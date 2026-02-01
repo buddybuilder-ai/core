@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Builder
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -16,15 +16,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy project files needed for installation
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir build && \
-    pip wheel --no-cache-dir --wheel-dir /wheels -e .
+COPY src/ ./src/
+
+# Install dependencies and build wheels
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip wheel --no-cache-dir --wheel-dir /wheels .
 
 # -----------------------------------------------------------------------------
 # Stage 2: Production
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -45,7 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy wheels from builder and install
 COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && \
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir /wheels/* && \
     rm -rf /wheels
 
 # Copy application code
