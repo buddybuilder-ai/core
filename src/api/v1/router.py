@@ -1,0 +1,10 @@
+"""API v1 router - aggregates all endpoint routers."""
+
+from fastapi import APIRouter
+
+from src.api.v1.chat.router import router as chat_router
+from src.api.v1.layout.router import router as layout_router
+
+api_v1_router = APIRouter()
+api_v1_router.include_router(chat_router)
+api_v1_router.include_router(layout_router)
