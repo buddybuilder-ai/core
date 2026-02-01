@@ -69,21 +69,44 @@ python -m venv .venv
 # Activate virtual environment
 # Linux/Mac:
 source .venv/bin/activate
-# Windows:
-.venv\Scripts\activate
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# Windows (CMD):
+.venv\Scripts\activate.bat
+```
 
-# Install dependencies
+#### Install Dependencies
+
+**Linux/Mac (Make):**
+```bash
 make dev
+```
 
+**Windows (PowerShell):**
+```powershell
+.\dev.ps1 dev
+# หรือใช้ pip โดยตรง:
+pip install -e ".[dev]"
+```
+
+#### Setup & Run
+
+```bash
 # Setup environment
 cp .env.example .env
 # Edit .env with your OpenRouter API key and database credentials
 
 # Run database migrations
+# Linux/Mac:
 make migrate
+# Windows:
+.\dev.ps1 migrate
 
 # Start development server
+# Linux/Mac:
 make run
+# Windows:
+.\dev.ps1 run
 ```
 
 The API will be available at `http://localhost:8000`
@@ -92,10 +115,16 @@ The API will be available at `http://localhost:8000`
 
 ```bash
 # Start all services (PostgreSQL, ChromaDB, API)
+# Linux/Mac:
 make docker-run
+# Windows:
+.\dev.ps1 docker-run
 
 # Stop services
+# Linux/Mac:
 make docker-down
+# Windows:
+.\dev.ps1 docker-down
 ```
 
 ## 📡 API Endpoints
@@ -126,33 +155,41 @@ make docker-down
 
 ### Available Commands
 
+| Task | Linux/Mac (Make) | Windows (PowerShell) |
+|------|------------------|----------------------|
+| Install (prod) | `make install` | `.\dev.ps1 install` |
+| Install (dev) | `make dev` | `.\dev.ps1 dev` |
+| Run server | `make run` | `.\dev.ps1 run` |
+| Run linter | `make lint` | `.\dev.ps1 lint` |
+| Format code | `make format` | `.\dev.ps1 format` |
+| Run tests | `make test` | `.\dev.ps1 test` |
+| Test + coverage | `make test-cov` | `.\dev.ps1 test-cov` |
+| Run migrations | `make migrate` | `.\dev.ps1 migrate` |
+| Docker up | `make docker-run` | `.\dev.ps1 docker-run` |
+| Docker down | `make docker-down` | `.\dev.ps1 docker-down` |
+
+#### Direct Commands (Alternative)
+
 ```bash
 # Install dependencies
-make install      # Production only
-make dev          # With dev dependencies
+pip install -e .           # Production only
+pip install -e ".[dev]"    # With dev dependencies
 
 # Code Quality
-make lint         # Run linter (Ruff + MyPy)
-make format       # Format code
+ruff check src/ tests/     # Lint
+ruff format src/ tests/    # Format
+mypy src/                  # Type check
 
 # Testing
-make test         # Run tests
-make test-cov     # Run tests with coverage
+pytest tests/ -v
+pytest tests/ -v --cov=src --cov-report=html
 
 # Database
-make migrate              # Run migrations
-make migrate-create msg="description"  # Create new migration
+alembic upgrade head       # Run migrations
+alembic revision --autogenerate -m "description"  # Create migration
 
 # Development
-make run          # Start dev server with hot reload
-
-# Docker
-make docker-build # Build Docker image
-make docker-run   # Start all services
-make docker-down  # Stop services
-
-# Cleanup
-make clean        # Remove cache files
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Code Style
@@ -174,10 +211,16 @@ pre-commit run --all-files
 
 ```bash
 # Run all tests
+# Linux/Mac:
 make test
+# Windows:
+.\dev.ps1 test
 
 # Run with coverage report
+# Linux/Mac:
 make test-cov
+# Windows:
+.\dev.ps1 test-cov
 
 # Run specific test file
 pytest tests/test_chat.py -v
