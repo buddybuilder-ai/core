@@ -15,6 +15,18 @@ from src.modules.layout.infrastructure.tools.collision_detector_tool import (
     CollisionType,
     PlacedItem,
 )
+from src.modules.layout.infrastructure.tools.feng_shui_rules_data import (
+    FENG_SHUI_RULES,
+    FengShuiRule,
+    RuleCategory,
+)
+from src.modules.layout.infrastructure.tools.rag_search_tool import (
+    BaseRagSearchTool,
+    MockRagSearchTool,
+    RagSearchInput,
+    RagSearchOutput,
+    RuleSearchResult,
+)
 from src.modules.layout.infrastructure.tools.spatial_calculator_tool import (
     SpatialAnalysisInput,
     SpatialAnalysisOutput,
@@ -37,6 +49,15 @@ __all__ = [
     "CollisionDetectorTool",
     "CollisionType",
     "PlacedItem",
+    # RAG Search
+    "BaseRagSearchTool",
+    "FENG_SHUI_RULES",
+    "FengShuiRule",
+    "MockRagSearchTool",
+    "RagSearchInput",
+    "RagSearchOutput",
+    "RuleCategory",
+    "RuleSearchResult",
     # Spatial Calculator
     "SpatialAnalysisInput",
     "SpatialAnalysisOutput",
