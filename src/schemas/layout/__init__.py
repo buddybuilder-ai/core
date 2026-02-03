@@ -2,12 +2,37 @@
 
 from pydantic import BaseModel, Field
 
+# Import from base first (no circular dependency)
+from src.schemas.layout.base import RoomDimensions
 
-class RoomDimensions(BaseModel):
-    """Room dimensions in meters."""
-
-    width: float = Field(..., gt=0, description="Room width in meters")
-    depth: float = Field(..., gt=0, description="Room depth in meters")
+# Then import from submodules
+from src.schemas.layout.feng_shui import (
+    CommandPosition,
+    DoorPosition,
+    ElementBalance,
+    FengShuiAnalysis,
+    FengShuiRecommendation,
+    FengShuiRule,
+    FengShuiScoreBreakdown,
+    FiveElement,
+    FurnitureDimensions,
+    RoomType,
+    RulePriority,
+    ShaChiLine,
+    WallSide,
+    WindowPosition,
+)
+from src.schemas.layout.agent import (
+    AgentContext,
+    AgentExecutionTrace,
+    AgentStep,
+    FengShuiLayoutRequest,
+    FengShuiLayoutResponse,
+    LayoutConstraint,
+    LayoutMetadata,
+    PlacedFurnitureItem,
+    ToolCallResult,
+)
 
 
 class DesignRequest(BaseModel):
@@ -38,8 +63,34 @@ class DesignResponse(BaseModel):
 
 
 __all__ = [
+    # Original schemas
     "RoomDimensions",
     "DesignRequest",
     "FurnitureItem",
     "DesignResponse",
+    # Feng Shui schemas
+    "CommandPosition",
+    "DoorPosition",
+    "ElementBalance",
+    "FengShuiAnalysis",
+    "FengShuiRecommendation",
+    "FengShuiRule",
+    "FengShuiScoreBreakdown",
+    "FiveElement",
+    "FurnitureDimensions",
+    "RoomType",
+    "RulePriority",
+    "ShaChiLine",
+    "WallSide",
+    "WindowPosition",
+    # Agent schemas
+    "AgentContext",
+    "AgentExecutionTrace",
+    "AgentStep",
+    "FengShuiLayoutRequest",
+    "FengShuiLayoutResponse",
+    "LayoutConstraint",
+    "LayoutMetadata",
+    "PlacedFurnitureItem",
+    "ToolCallResult",
 ]
