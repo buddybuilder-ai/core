@@ -46,6 +46,16 @@ from src.modules.layout.infrastructure.tools.spatial_calculator_tool import (
     Zone,
     ZoneType,
 )
+from src.modules.layout.infrastructure.tools.user_clarifier_tool import (
+    ClarificationAnswer,
+    ClarificationQuestion,
+    ClarifierInput,
+    ClarifierOutput,
+    QuestionPriority,
+    QuestionStatus,
+    QuestionType,
+    UserClarifierTool,
+)
 from src.modules.layout.infrastructure.tools.validator_tool import (
     LayoutItem,
     ValidationIssue,
@@ -93,6 +103,15 @@ __all__ = [
     "SpatialCalculatorTool",
     "Zone",
     "ZoneType",
+    # User Clarifier
+    "ClarificationAnswer",
+    "ClarificationQuestion",
+    "ClarifierInput",
+    "ClarifierOutput",
+    "QuestionPriority",
+    "QuestionStatus",
+    "QuestionType",
+    "UserClarifierTool",
     # Validator
     "LayoutItem",
     "ValidationIssue",
