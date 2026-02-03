@@ -46,6 +46,14 @@ from src.modules.layout.infrastructure.tools.spatial_calculator_tool import (
     Zone,
     ZoneType,
 )
+from src.modules.layout.infrastructure.tools.validator_tool import (
+    LayoutItem,
+    ValidationIssue,
+    ValidationLevel,
+    ValidatorInput,
+    ValidatorOutput,
+    ValidatorTool,
+)
 
 __all__ = [
     # Base
@@ -85,4 +93,11 @@ __all__ = [
     "SpatialCalculatorTool",
     "Zone",
     "ZoneType",
+    # Validator
+    "LayoutItem",
+    "ValidationIssue",
+    "ValidationLevel",
+    "ValidatorInput",
+    "ValidatorOutput",
+    "ValidatorTool",
 ]
