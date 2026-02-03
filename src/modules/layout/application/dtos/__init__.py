@@ -1,24 +1,28 @@
-"""Application layer for feng shui layout module."""
+"""DTOs for feng shui layout application layer."""
 
-from src.modules.layout.application.dtos import (
+from src.modules.layout.application.dtos.agent_context import (
     AgentContext,
     AgentPhase,
     AgentState,
-    AnalysisZone,
-    BatchPlacementResult,
-    CommandPosition,
-    FallbackAction,
-    FengShuiDirection,
-    LayoutOutput,
     PlacedFurniture,
+    PlacementStrategy,
+    UserPreferences,
+)
+from src.modules.layout.application.dtos.placement_result import (
+    BatchPlacementResult,
+    FallbackAction,
+    LayoutOutput,
     PlacementAttempt,
     PlacementFailureReason,
     PlacementResult,
     PlacementStatus,
-    PlacementStrategy,
+)
+from src.modules.layout.application.dtos.spatial_analysis import (
+    AnalysisZone,
+    CommandPosition,
+    FengShuiDirection,
     SpatialAnalysisResult,
     TrafficFlowAnalysis,
-    UserPreferences,
     ZoneQuality,
 )
 
