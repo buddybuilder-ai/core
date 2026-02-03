@@ -20,6 +20,18 @@ from src.modules.layout.infrastructure.tools.feng_shui_rules_data import (
     FengShuiRule,
     RuleCategory,
 )
+from src.modules.layout.infrastructure.tools.furniture_catalog_data import (
+    FURNITURE_CATALOG,
+    BudgetLevel,
+    CatalogFurniture,
+    FurnitureCategory,
+)
+from src.modules.layout.infrastructure.tools.furniture_db_tool import (
+    FurnitureSearchInput,
+    FurnitureSearchOutput,
+    FurnitureSearchResult,
+    InMemoryFurnitureDbTool,
+)
 from src.modules.layout.infrastructure.tools.rag_search_tool import (
     BaseRagSearchTool,
     MockRagSearchTool,
@@ -49,6 +61,15 @@ __all__ = [
     "CollisionDetectorTool",
     "CollisionType",
     "PlacedItem",
+    # Furniture DB
+    "BudgetLevel",
+    "CatalogFurniture",
+    "FURNITURE_CATALOG",
+    "FurnitureCategory",
+    "FurnitureSearchInput",
+    "FurnitureSearchOutput",
+    "FurnitureSearchResult",
+    "InMemoryFurnitureDbTool",
     # RAG Search
     "BaseRagSearchTool",
     "FENG_SHUI_RULES",
