@@ -15,6 +15,15 @@ from src.modules.layout.infrastructure.geometry.grid import (
     PlacementCandidate,
     PlacementGrid,
 )
+from src.modules.layout.infrastructure.geometry.path_finding import (
+    PathFinder,
+    PathPoint,
+    PathResult,
+    PathType,
+    TrafficPath,
+    calculate_path_efficiency,
+    find_direct_line_path,
+)
 
 __all__ = [
     # Collision
@@ -30,4 +39,12 @@ __all__ = [
     "GridRect",
     "PlacementCandidate",
     "PlacementGrid",
+    # Path Finding
+    "PathFinder",
+    "PathPoint",
+    "PathResult",
+    "PathType",
+    "TrafficPath",
+    "calculate_path_efficiency",
+    "find_direct_line_path",
 ]
