@@ -7,6 +7,14 @@ from src.modules.layout.infrastructure.tools.base import (
     ToolResult,
     ToolTimeoutError,
 )
+from src.modules.layout.infrastructure.tools.collision_detector_tool import (
+    Collision,
+    CollisionDetectorInput,
+    CollisionDetectorOutput,
+    CollisionDetectorTool,
+    CollisionType,
+    PlacedItem,
+)
 from src.modules.layout.infrastructure.tools.spatial_calculator_tool import (
     SpatialAnalysisInput,
     SpatialAnalysisOutput,
@@ -22,6 +30,13 @@ __all__ = [
     "ToolInputError",
     "ToolResult",
     "ToolTimeoutError",
+    # Collision Detector
+    "Collision",
+    "CollisionDetectorInput",
+    "CollisionDetectorOutput",
+    "CollisionDetectorTool",
+    "CollisionType",
+    "PlacedItem",
     # Spatial Calculator
     "SpatialAnalysisInput",
     "SpatialAnalysisOutput",
