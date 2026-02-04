@@ -11,14 +11,24 @@ from src.modules.layout.application.services.input_analyzer import (
     ValidationIssue,
     ValidationSeverity,
 )
+from src.modules.layout.application.services.placement_engine import (
+    FallbackStrategy,
+    PlacementConfig,
+    PlacementEngine,
+    RotationStrategy,
+)
 from src.modules.layout.application.services.spatial_analyzer import SpatialAnalyzer
 
 __all__ = [
+    "FallbackStrategy",
     "FurnitureSelection",
     "FurnitureSelectionResult",
     "FurnitureSelector",
     "InputAnalyzer",
     "InputAnalysisResult",
+    "PlacementConfig",
+    "PlacementEngine",
+    "RotationStrategy",
     "SpatialAnalyzer",
     "ValidationIssue",
     "ValidationSeverity",
