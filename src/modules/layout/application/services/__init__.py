@@ -17,6 +17,13 @@ from src.modules.layout.application.services.input_analyzer import (
     ValidationIssue,
     ValidationSeverity,
 )
+from src.modules.layout.application.services.output_builder import (
+    LayoutReport,
+    OutputBuilder,
+    OutputConfig,
+    OutputSummary,
+    build_layout_report,
+)
 from src.modules.layout.application.services.placement_engine import (
     FallbackStrategy,
     PlacementConfig,
@@ -34,6 +41,10 @@ __all__ = [
     "FurnitureSelector",
     "InputAnalyzer",
     "InputAnalysisResult",
+    "LayoutReport",
+    "OutputBuilder",
+    "OutputConfig",
+    "OutputSummary",
     "PlacementConfig",
     "PlacementEngine",
     "RotationStrategy",
@@ -42,4 +53,5 @@ __all__ = [
     "SpatialAnalyzer",
     "ValidationIssue",
     "ValidationSeverity",
+    "build_layout_report",
 ]
