@@ -34,14 +34,18 @@ async def get_layout_service() -> Any:
     return None
 
 
-def get_layout_orchestrator() -> LayoutOrchestrator:
+def get_layout_orchestrator(use_llm: bool = False) -> LayoutOrchestrator:
     """Create and return a layout orchestrator.
+
+    Args:
+        use_llm: Whether to use LLM for intelligent scoring.
 
     Returns:
         Configured LayoutOrchestrator instance.
     """
     config = OrchestratorConfig(
         use_minimal_workflow=False,
+        use_llm=use_llm,
         max_retries=3,
         min_acceptable_score=40,
         auto_retry_low_score=True,
@@ -99,7 +103,7 @@ async def generate_layout(
 @router.post("/feng-shui", response_model=FengShuiLayoutResponse)
 async def generate_feng_shui_layout(
     request: FengShuiLayoutRequest,
-    orchestrator: LayoutOrchestrator = Depends(get_layout_orchestrator),
+    use_llm: bool = False,
 ) -> FengShuiLayoutResponse:
     """Generate a feng shui optimized furniture layout.
 
@@ -109,7 +113,9 @@ async def generate_feng_shui_layout(
 
     Args:
         request: Feng shui layout request with room dimensions and preferences.
-        orchestrator: Injected layout orchestrator.
+        use_llm: Enable LLM-powered scoring for intelligent feng shui analysis.
+            When enabled, uses OpenRouter API for enhanced scoring.
+            Default: False (uses deterministic rule-based scoring).
 
     Returns:
         FengShuiLayoutResponse with placed furniture, feng shui score, and analysis.
@@ -117,6 +123,7 @@ async def generate_feng_shui_layout(
     Raises:
         HTTPException: If layout generation fails.
     """
+    orchestrator = get_layout_orchestrator(use_llm=use_llm)
     # Convert API request to orchestrator request
     # RoomDimensions only has width/depth, use default height
     orchestrator_request = OrchestratorRequest(
@@ -205,6 +212,17 @@ async def generate_feng_shui_layout(
     if response.output and response.output.recommendations:
         warnings.extend(response.output.recommendations[:3])  # Limit to 3 warnings
 
+    # Check if LLM was used from phase results
+    llm_used = False
+    for phase_result in response.phase_results:
+        if phase_result.data and phase_result.data.get("llm_used"):
+            llm_used = True
+            break
+
+    # Add LLM info to reasoning
+    if llm_used:
+        reasoning += " [LLM-powered scoring]"
+
     return FengShuiLayoutResponse(
         items=items,
         feng_shui_score=score_breakdown,
@@ -212,6 +230,7 @@ async def generate_feng_shui_layout(
         warnings=warnings,
         metadata=LayoutMetadata(
             generation_time_ms=int(response.execution_time_ms),
+            agent_model="openrouter/llm" if llm_used else None,
         ),
     )
 

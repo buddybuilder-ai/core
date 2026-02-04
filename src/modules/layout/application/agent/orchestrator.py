@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -35,7 +36,10 @@ from src.modules.layout.application.services import (
     build_layout_report,
 )
 from src.modules.layout.domain.entities import Room, RoomType
+from src.modules.layout.domain.value_objects import FengShuiScore
 from src.modules.layout.infrastructure.tools import InMemoryFurnitureDbTool
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,6 +48,7 @@ class OrchestratorConfig:
 
     Attributes:
         use_minimal_workflow: Use minimal workflow (skip optional phases).
+        use_llm: Use LLM for intelligent layout decisions.
         max_retries: Maximum retries for failed phases.
         timeout_seconds: Overall timeout for layout generation.
         min_acceptable_score: Minimum acceptable feng shui score.
@@ -51,6 +56,7 @@ class OrchestratorConfig:
     """
 
     use_minimal_workflow: bool = False
+    use_llm: bool = False
     max_retries: int = 3
     timeout_seconds: float = 120.0
     min_acceptable_score: int = 40
@@ -143,7 +149,8 @@ class LayoutOrchestrator:
     """Orchestrator for feng shui layout generation.
 
     This class coordinates all services and tools to generate
-    a complete feng shui-optimized room layout.
+    a complete feng shui-optimized room layout. Supports both
+    deterministic (rule-based) and LLM-powered modes.
     """
 
     def __init__(self, config: OrchestratorConfig | None = None) -> None:
@@ -165,10 +172,25 @@ class LayoutOrchestrator:
         # Initialize state machine
         self._state_machine = AgentStateMachine()
 
+        # Initialize LLM agent if enabled
+        self._llm_agent = None
+        if self.config.use_llm:
+            try:
+                from src.modules.layout.infrastructure.llm import (
+                    FengShuiLLMAgent,
+                    LLMConfig,
+                )
+                self._llm_agent = FengShuiLLMAgent(LLMConfig())
+                logger.info("LLM agent initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize LLM agent: {e}")
+                logger.info("Falling back to deterministic mode")
+
         # Current context and state
         self._context: AgentContext | None = None
         self._selections: list[FurnitureSelection] = []
         self._placement_result: BatchPlacementResult | None = None
+        self._request: LayoutRequest | None = None
 
     async def generate_layout(self, request: LayoutRequest) -> LayoutResponse:
         """Generate a feng shui layout.
@@ -181,6 +203,7 @@ class LayoutOrchestrator:
         """
         start_time = time.time()
         phase_results: list[PhaseResult] = []
+        self._request = request  # Store for LLM phases
 
         try:
             # Get workflow
@@ -491,7 +514,14 @@ class LayoutOrchestrator:
         )
 
     async def _phase_scoring(self) -> PhaseResult:
-        """Score the layout."""
+        """Score the layout using rule-based scorer or LLM."""
+        # Try LLM scoring if enabled
+        if self._llm_agent and self._request:
+            llm_result = await self._phase_scoring_with_llm()
+            if llm_result:
+                return llm_result
+
+        # Fallback to deterministic scoring
         result = self._scorer.score_layout(
             room=self._context.room,
             placed_furniture=self._context.placed_furniture,
@@ -518,8 +548,96 @@ class LayoutOrchestrator:
             data={
                 "total_score": result.score.total,
                 "grade": result.score.grade,
+                "llm_used": False,
             },
         )
+
+    async def _phase_scoring_with_llm(self) -> PhaseResult | None:
+        """Score layout using LLM for intelligent analysis."""
+        try:
+            # Prepare furniture placements for LLM
+            placements = [
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "category": f.category,
+                    "pos_x": f.pos_x,
+                    "pos_z": f.pos_z,
+                    "width": f.width,
+                    "depth": f.depth,
+                    "rotation": f.rotation,
+                }
+                for f in self._context.placed_furniture
+            ]
+
+            logger.info("Invoking LLM for layout scoring...")
+            llm_response = await self._llm_agent.score_layout(
+                room_type=self._request.room_type,
+                width=self._request.width,
+                depth=self._request.depth,
+                furniture_placements=placements,
+            )
+
+            if not llm_response.success:
+                logger.warning(f"LLM scoring failed: {llm_response.error}")
+                return None
+
+            # Extract scores from LLM response
+            content = llm_response.content
+            scores = content.get("scores", {})
+
+            score = FengShuiScore(
+                command_position=min(30, max(0, scores.get("command_position", 15))),
+                five_elements=min(20, max(0, scores.get("five_elements", 10))),
+                chi_flow=min(25, max(0, scores.get("chi_flow", 12))),
+                sha_chi_avoidance=min(25, max(0, scores.get("sha_chi_avoidance", 12))),
+            )
+
+            # Update context with LLM score
+            self._context.feng_shui_score = score
+
+            # Add LLM recommendations to context
+            recommendations = content.get("recommendations", [])
+            for rec in recommendations[:3]:
+                self._context.add_warning(rec)
+
+            # Store LLM analysis in metadata
+            self._context.metadata["llm_analysis"] = {
+                "component_analysis": content.get("component_analysis", {}),
+                "grade": content.get("grade", score.grade),
+                "tokens_used": llm_response.tokens_used,
+            }
+
+            logger.info(f"LLM scoring complete: {score.total}/100 ({score.grade})")
+
+            # Check if score is acceptable
+            if (
+                self.config.auto_retry_low_score
+                and score.total < self.config.min_acceptable_score
+            ):
+                return PhaseResult(
+                    phase=AgentPhase.SCORING,
+                    result=TransitionResult.RETRY,
+                    error=f"LLM Score too low: {score.total}",
+                    data={"score": score.total, "llm_used": True},
+                )
+
+            self._context.advance_phase(AgentPhase.SCORING)
+
+            return PhaseResult(
+                phase=AgentPhase.SCORING,
+                result=TransitionResult.SUCCESS,
+                data={
+                    "total_score": score.total,
+                    "grade": score.grade,
+                    "llm_used": True,
+                    "tokens_used": llm_response.tokens_used,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"LLM scoring error: {e}")
+            return None
 
     async def _phase_validation(self) -> PhaseResult:
         """Validate the layout."""
@@ -565,6 +683,7 @@ async def generate_layout(
     depth: float,
     height: float = 2.8,
     budget_level: str = "medium",
+    use_llm: bool = False,
     **kwargs: Any,
 ) -> LayoutResponse:
     """Convenience function to generate a layout.
@@ -575,6 +694,7 @@ async def generate_layout(
         depth: Room depth in meters.
         height: Room height in meters.
         budget_level: Budget level.
+        use_llm: Whether to use LLM for intelligent scoring.
         **kwargs: Additional request parameters.
 
     Returns:
@@ -589,5 +709,6 @@ async def generate_layout(
         **{k: v for k, v in kwargs.items() if k in LayoutRequest.__dataclass_fields__},
     )
 
-    orchestrator = LayoutOrchestrator()
+    config = OrchestratorConfig(use_llm=use_llm)
+    orchestrator = LayoutOrchestrator(config)
     return await orchestrator.generate_layout(request)
