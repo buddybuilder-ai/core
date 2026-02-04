@@ -1,5 +1,11 @@
 """Application services for feng shui layout generation."""
 
+from src.modules.layout.application.services.feng_shui_scorer import (
+    FengShuiElement,
+    FengShuiScorer,
+    ScoringConfig,
+    ScoringResult,
+)
 from src.modules.layout.application.services.furniture_selector import (
     FurnitureSelection,
     FurnitureSelectionResult,
@@ -21,6 +27,8 @@ from src.modules.layout.application.services.spatial_analyzer import SpatialAnal
 
 __all__ = [
     "FallbackStrategy",
+    "FengShuiElement",
+    "FengShuiScorer",
     "FurnitureSelection",
     "FurnitureSelectionResult",
     "FurnitureSelector",
@@ -29,6 +37,8 @@ __all__ = [
     "PlacementConfig",
     "PlacementEngine",
     "RotationStrategy",
+    "ScoringConfig",
+    "ScoringResult",
     "SpatialAnalyzer",
     "ValidationIssue",
     "ValidationSeverity",
