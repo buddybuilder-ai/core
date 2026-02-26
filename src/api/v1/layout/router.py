@@ -5,11 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from src.modules.layout.application.agent import (
     LayoutOrchestrator,
     LayoutRequest as OrchestratorRequest,
     OrchestratorConfig,
+)
+from src.modules.layout.application.pipeline import (
+    PipelineConfig,
+    PipelineOrchestrator,
 )
 from src.schemas.layout import (
     DesignRequest,
@@ -232,6 +237,77 @@ async def generate_feng_shui_layout(
             generation_time_ms=int(response.execution_time_ms),
             agent_model="openrouter/llm" if llm_used else None,
         ),
+    )
+
+
+@router.post("/generate/stream")
+async def generate_layout_stream(
+    request: FengShuiLayoutRequest,
+    max_repair_loops: int = 3,
+) -> StreamingResponse:
+    """Generate a feng shui layout with SSE streaming.
+
+    Streams real-time progress events as the 5-step agentic pipeline
+    processes the layout:
+        1. Structured Data Builder
+        2. Layout Generator (Planner)
+        3. Rule Checker (Dual-rule)
+        4. Repair (Auto-fix) — loops with Step 3 if conflicts exist
+        5. Explainer
+
+    Args:
+        request: Feng shui layout request.
+        max_repair_loops: Max repair iterations (default 3).
+
+    Returns:
+        SSE stream of pipeline events.
+    """
+    config = PipelineConfig(max_repair_loops=max_repair_loops)
+    orchestrator = PipelineOrchestrator(config)
+
+    room_spec = {
+        "room_type": request.room_type.value,
+        "dimensions": {
+            "width": request.dimensions.width,
+            "depth": request.dimensions.depth,
+        },
+        "width": request.dimensions.width,
+        "depth": request.dimensions.depth,
+        "height": 2.8,
+        "doors": [
+            {
+                "wall": door.wall.value,
+                "offset": door.offset,
+                "width": door.width,
+            }
+            for door in request.doors
+        ],
+        "windows": [
+            {
+                "wall": window.wall.value,
+                "offset": window.offset,
+                "width": window.width,
+            }
+            for window in request.windows
+        ],
+        "direction": request.direction or "north",
+        "budget_level": request.budget_level,
+        "style": request.style,
+        "user_preferences": request.user_preferences or {},
+    }
+
+    async def event_generator():
+        async for event in orchestrator.run(room_spec):
+            yield event.to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
