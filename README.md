@@ -129,20 +129,26 @@ make docker-down
 
 ## 📡 API Endpoints
 
-### Chat (RAG Chatbot)
+### Chat
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v1/chat/conversations` | Create new conversation |
-| `POST` | `/api/v1/chat/conversations/{id}/messages` | Send message |
-| `GET` | `/api/v1/chat/conversations/{id}` | Get conversation history |
+| `POST` | `/api/v1/chat/message` | Single-turn LLM chat (non-streaming) |
+| `POST` | `/api/v1/chat/stream` | Streaming intent router (SSE) — classifies intent and dispatches to layout pipeline, modifier, explainer, or Q&A |
 
-### Layout (3D Generation)
+### Layout (SSE Streaming)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v1/layout/generate` | Generate 3D room layout |
-| `GET` | `/api/v1/layout/{id}` | Get generated layout |
+| `POST` | `/api/v1/layout/generate/stream` | Run 5-step agentic layout pipeline with real-time SSE events |
+| `GET` | `/api/v1/layout/health` | Layout service health check |
+
+#### `/layout/generate/stream` query params
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max_repair_loops` | `int` | `3` | Max rule-check/repair iterations |
+| `mode` | `string` | `buddy` | Personality mode: `buddy`, `mentor`, `fun` |
 
 ### Health
 
@@ -257,9 +263,35 @@ pytest tests/test_chat.py::test_send_message -v
 | Layer | Responsibility |
 |-------|---------------|
 | **API** | HTTP handling, validation, auth |
-| **Application** | Use cases, orchestration |
+| **Application** | Use cases, orchestration (PipelineOrchestrator, RouterAgent, ModifierAgent) |
 | **Domain** | Business logic, entities |
-| **Infrastructure** | External integrations (DB, LLM, Vector Store) |
+| **Infrastructure** | External integrations (DB, LLM via OpenRouter, RAG via MockRagSearchTool) |
+
+### Layout Pipeline (5-Step Agentic)
+
+```
+User Request
+     │
+     ▼
+[Step 1] StructuredDataBuilder  — parse room spec, validate dimensions
+     │
+     ├─── RAG retrieval (ContextInjector) — inject feng shui rules into state
+     │
+     ▼
+[Step 2] LayoutGenerator        — LLM selects furniture + plans placements
+     │
+     ▼
+[Step 3] RuleChecker            — spatial + feng shui conflict detection
+     │
+     ├── conflicts? ──► [Step 4] Repair ──► loop back to Step 3
+     │   (up to max_repair_loops)
+     │
+     ▼
+[Step 5] Explainer              — LLM generates Thai explanation (Buddy/Mentor/Fun mode)
+     │
+     ▼
+pipeline_completed SSE event → frontend
+```
 
 ## 📄 Configuration
 

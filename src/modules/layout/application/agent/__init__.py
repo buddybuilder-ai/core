@@ -1,14 +1,10 @@
-"""Agent module for feng shui layout generation."""
+"""Agent module for feng shui layout generation.
 
-from src.modules.layout.application.agent.langchain_tools import (
-    AnalyzeRoomTool,
-    GenerateOutputTool,
-    PlaceFurnitureTool,
-    ScoreLayoutTool,
-    SelectFurnitureTool,
-    create_layout_tools,
-    get_tool_descriptions,
-)
+Note: LayoutOrchestrator and the state machine are superseded by
+PipelineOrchestrator (src/modules/layout/application/pipeline/).
+They remain here for reference and will be removed in a future release.
+"""
+
 from src.modules.layout.application.agent.orchestrator import (
     LayoutOrchestrator,
     LayoutRequest,
@@ -29,23 +25,16 @@ from src.modules.layout.application.agent.state_machine import (
 
 __all__ = [
     "AgentStateMachine",
-    "AnalyzeRoomTool",
-    "GenerateOutputTool",
     "LayoutOrchestrator",
     "LayoutRequest",
     "LayoutResponse",
     "OrchestratorConfig",
     "PhaseConfig",
     "PhaseResult",
-    "PlaceFurnitureTool",
-    "ScoreLayoutTool",
-    "SelectFurnitureTool",
     "StateTransition",
     "TransitionResult",
     "WorkflowState",
-    "create_layout_tools",
     "create_minimal_workflow",
     "create_standard_workflow",
     "generate_layout",
-    "get_tool_descriptions",
 ]

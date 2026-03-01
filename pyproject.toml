@@ -131,6 +131,10 @@ filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests as integration tests (no external API calls)",
+    "slow: marks tests as slow-running",
+]
 
 [tool.coverage.run]
 source = ["src"]
