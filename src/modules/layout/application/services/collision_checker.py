@@ -1,0 +1,162 @@
+"""Collision checker for resolved furniture placements.
+
+Checks:
+  - out_of_bounds: furniture footprint extends outside room
+  - overlap: two furniture footprints intersect
+  - door_blocked: furniture inside 80 cm clearance zone in front of a door
+  - insufficient_clearance: less than 60 cm between two items
+
+No LLM calls. All measurements in meters.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from src.modules.layout.domain.entities.room import DoorPosition, WallSide
+from src.modules.layout.infrastructure.geometry.collision import AABB
+from src.modules.layout.application.services.spatial_resolver import (
+    PhysicalPlacement,
+    RoomSpec,
+)
+
+DOOR_CLEARANCE = 0.80   # metres
+WALKWAY_CLEARANCE = 0.60  # metres
+
+
+@dataclass(frozen=True)
+class Collision:
+    """A detected spatial problem between furniture or boundaries.
+
+    Attributes:
+        type: overlap|out_of_bounds|door_blocked|insufficient_clearance
+        severity: critical|major|minor
+        furniture_ids: IDs of furniture involved (1 or 2 items).
+        description: Human-readable explanation with measurements.
+    """
+
+    type: str
+    severity: str
+    furniture_ids: list[str]
+    description: str
+
+
+def check_collisions(
+    placements: list[PhysicalPlacement],
+    room: RoomSpec,
+) -> list[Collision]:
+    """Run all collision checks on a list of resolved placements.
+
+    Args:
+        placements: Output of SpatialResolver.resolve().
+        room: Room dimensions and features.
+
+    Returns:
+        List of Collision objects, empty if layout is clean.
+    """
+    results: list[Collision] = []
+    results.extend(_check_out_of_bounds(placements, room))
+    results.extend(_check_overlaps(placements))
+    results.extend(_check_door_clearances(placements, room))
+    results.extend(_check_walkway_clearances(placements))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Individual check functions
+# ---------------------------------------------------------------------------
+
+def _check_out_of_bounds(
+    placements: list[PhysicalPlacement], room: RoomSpec
+) -> list[Collision]:
+    collisions: list[Collision] = []
+    for p in placements:
+        b = p.bbox
+        if b.min_x < 0 or b.min_z < 0 or b.max_x > room.width or b.max_z > room.depth:
+            overflow_x = max(0.0, -b.min_x, b.max_x - room.width)
+            overflow_z = max(0.0, -b.min_z, b.max_z - room.depth)
+            overflow = max(overflow_x, overflow_z)
+            collisions.append(Collision(
+                type="out_of_bounds",
+                severity="critical",
+                furniture_ids=[p.furniture_id],
+                description=f"{p.furniture_id} extends {overflow:.2f}m outside room bounds",
+            ))
+    return collisions
+
+
+def _check_overlaps(placements: list[PhysicalPlacement]) -> list[Collision]:
+    collisions: list[Collision] = []
+    for i, a in enumerate(placements):
+        for b in placements[i + 1:]:
+            if not a.bbox.intersects(b.bbox):
+                continue
+            inter = a.bbox.intersection(b.bbox)
+            if inter is None:
+                continue
+            if inter.width <= inter.depth:
+                axis_desc = f"{inter.width:.2f}m on x-axis"
+            else:
+                axis_desc = f"{inter.depth:.2f}m on z-axis"
+            collisions.append(Collision(
+                type="overlap",
+                severity="critical",
+                furniture_ids=[a.furniture_id, b.furniture_id],
+                description=(
+                    f"{a.furniture_id} overlaps with {b.furniture_id} by {axis_desc}"
+                ),
+            ))
+    return collisions
+
+
+def _door_clearance_box(door: DoorPosition, room: RoomSpec) -> AABB:
+    """Return the AABB that must remain clear in front of a door."""
+    off, w, c = door.offset, door.width, DOOR_CLEARANCE
+    if door.wall == WallSide.SOUTH:
+        return AABB(min_x=off, min_z=0.0, max_x=off + w, max_z=c)
+    if door.wall == WallSide.NORTH:
+        return AABB(min_x=off, min_z=room.depth - c, max_x=off + w, max_z=room.depth)
+    if door.wall == WallSide.WEST:
+        return AABB(min_x=0.0, min_z=off, max_x=c, max_z=off + w)
+    # EAST
+    return AABB(min_x=room.width - c, min_z=off, max_x=room.width, max_z=off + w)
+
+
+def _check_door_clearances(
+    placements: list[PhysicalPlacement], room: RoomSpec
+) -> list[Collision]:
+    collisions: list[Collision] = []
+    for i, door in enumerate(room.doors):
+        clear_box = _door_clearance_box(door, room)
+        for p in placements:
+            if p.bbox.intersects(clear_box):
+                collisions.append(Collision(
+                    type="door_blocked",
+                    severity="critical",
+                    furniture_ids=[p.furniture_id],
+                    description=(
+                        f"{p.furniture_id} blocks {DOOR_CLEARANCE * 100:.0f}cm "
+                        f"clearance zone of door_{i + 1} on {door.wall.value} wall"
+                    ),
+                ))
+    return collisions
+
+
+def _check_walkway_clearances(placements: list[PhysicalPlacement]) -> list[Collision]:
+    collisions: list[Collision] = []
+    for i, a in enumerate(placements):
+        for b in placements[i + 1:]:
+            if a.bbox.intersects(b.bbox):
+                continue  # already reported as overlap
+            dist = a.bbox.distance_to(b.bbox)
+            if 0.0 < dist < WALKWAY_CLEARANCE:
+                collisions.append(Collision(
+                    type="insufficient_clearance",
+                    severity="major",
+                    furniture_ids=[a.furniture_id, b.furniture_id],
+                    description=(
+                        f"{a.furniture_id} and {b.furniture_id} are {dist:.2f}m apart "
+                        f"(minimum {WALKWAY_CLEARANCE}m required)"
+                    ),
+                ))
+    return collisions
