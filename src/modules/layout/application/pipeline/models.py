@@ -76,6 +76,11 @@ class SSEEventType(str, Enum):
     LAYOUT_UPDATED = "layout_updated"
     PIPELINE_COMPLETED = "pipeline_completed"
     PIPELINE_FAILED = "pipeline_failed"
+    # Router + Modifier events
+    ROUTER_CLASSIFIED = "router_classified"
+    MODIFIER_STARTED = "modifier_started"
+    MODIFIER_UPDATED = "modifier_updated"
+    MODIFIER_COMPLETED = "modifier_completed"
 
 
 @dataclass
