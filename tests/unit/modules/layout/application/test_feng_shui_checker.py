@@ -2,19 +2,18 @@
 
 import pytest
 
-from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
-from src.modules.layout.infrastructure.geometry.collision import AABB
-from src.modules.layout.application.services.spatial_resolver import PhysicalPlacement, RoomSpec
 from src.modules.layout.application.services.feng_shui_checker import (
     FengShuiViolation,
-    check_feng_shui,
-    _rule_bed_not_facing_door,
     _rule_bed_headboard_solid_wall,
+    _rule_bed_not_facing_door,
     _rule_mirror_not_facing_bed,
-    _rule_wealth_corner_not_empty,
     _rule_no_bed_under_window,
+    _rule_wealth_corner_not_empty,
+    check_feng_shui,
 )
-
+from src.modules.layout.application.services.spatial_resolver import PhysicalPlacement, RoomSpec
+from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
+from src.modules.layout.infrastructure.geometry.collision import AABB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -22,13 +21,13 @@ from src.modules.layout.application.services.feng_shui_checker import (
 
 
 def _make_placement(
-    fid: str, x: float, z: float, w: float, l: float, rotation: int = 0
+    fid: str, x: float, z: float, w: float, depth: float, rotation: int = 0
 ) -> PhysicalPlacement:
     return PhysicalPlacement(
         furniture_id=fid,
         x=x, y=0.0, z=z,
         rotation=rotation,
-        bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=l),
+        bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=depth),
     )
 
 

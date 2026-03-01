@@ -10,7 +10,8 @@ Generates the initial furniture layout using the LLM semantic placement flow:
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.modules.layout.application.dtos import UserPreferences
 from src.modules.layout.application.pipeline.models import (
@@ -111,7 +112,7 @@ class LayoutGeneratorStep(BaseStep):
 
         # --- 3. LLM semantic placement ---
         yield self._emit_progress("LLM planning semantic layout...", 0.5)
-        logger.info(f"🤖 Calling LLM for semantic layout plan...")
+        logger.info("🤖 Calling LLM for semantic layout plan...")
 
         extra_ctx = state.rag_context.get("layout_prompt_context", "")
         if extra_ctx:

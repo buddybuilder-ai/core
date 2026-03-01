@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -14,7 +14,7 @@ from src.modules.layout.application.dtos import (
     TrafficFlowAnalysis,
     ZoneQuality,
 )
-from src.modules.layout.domain.entities import Room, RoomType, WallSide
+from src.modules.layout.domain.entities import Room, WallSide
 
 
 @dataclass
@@ -402,7 +402,6 @@ class SpatialAnalyzer:
         zones = []
         for i, door in enumerate(room.doors):
             # Traffic zone is area in front of door
-            zone_width = 1.2  # 1.2m traffic corridor
             zone_depth = 1.5  # 1.5m in front of door
 
             if door.wall == WallSide.SOUTH:

@@ -15,10 +15,10 @@ No full pipeline re-run — only steps 2-4 (plan + resolve + lightweight repair)
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.modules.layout.application.pipeline.models import (
-    PipelineConfig,
     SSEEvent,
     SSEEventType,
 )

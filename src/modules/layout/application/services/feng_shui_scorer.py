@@ -10,12 +10,10 @@ from typing import Any
 from src.modules.layout.application.dtos import (
     AgentContext,
     PlacedFurniture,
-    PlacementStrategy,
 )
 from src.modules.layout.application.dtos.spatial_analysis import (
     CommandPosition,
     SpatialAnalysisResult,
-    ZoneQuality,
 )
 from src.modules.layout.domain.entities import Room
 from src.modules.layout.domain.value_objects import FengShuiScore
@@ -331,9 +329,7 @@ class FengShuiScorer:
         }
 
         # Count elements
-        element_counts: dict[FengShuiElement, int] = {
-            elem: 0 for elem in FengShuiElement
-        }
+        element_counts: dict[FengShuiElement, int] = dict.fromkeys(FengShuiElement, 0)
 
         for item in furniture:
             element = self.CATEGORY_ELEMENTS.get(
@@ -579,16 +575,13 @@ class FengShuiScorer:
         max_z = max(start_z, end_z)
 
         # Check if box overlaps the bounding region
-        if (
+        # More detailed check would use line-box intersection
+        return not (
             box.max_x < min_x
             or box.min_x > max_x
             or box.max_z < min_z
             or box.min_z > max_z
-        ):
-            return False
-
-        # More detailed check would use line-box intersection
-        return True
+        )
 
     def _is_aligned_with_door(
         self,

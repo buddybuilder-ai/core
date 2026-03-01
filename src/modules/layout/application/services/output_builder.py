@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -12,7 +12,6 @@ from src.modules.layout.application.dtos import (
 from src.modules.layout.application.dtos.placement_result import (
     BatchPlacementResult,
     LayoutOutput,
-    PlacementStatus,
 )
 from src.modules.layout.application.services.feng_shui_scorer import ScoringResult
 from src.modules.layout.domain.entities import Room

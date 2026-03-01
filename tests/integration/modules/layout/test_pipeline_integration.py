@@ -215,12 +215,6 @@ class TestPipelineRepairLoop:
     @pytest.mark.asyncio
     async def test_repair_step_starts_when_conflicts_found(self, mock_both_steps):
         """Inject a conflict from the rule checker to trigger the repair step."""
-        from src.modules.layout.application.pipeline.models import (
-            PipelineStep,
-            SSEEvent,
-            StepResult,
-            StepStatus,
-        )
         from src.modules.layout.application.pipeline.steps.step3_rule_checker import RuleCheckerStep
 
         original_execute = RuleCheckerStep.execute

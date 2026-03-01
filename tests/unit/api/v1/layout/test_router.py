@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.api.v1.layout.router import router
-from src.schemas.layout import RoomType, WallSide
 
 
 @pytest.fixture

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from src.modules.layout.application.agent import LayoutRequest
 from src.modules.layout.application.dtos import (

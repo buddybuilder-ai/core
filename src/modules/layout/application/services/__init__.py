@@ -1,5 +1,17 @@
 """Application services for feng shui layout generation."""
 
+from src.modules.layout.application.services.collision_checker import (
+    Collision,
+    check_collisions,
+)
+from src.modules.layout.application.services.context_injector import (
+    ContextInjector,
+    RagContext,
+)
+from src.modules.layout.application.services.feng_shui_checker import (
+    FengShuiViolation,
+    check_feng_shui,
+)
 from src.modules.layout.application.services.feng_shui_scorer import (
     FengShuiElement,
     FengShuiScorer,
@@ -12,10 +24,15 @@ from src.modules.layout.application.services.furniture_selector import (
     FurnitureSelector,
 )
 from src.modules.layout.application.services.input_analyzer import (
-    InputAnalyzer,
     InputAnalysisResult,
+    InputAnalyzer,
     ValidationIssue,
     ValidationSeverity,
+)
+from src.modules.layout.application.services.layout_resolver import (
+    LayoutResolutionResult,
+    LayoutResolver,
+    SemanticPlacementSchema,
 )
 from src.modules.layout.application.services.output_builder import (
     LayoutReport,
@@ -37,23 +54,6 @@ from src.modules.layout.application.services.spatial_resolver import (
     RoomSpec,
     SemanticPlacement,
     SpatialResolver,
-)
-from src.modules.layout.application.services.collision_checker import (
-    Collision,
-    check_collisions,
-)
-from src.modules.layout.application.services.feng_shui_checker import (
-    FengShuiViolation,
-    check_feng_shui,
-)
-from src.modules.layout.application.services.layout_resolver import (
-    LayoutResolutionResult,
-    LayoutResolver,
-    SemanticPlacementSchema,
-)
-from src.modules.layout.application.services.context_injector import (
-    ContextInjector,
-    RagContext,
 )
 
 __all__ = [

@@ -2,28 +2,27 @@
 
 import pytest
 
-from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
-from src.modules.layout.infrastructure.geometry.collision import AABB
-from src.modules.layout.application.services.spatial_resolver import PhysicalPlacement, RoomSpec
 from src.modules.layout.application.services.collision_checker import (
     DOOR_CLEARANCE,
     WALKWAY_CLEARANCE,
     Collision,
     check_collisions,
 )
-
+from src.modules.layout.application.services.spatial_resolver import PhysicalPlacement, RoomSpec
+from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
+from src.modules.layout.infrastructure.geometry.collision import AABB
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_placement(fid: str, x: float, z: float, w: float, l: float) -> PhysicalPlacement:
+def _make_placement(fid: str, x: float, z: float, w: float, depth: float) -> PhysicalPlacement:
     return PhysicalPlacement(
         furniture_id=fid,
         x=x, y=0.0, z=z,
         rotation=0,
-        bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=l),
+        bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=depth),
     )
 
 

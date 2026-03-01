@@ -16,12 +16,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.modules.layout.domain.entities.room import WallSide
-from src.modules.layout.infrastructure.geometry.collision import AABB
 from src.modules.layout.application.services.spatial_resolver import (
     PhysicalPlacement,
     RoomSpec,
 )
+from src.modules.layout.domain.entities.room import WallSide
+from src.modules.layout.infrastructure.geometry.collision import AABB
 
 
 @dataclass(frozen=True)

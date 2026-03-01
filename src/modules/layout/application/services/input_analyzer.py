@@ -800,7 +800,7 @@ class InputAnalyzer:
             issues.append(
                 ValidationIssue(
                     field=f"{field_prefix}.offset",
-                    message=f"Window extends beyond wall",
+                    message="Window extends beyond wall",
                     severity=ValidationSeverity.WARNING,
                 )
             )

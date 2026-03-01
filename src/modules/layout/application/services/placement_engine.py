@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from src.modules.layout.application.dtos import (
     AgentContext,
@@ -21,7 +21,6 @@ from src.modules.layout.application.dtos.placement_result import (
     PlacementStatus,
 )
 from src.modules.layout.application.dtos.spatial_analysis import (
-    CommandPosition,
     SpatialAnalysisResult,
     ZoneQuality,
 )

@@ -9,7 +9,6 @@ from src.modules.layout.application.dtos import (
     AnalysisZone,
     BatchPlacementResult,
     CommandPosition,
-    FallbackAction,
     FengShuiDirection,
     LayoutOutput,
     PlacedFurniture,

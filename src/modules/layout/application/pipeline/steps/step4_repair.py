@@ -13,13 +13,12 @@ up to max_repair_loops iterations.
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.modules.layout.application.pipeline.models import (
     Conflict,
-    ConflictSeverity,
     ConflictType,
-    PipelineConfig,
     PipelineState,
     PipelineStep,
     RepairAction,
@@ -58,7 +57,7 @@ class RepairStep(BaseStep):
 
         unresolved = state.unresolved_conflicts
         if not unresolved:
-            logger.info(f"🔧 STEP 4: No conflicts to repair - skipping")
+            logger.info("🔧 STEP 4: No conflicts to repair - skipping")
             yield self._emit_progress("No conflicts to repair", 1.0)
             yield self._emit_completed({"repairs_applied": 0})
             return
@@ -67,7 +66,7 @@ class RepairStep(BaseStep):
         repaired = 0
 
         logger.info(f"🔧 STEP 4: Repairing {total} conflicts")
-        logger.info(f"   Strategy: Shift → Rotate → Swap → Remove (last resort)")
+        logger.info("   Strategy: Shift → Rotate → Swap → Remove (last resort)")
 
         for i, conflict in enumerate(unresolved):
             progress = (i + 1) / total
@@ -84,7 +83,7 @@ class RepairStep(BaseStep):
                 repaired += 1
                 logger.info(f"      ✓ Fixed with {action.action_type.value}: {action.description}")
             else:
-                logger.info(f"      ✗ Could not fix automatically")
+                logger.info("      ✗ Could not fix automatically")
 
                 yield SSEEvent(
                     event_type=SSEEventType.REPAIR_APPLIED,

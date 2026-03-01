@@ -197,7 +197,7 @@ class MockRagSearchTool(BaseRagSearchTool):
 
         # Apply filters
         if input_data.room_type:
-            room_rules = set(r.id for r in get_rules_for_room_type(input_data.room_type))
+            room_rules = {r.id for r in get_rules_for_room_type(input_data.room_type)}
             matched_rules = [r for r in matched_rules if r.id in room_rules]
 
         if input_data.furniture_types:

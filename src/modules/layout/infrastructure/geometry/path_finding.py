@@ -539,10 +539,7 @@ def find_direct_line_path(
 
     line_box = AABB(min_x=min_x, min_z=min_z, max_x=max_x, max_z=max_z)
 
-    for obstacle in obstacles:
-        if line_box.intersects(obstacle):
-            return False
-    return True
+    return all(not line_box.intersects(obstacle) for obstacle in obstacles)
 
 
 def calculate_path_efficiency(

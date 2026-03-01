@@ -2,6 +2,18 @@
 
 from pydantic import BaseModel, Field
 
+from src.schemas.layout.agent import (
+    AgentContext,
+    AgentExecutionTrace,
+    AgentStep,
+    FengShuiLayoutRequest,
+    FengShuiLayoutResponse,
+    LayoutConstraint,
+    LayoutMetadata,
+    PlacedFurnitureItem,
+    ToolCallResult,
+)
+
 # Import from base first (no circular dependency)
 from src.schemas.layout.base import RoomDimensions
 
@@ -21,17 +33,6 @@ from src.schemas.layout.feng_shui import (
     ShaChiLine,
     WallSide,
     WindowPosition,
-)
-from src.schemas.layout.agent import (
-    AgentContext,
-    AgentExecutionTrace,
-    AgentStep,
-    FengShuiLayoutRequest,
-    FengShuiLayoutResponse,
-    LayoutConstraint,
-    LayoutMetadata,
-    PlacedFurnitureItem,
-    ToolCallResult,
 )
 
 

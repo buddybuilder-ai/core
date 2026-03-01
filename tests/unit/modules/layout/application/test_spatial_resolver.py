@@ -2,14 +2,13 @@
 
 import pytest
 
-from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
 from src.modules.layout.application.services.spatial_resolver import (
     FurnitureSize,
-    PhysicalPlacement,
     RoomSpec,
     SemanticPlacement,
     SpatialResolver,
 )
+from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
 
 
 @pytest.fixture

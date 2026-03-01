@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import AsyncGenerator
 from dataclasses import replace
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from src.modules.layout.application.dtos import PlacedFurniture
 from src.modules.layout.application.pipeline.models import (
@@ -72,7 +73,7 @@ class RuleCheckerStep(BaseStep):
 
         # --- Universal Standards ---
         yield self._emit_progress("Checking universal standards...", 0.2)
-        logger.info(f"   Checking universal standards (overlap, clearance, doors)...")
+        logger.info("   Checking universal standards (overlap, clearance, doors)...")
         universal_conflicts = self._check_universal_standards(items, room, spec)
         logger.info(f"   ✓ Universal check: {len(universal_conflicts)} issues found")
         for conflict in universal_conflicts[:3]:
@@ -82,7 +83,7 @@ class RuleCheckerStep(BaseStep):
 
         # --- Feng Shui Principles ---
         yield self._emit_progress("Checking feng shui principles...", 0.6)
-        logger.info(f"   Checking feng shui principles (command pos, chi flow)...")
+        logger.info("   Checking feng shui principles (command pos, chi flow)...")
         feng_shui_conflicts = self._check_feng_shui(items, room, spec)
         logger.info(f"   ✓ Feng shui check: {len(feng_shui_conflicts)} issues found")
         for conflict in feng_shui_conflicts:
@@ -307,14 +308,12 @@ class RuleCheckerStep(BaseStep):
         offset = door.get("offset", 1.0)
         width = door.get("width", 0.9)
         center = offset + width / 2
-        if wall == "north":
-            return center, 0
-        elif wall == "south":
-            return center, room.depth
-        elif wall == "west":
-            return 0, center
-        else:
-            return room.width, center
+        _wall_coords = {
+            "north": (center, 0),
+            "south": (center, room.depth),
+            "west": (0, center),
+        }
+        return _wall_coords.get(wall, (room.width, center))
 
     def _get_primary_door_pos(self, room: Room) -> tuple[float, float]:
         if room.doors:

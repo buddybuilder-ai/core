@@ -13,8 +13,8 @@ Streams SSE events for real-time frontend updates.
 from __future__ import annotations
 
 import logging
-import time
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.modules.layout.application.pipeline.models import (
     PipelineConfig,

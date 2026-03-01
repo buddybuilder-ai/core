@@ -1,8 +1,8 @@
 """Placement grid for feng shui layout generation."""
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Iterator
 
 
 class CellState(str, Enum):
@@ -245,10 +245,7 @@ class PlacementGrid:
         Returns:
             True if all cells in the rectangle are empty.
         """
-        for pos in rect.positions():
-            if not self.is_available(pos):
-                return False
-        return True
+        return all(self.is_available(pos) for pos in rect.positions())
 
     def mark_occupied(
         self,

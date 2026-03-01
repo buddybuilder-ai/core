@@ -1,8 +1,8 @@
 """Chat API endpoints for RAG conversational AI."""
 
-import httpx
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -113,8 +113,8 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     """
     async def event_generator():
         from src.modules.layout.application.agent.personality import (
-            detect_mood,
             detect_mode_switch,
+            detect_mood,
         )
 
         # Detect user mood from the message (keyword-based, no LLM call)

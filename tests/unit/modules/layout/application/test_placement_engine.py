@@ -2,9 +2,8 @@
 
 import pytest
 
-from src.modules.layout.application.dtos import PlacedFurniture, PlacementStrategy
+from src.modules.layout.application.dtos import PlacementStrategy
 from src.modules.layout.application.dtos.placement_result import (
-    PlacementFailureReason,
     PlacementStatus,
 )
 from src.modules.layout.application.dtos.spatial_analysis import (

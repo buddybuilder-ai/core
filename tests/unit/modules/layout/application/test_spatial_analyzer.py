@@ -4,7 +4,6 @@ import pytest
 
 from src.modules.layout.application.dtos import (
     AgentContext,
-    AgentPhase,
     ZoneQuality,
 )
 from src.modules.layout.application.services import SpatialAnalyzer

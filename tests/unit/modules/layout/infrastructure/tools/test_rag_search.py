@@ -4,7 +4,6 @@ import pytest
 
 from src.modules.layout.infrastructure.tools.feng_shui_rules_data import (
     FENG_SHUI_RULES,
-    FengShuiRule,
     RuleCategory,
     get_rules_by_category,
     get_rules_for_furniture,
@@ -71,7 +70,7 @@ class TestFengShuiRulesData:
 
         # First result should have highest match count
         first_rule, first_count = results[0]
-        for rule, count in results[1:]:
+        for _rule, count in results[1:]:
             assert count <= first_count
 
     def test_search_with_no_matches(self) -> None:

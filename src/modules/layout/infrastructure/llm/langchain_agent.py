@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 
 from src.config.settings import get_settings
@@ -255,11 +254,11 @@ class FengShuiLLMAgent:
         pos_x = float(old.get("pos_x", room_width / 2))
         pos_z = float(old.get("pos_z", room_depth / 2))
         w = float(old.get("width", 1.0))
-        l = float(old.get("depth", 1.0))
+        depth = float(old.get("depth", 1.0))
         h = float(old.get("height", 1.0))
 
         dist_south = pos_z
-        dist_north = room_depth - (pos_z + l)
+        dist_north = room_depth - (pos_z + depth)
         dist_west  = pos_x
         dist_east  = room_width - (pos_x + w)
         min_dist = min(dist_south, dist_north, dist_west, dist_east)
@@ -281,19 +280,19 @@ class FengShuiLLMAgent:
             offset = round(dist_north, 2)
         elif min_dist == dist_west:
             target_wall = "west"
-            rel = pos_z / max(room_depth - l, 0.001)
+            rel = pos_z / max(room_depth - depth, 0.001)
             alignment = "left" if rel < 0.33 else ("right" if rel > 0.66 else "center")
             offset = round(dist_west, 2)
         else:
             target_wall = "east"
-            rel = pos_z / max(room_depth - l, 0.001)
+            rel = pos_z / max(room_depth - depth, 0.001)
             alignment = "left" if rel < 0.33 else ("right" if rel > 0.66 else "center")
             offset = round(dist_east, 2)
 
         return {
             "furniture_id": fid,
             "furniture_type": ftype,
-            "size": {"w": w, "l": l, "h": h},
+            "size": {"w": w, "l": depth, "h": h},
             "target_wall": target_wall,
             "alignment": alignment,
             "offset_from_wall": max(0.0, offset),

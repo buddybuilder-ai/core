@@ -2,13 +2,13 @@
 
 import pytest
 
+from src.modules.layout.application.dtos import AgentPhase
 from src.modules.layout.application.services import (
-    InputAnalyzer,
     InputAnalysisResult,
+    InputAnalyzer,
     ValidationIssue,
     ValidationSeverity,
 )
-from src.modules.layout.application.dtos import AgentPhase
 
 
 class TestValidationIssue:

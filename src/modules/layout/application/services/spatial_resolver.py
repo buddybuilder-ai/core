@@ -18,12 +18,12 @@ class FurnitureSize:
 
     Attributes:
         w: Width along x-axis in meters.
-        l: Length along z-axis in meters.
+        length: Length along z-axis in meters.
         h: Height along y-axis in meters.
     """
 
     w: float
-    l: float
+    length: float
     h: float
 
 
@@ -133,17 +133,17 @@ class SpatialResolver:
             x, z, rotation = self._wall_position(p, room, wall)
 
         # Use actual footprint dimensions after rotation
-        w, l = self._footprint(p.size, rotation)
+        w, length = self._footprint(p.size, rotation)
 
         # Cap dimensions so item never exceeds room size
         w = min(w, room.width)
-        l = min(l, room.depth)
+        length = min(length, room.depth)
 
         # Clamp origin so item stays fully inside room
         x = max(0.0, min(x, room.width - w))
-        z = max(0.0, min(z, room.depth - l))
+        z = max(0.0, min(z, room.depth - length))
 
-        bbox = AABB.from_position_and_size(x=x, z=z, width=w, depth=l)
+        bbox = AABB.from_position_and_size(x=x, z=z, width=w, depth=length)
         return PhysicalPlacement(
             furniture_id=p.furniture_id,
             x=x,
@@ -156,36 +156,36 @@ class SpatialResolver:
     def _footprint(self, size: FurnitureSize, rotation: int) -> tuple[float, float]:
         """Return (width_x, depth_z) after applying rotation."""
         if rotation in (90, 270):
-            return size.l, size.w
-        return size.w, size.l
+            return size.length, size.w
+        return size.w, size.length
 
     def _center_position(
         self, p: SemanticPlacement, room: RoomSpec
     ) -> tuple[float, float, int]:
-        w, l = self._footprint(p.size, 0)
+        w, length = self._footprint(p.size, 0)
         x = (room.width - w) / 2.0
-        z = (room.depth - l) / 2.0
+        z = (room.depth - length) / 2.0
         return x, z, 0
 
     def _wall_position(
         self, p: SemanticPlacement, room: RoomSpec, wall: str
     ) -> tuple[float, float, int]:
         rotation = _WALL_ROTATION.get(wall, 0)
-        w, l = self._footprint(p.size, rotation)
+        w, length = self._footprint(p.size, rotation)
         gap = p.offset_from_wall
 
         if wall == "south":
             z = gap
             x = self._align_along_axis(p.alignment, w, room.width)
         elif wall == "north":
-            z = room.depth - l - gap
+            z = room.depth - length - gap
             x = self._align_along_axis(p.alignment, w, room.width)
         elif wall == "west":
             x = gap
-            z = self._align_along_axis(p.alignment, l, room.depth)
+            z = self._align_along_axis(p.alignment, length, room.depth)
         elif wall == "east":
             x = room.width - w - gap
-            z = self._align_along_axis(p.alignment, l, room.depth)
+            z = self._align_along_axis(p.alignment, length, room.depth)
         else:
             x = gap
             z = gap

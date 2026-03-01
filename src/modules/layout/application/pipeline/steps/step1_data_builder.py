@@ -7,7 +7,8 @@ into a validated structured RoomSpec. Uses existing InputAnalyzer service.
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.modules.layout.application.pipeline.models import (
     PipelineConfig,
@@ -52,7 +53,7 @@ class StructuredDataBuilderStep(BaseStep):
         if not raw:
             raise ValueError("No room specification provided")
 
-        logger.info(f"📋 STEP 1: Parsing and validating room specification")
+        logger.info("📋 STEP 1: Parsing and validating room specification")
         logger.info(f"   Room type: {raw.get('room_type', 'bedroom')}")
         logger.info(f"   Dimensions: {raw.get('width', 0)}m × {raw.get('depth', 0)}m")
         logger.info(f"   Doors: {len(raw.get('doors', []))}, Windows: {len(raw.get('windows', []))}")
@@ -66,7 +67,7 @@ class StructuredDataBuilderStep(BaseStep):
             logger.error(f"   ✗ Validation failed: {error_msg}")
             raise ValueError(f"Invalid input: {error_msg}")
 
-        logger.info(f"   ✓ Input validation passed")
+        logger.info("   ✓ Input validation passed")
 
         yield self._emit_progress("Building room model...", 0.5)
 

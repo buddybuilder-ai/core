@@ -18,28 +18,6 @@ Public API:
 """
 
 # Core orchestration (primary public API)
-from src.modules.layout.application.agent import (
-    LayoutOrchestrator,
-    LayoutRequest,
-    LayoutResponse,
-    OrchestratorConfig,
-    generate_layout,
-)
-
-# Domain entities
-from src.modules.layout.domain import (
-    DoorPosition,
-    Furniture,
-    FengShuiScore,
-    FurnitureCategory,
-    Placement,
-    Position3D,
-    Room,
-    RoomType,
-    WallSide,
-    WindowPosition,
-)
-
 # DTOs for working with the agent
 from src.modules.layout.application import (
     AgentContext,
@@ -51,6 +29,13 @@ from src.modules.layout.application import (
     SpatialAnalysisResult,
     UserPreferences,
 )
+from src.modules.layout.application.agent import (
+    LayoutOrchestrator,
+    LayoutRequest,
+    LayoutResponse,
+    OrchestratorConfig,
+    generate_layout,
+)
 
 # Services for direct use
 from src.modules.layout.application.services import (
@@ -60,6 +45,20 @@ from src.modules.layout.application.services import (
     OutputBuilder,
     PlacementEngine,
     SpatialAnalyzer,
+)
+
+# Domain entities
+from src.modules.layout.domain import (
+    DoorPosition,
+    FengShuiScore,
+    Furniture,
+    FurnitureCategory,
+    Placement,
+    Position3D,
+    Room,
+    RoomType,
+    WallSide,
+    WindowPosition,
 )
 
 __all__ = [

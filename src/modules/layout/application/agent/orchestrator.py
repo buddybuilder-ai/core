@@ -18,7 +18,6 @@ from src.modules.layout.application.agent.state_machine import (
 from src.modules.layout.application.dtos import (
     AgentContext,
     AgentPhase,
-    PlacedFurniture,
     UserPreferences,
 )
 from src.modules.layout.application.dtos.placement_result import (
@@ -33,7 +32,6 @@ from src.modules.layout.application.services import (
     OutputBuilder,
     PlacementEngine,
     SpatialAnalyzer,
-    build_layout_report,
 )
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.value_objects import FengShuiScore
@@ -476,9 +474,6 @@ class LayoutOrchestrator:
         # Get spatial analysis if available
         spatial_analysis = None
         if "spatial_analysis" in self._context.metadata:
-            from src.modules.layout.application.dtos.spatial_analysis import (
-                SpatialAnalysisResult,
-            )
             # Note: Would need proper deserialization in production
             pass
 

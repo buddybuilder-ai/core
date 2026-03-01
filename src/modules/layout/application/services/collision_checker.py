@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.modules.layout.domain.entities.room import DoorPosition, WallSide
-from src.modules.layout.infrastructure.geometry.collision import AABB
 from src.modules.layout.application.services.spatial_resolver import (
     PhysicalPlacement,
     RoomSpec,
 )
+from src.modules.layout.domain.entities.room import DoorPosition, WallSide
+from src.modules.layout.infrastructure.geometry.collision import AABB
 
 DOOR_CLEARANCE = 0.80   # metres
 WALKWAY_CLEARANCE = 0.60  # metres

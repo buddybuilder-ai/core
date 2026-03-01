@@ -5,7 +5,7 @@ from __future__ import annotations
 import abc
 import logging
 import time
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from src.modules.layout.application.pipeline.models import (
     PipelineConfig,

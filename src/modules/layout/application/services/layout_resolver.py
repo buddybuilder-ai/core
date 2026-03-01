@@ -221,7 +221,7 @@ class LayoutResolver:
             furniture_type=s.furniture_type,
             size=FurnitureSize(
                 w=float(s.size.get("w", 1.0)),
-                l=float(s.size.get("l", 1.0)),
+                length=float(s.size.get("l", 1.0)),
                 h=float(s.size.get("h", 1.0)),
             ),
             target_wall=s.target_wall,

@@ -2,7 +2,13 @@
 
 import pytest
 
-from src.modules.layout.domain.entities import DoorPosition, Room, RoomType, WallSide, WindowPosition
+from src.modules.layout.domain.entities import (
+    DoorPosition,
+    Room,
+    RoomType,
+    WallSide,
+    WindowPosition,
+)
 from src.modules.layout.infrastructure.tools.spatial_calculator_tool import (
     SpatialAnalysisInput,
     SpatialCalculatorTool,

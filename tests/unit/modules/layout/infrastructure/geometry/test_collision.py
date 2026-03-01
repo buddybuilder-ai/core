@@ -628,7 +628,7 @@ class TestCollisionDetectorIntegration:
         chair = AABB.from_position_and_size(0.8, 1.5, 0.6, 0.6)
 
         # Check chair has clearance from desk
-        result = detector.check_clearance(chair, desk, chair_clearance)
+        detector.check_clearance(chair, desk, chair_clearance)
         # Chair is close to desk, might violate clearance
         # This is expected in this setup
 

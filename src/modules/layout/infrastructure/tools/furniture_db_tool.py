@@ -9,9 +9,6 @@ from src.modules.layout.infrastructure.tools.furniture_catalog_data import (
     BudgetLevel,
     CatalogFurniture,
     FurnitureCategory,
-    get_essential_furniture,
-    get_furniture_by_budget,
-    get_furniture_by_category,
     get_furniture_by_id,
     get_furniture_by_room_type,
 )

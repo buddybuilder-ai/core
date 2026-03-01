@@ -1,6 +1,5 @@
 """Unit tests for the personality module."""
 
-import pytest
 
 from src.modules.layout.application.agent.personality import (
     PersonalityMode,

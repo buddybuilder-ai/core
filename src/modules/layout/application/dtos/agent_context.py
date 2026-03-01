@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from src.modules.layout.domain.entities import DoorPosition, Room, WindowPosition
+from src.modules.layout.domain.entities import Room
 from src.modules.layout.domain.value_objects import FengShuiScore
 
 
