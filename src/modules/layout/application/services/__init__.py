@@ -46,6 +46,11 @@ from src.modules.layout.application.services.feng_shui_checker import (
     FengShuiViolation,
     check_feng_shui,
 )
+from src.modules.layout.application.services.layout_resolver import (
+    LayoutResolutionResult,
+    LayoutResolver,
+    SemanticPlacementSchema,
+)
 
 __all__ = [
     "FallbackStrategy",
@@ -79,4 +84,8 @@ __all__ = [
     "SpatialResolver",
     "check_collisions",
     "check_feng_shui",
+    # Integration layer
+    "LayoutResolutionResult",
+    "LayoutResolver",
+    "SemanticPlacementSchema",
 ]
