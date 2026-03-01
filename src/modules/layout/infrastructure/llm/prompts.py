@@ -237,3 +237,22 @@ For each selected item, explain:
 - Why it's needed for this room type
 - Its Feng Shui element contribution
 - Recommended placement zone"""
+
+EXPLANATION_PROMPT = """\
+You are explaining a feng shui furniture layout result to the user.
+
+Room: {room_type} ({width}m × {depth}m)
+Items placed: {items_summary}
+Conflicts found: {conflicts_summary}
+Repairs applied: {repairs_summary}
+Feng shui score: {total_score}/100 ({grade})
+Remaining issues: {remaining_issues}
+
+Write a clear, natural explanation in Thai language (200–350 words) covering:
+1. What furniture was placed and the key feng shui reason for the most important items
+2. Any conflicts that were detected and how they were resolved (if any)
+3. The overall feng shui score and what it means for the space
+4. Any remaining issues the user should be aware of (if any)
+
+Do NOT output JSON, markdown headers, or bullet lists. Write in plain, flowing Thai prose only.\
+"""

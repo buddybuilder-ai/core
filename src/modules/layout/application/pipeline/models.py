@@ -81,6 +81,8 @@ class SSEEventType(str, Enum):
     MODIFIER_STARTED = "modifier_started"
     MODIFIER_UPDATED = "modifier_updated"
     MODIFIER_COMPLETED = "modifier_completed"
+    # Personality mode
+    MODE_CHANGED = "mode_changed"
 
 
 @dataclass
@@ -196,6 +198,9 @@ class PipelineState:
 
     # RAG context retrieved between Step 1 and Step 2
     rag_context: dict[str, Any] = field(default_factory=dict)
+
+    # Personality mode for Explainer (Step 5)
+    personality_mode: str = "buddy"
 
     @property
     def unresolved_conflicts(self) -> list[Conflict]:

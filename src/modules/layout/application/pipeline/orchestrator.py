@@ -48,7 +48,7 @@ class PipelineOrchestrator:
         self.config = config or PipelineConfig()
 
     async def run(
-        self, room_spec: dict[str, Any]
+        self, room_spec: dict[str, Any], mode: str = "buddy"
     ) -> AsyncGenerator[SSEEvent, None]:
         """Run the full pipeline, yielding SSE events.
 
@@ -56,11 +56,12 @@ class PipelineOrchestrator:
 
         Args:
             room_spec: Raw room specification from the user/frontend.
+            mode: Personality mode for Step 5 Explainer ("buddy"|"mentor"|"fun").
 
         Yields:
             SSEEvent objects to stream to the client.
         """
-        state = PipelineState(room_spec=room_spec)
+        state = PipelineState(room_spec=room_spec, personality_mode=mode)
         steps = self._build_steps()
 
         yield SSEEvent(
@@ -169,20 +170,21 @@ class PipelineOrchestrator:
             )
 
     async def run_sync(
-        self, room_spec: dict[str, Any]
+        self, room_spec: dict[str, Any], mode: str = "buddy"
     ) -> PipelineResult:
         """Run the pipeline and return the final result (non-streaming).
 
         Args:
             room_spec: Raw room specification.
+            mode: Personality mode for Step 5 Explainer ("buddy"|"mentor"|"fun").
 
         Returns:
             PipelineResult with the complete layout.
         """
-        state = PipelineState(room_spec=room_spec)
+        state = PipelineState(room_spec=room_spec, personality_mode=mode)
         last_event: SSEEvent | None = None
 
-        async for event in self.run(room_spec):
+        async for event in self.run(room_spec, mode=mode):
             last_event = event
 
         if last_event and last_event.event_type == SSEEventType.PIPELINE_COMPLETED:

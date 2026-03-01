@@ -25,7 +25,7 @@ from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-_VALID_INTENTS = {"new_layout", "modify", "question", "explain"}
+_VALID_INTENTS = {"new_layout", "modify", "question", "explain", "set_mode"}
 _FALLBACK_INTENT = "question"
 
 _SYSTEM_PROMPT = """\
@@ -36,6 +36,8 @@ Classify the user message into exactly one of:
 - "modify": user wants to change an existing layout (move/resize/swap/remove/add furniture)
 - "question": user asks about feng shui or design principles (including greetings)
 - "explain": user wants an explanation of the current layout
+- "set_mode": user wants to change the personality mode of the assistant
+  (e.g. "เปลี่ยนเป็นโหมดครู", "switch to fun mode", "use mentor mode", "โหมดสนุก")
 
 Context clues:
 - If has_existing_layout is false, "modify" and "explain" are unlikely.
@@ -43,7 +45,7 @@ Context clues:
 
 Respond ONLY with a valid JSON object — no other text:
 {
-  "intent": "<new_layout|modify|question|explain>",
+  "intent": "<new_layout|modify|question|explain|set_mode>",
   "confidence": <float 0.0-1.0>,
   "extracted_params": {}
 }
@@ -53,6 +55,10 @@ For "modify" intent, extracted_params must be:
   "action": "<move|resize|swap|remove|add>",
   "target_furniture": "<furniture type e.g. bed|desk|sofa|wardrobe|chair>",
   "details": "<free text describing the change>"
+}
+For "set_mode" intent, extracted_params must be:
+{
+  "mode": "<mentor|buddy|fun>"
 }
 For all other intents, extracted_params = {}."""
 
@@ -178,6 +184,14 @@ class RouterAgent:
                     confidence=confidence,
                     error=f"Low confidence: {confidence:.2f}",
                 )
+
+            # Keyword-based set_mode override — catches cases the LLM misses
+            if intent != "set_mode":
+                from src.modules.layout.application.agent.personality import detect_mode_switch
+                switched = detect_mode_switch(message)
+                if switched:
+                    intent = "set_mode"
+                    extracted = {"mode": switched}
 
             logger.info(
                 f"RouterAgent: intent={intent!r} confidence={confidence:.2f} "

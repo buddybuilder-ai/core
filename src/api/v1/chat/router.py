@@ -112,6 +112,14 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
         SSE stream of events.
     """
     async def event_generator():
+        from src.modules.layout.application.agent.personality import (
+            detect_mood,
+            detect_mode_switch,
+        )
+
+        # Detect user mood from the message (keyword-based, no LLM call)
+        mood = detect_mood(request.message)
+
         # --- 1. Classify intent ---
         router_agent = RouterAgent()
         result = await router_agent.classify(
@@ -130,7 +138,19 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
         ).to_sse()
 
         # --- 2. Dispatch to handler ---
-        if result.intent == "new_layout":
+        if result.intent == "set_mode":
+            new_mode = (
+                result.extracted_params.get("mode")
+                or detect_mode_switch(request.message)
+                or "buddy"
+            )
+            yield SSEEvent(
+                event_type=SSEEventType.MODE_CHANGED,
+                data={"mode": new_mode},
+            ).to_sse()
+            return
+
+        elif result.intent == "new_layout":
             if not request.room_spec:
                 yield SSEEvent(
                     event_type=SSEEventType.PIPELINE_FAILED,
@@ -138,7 +158,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 ).to_sse()
                 return
             orchestrator = PipelineOrchestrator(PipelineConfig())
-            async for event in orchestrator.run(request.room_spec):
+            async for event in orchestrator.run(request.room_spec, mode=request.mode):
                 yield event.to_sse()
 
         elif result.intent == "modify":
@@ -158,13 +178,16 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 yield event.to_sse()
 
         elif result.intent == "explain":
-            state = PipelineState(room_spec=request.room_spec or {})
+            state = PipelineState(
+                room_spec=request.room_spec or {},
+                personality_mode=request.mode,
+            )
             state.layout_items = request.current_layout
             async for event in ExplainerStep(PipelineConfig()).execute(state):
                 yield event.to_sse()
 
         else:  # "question" (also the fallback)
-            answer = await _answer_question(request.message, request.mode)
+            answer = await _answer_question(request.message, request.mode, mood)
             yield SSEEvent(
                 event_type=SSEEventType.PIPELINE_COMPLETED,
                 data={"intent": "question", "answer": answer},
@@ -181,7 +204,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     )
 
 
-async def _answer_question(message: str, mode: str) -> str:
+async def _answer_question(message: str, mode: str, mood: str = "neutral") -> str:
     """Answer a feng shui / design question directly via LLM with RAG augmentation.
 
     Retrieves relevant feng shui rules from the knowledge base and prepends them
@@ -191,9 +214,10 @@ async def _answer_question(message: str, mode: str) -> str:
     Reuses the same OpenRouter call logic as send_message().
     Returns the answer string, or an error message if the call fails.
     """
+    from src.modules.layout.application.agent.personality import get_system_prompt
     from src.modules.layout.application.services import ContextInjector
 
-    system_prompt = _get_default_system_prompt(mode)
+    system_prompt = get_system_prompt(mode, mood)
 
     # RAG augmentation — graceful; never raises
     rag_context = ""

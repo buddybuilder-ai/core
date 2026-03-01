@@ -13,6 +13,7 @@ from langchain_openai import ChatOpenAI
 
 from src.config.settings import get_settings
 from src.modules.layout.infrastructure.llm.prompts import (
+    EXPLANATION_PROMPT,
     FENG_SHUI_SYSTEM_PROMPT,
     FURNITURE_SELECTION_PROMPT,
     LAYOUT_PLANNING_PROMPT,
@@ -467,6 +468,63 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         # Last resort: raise error
         raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+
+    async def explain_layout(
+        self,
+        room_type: str,
+        width: float,
+        depth: float,
+        items_summary: str,
+        conflicts_summary: str,
+        repairs_summary: str,
+        total_score: int,
+        grade: str,
+        remaining_issues: str,
+        personality_mode: str = "buddy",
+    ) -> LLMResponse:
+        """Generate a Thai natural-language explanation of the layout result.
+
+        Args:
+            room_type: The room type (e.g. "bedroom").
+            width: Room width in metres.
+            depth: Room depth in metres.
+            items_summary: Short text listing placed items.
+            conflicts_summary: Short text summarising conflicts found.
+            repairs_summary: Short text summarising repairs applied.
+            total_score: Feng shui score 0–100.
+            grade: Grade string (e.g. "Excellent").
+            remaining_issues: Short text listing unresolved issues.
+            personality_mode: "mentor", "buddy", or "fun".
+
+        Returns:
+            LLMResponse whose .content is a plain Thai text explanation.
+        """
+        from src.modules.layout.application.agent.personality import get_system_prompt
+
+        system_prompt = get_system_prompt(personality_mode)
+        prompt = EXPLANATION_PROMPT.format(
+            room_type=room_type,
+            width=width,
+            depth=depth,
+            items_summary=items_summary,
+            conflicts_summary=conflicts_summary,
+            repairs_summary=repairs_summary,
+            total_score=total_score,
+            grade=grade,
+            remaining_issues=remaining_issues,
+        )
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=prompt),
+        ]
+        try:
+            response = await self._llm.ainvoke(messages)
+            content = response.content if hasattr(response, "content") else ""
+            logger.info(f"explain_layout: generated {len(content)} chars (mode={personality_mode})")
+            return LLMResponse(content=content, raw_response={"text": content})
+        except Exception as exc:
+            logger.warning(f"explain_layout failed: {exc}")
+            raise
 
     def _format_catalog(self, catalog: list[dict[str, Any]]) -> str:
         """Format furniture catalog for prompt."""
