@@ -28,6 +28,9 @@ class ChatRequest(BaseModel):
 
     text: str = Field(..., min_length=1, description="User message text")
     mode: ChatMode = Field(..., description="Chat personality mode")
+    system_prompt: str | None = Field(
+        default=None, description="Optional system prompt override"
+    )
 
 
 class ChatResponse(BaseModel):

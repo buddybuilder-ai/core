@@ -17,6 +17,7 @@ class RoomType(str, Enum):
     DINING_ROOM = "dining_room"
     KITCHEN = "kitchen"
     BATHROOM = "bathroom"
+    STUDIO_APARTMENT = "studio_apartment"
 
 
 class FiveElement(str, Enum):

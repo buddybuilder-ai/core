@@ -142,6 +142,8 @@ class InputAnalyzer:
         "dining_room": RoomType.DINING_ROOM,
         "diningroom": RoomType.DINING_ROOM,
         "dining": RoomType.DINING_ROOM,
+        "studio_apartment": RoomType.STUDIO_APARTMENT,
+        "studio": RoomType.STUDIO_APARTMENT,
     }
 
     # Valid wall sides

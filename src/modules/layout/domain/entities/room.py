@@ -21,6 +21,7 @@ class RoomType(str, Enum):
     DINING_ROOM = "dining_room"
     KITCHEN = "kitchen"
     BATHROOM = "bathroom"
+    STUDIO_APARTMENT = "studio_apartment"
 
     @property
     def essential_furniture(self) -> list[str]:
@@ -32,6 +33,7 @@ class RoomType(str, Enum):
             self.DINING_ROOM: ["dining_table", "dining_chair"],
             self.KITCHEN: ["cabinet", "counter"],
             self.BATHROOM: ["toilet", "sink"],
+            self.STUDIO_APARTMENT: ["sofa_bed", "compact_wardrobe", "folding_desk"],
         }
         return essentials.get(self, [])
 

@@ -109,6 +109,7 @@ class FurnitureSelector:
         "living_room": ["sofa"],
         "office": ["desk", "chair"],
         "dining_room": ["dining_table"],
+        "studio_apartment": ["sofa_bed", "compact_wardrobe"],
     }
 
     # Standard furniture categories by room type
@@ -117,6 +118,14 @@ class FurnitureSelector:
         "living_room": ["sofa", "coffee_table", "tv_stand", "armchair", "bookshelf"],
         "office": ["desk", "chair", "bookshelf", "filing_cabinet"],
         "dining_room": ["dining_table", "dining_chair", "sideboard"],
+        "studio_apartment": [
+            "sofa_bed",
+            "compact_wardrobe",
+            "folding_desk",
+            "compact_dining",
+            "shoe_cabinet",
+            "room_divider",
+        ],
     }
 
     # Feng shui placement notes by category
@@ -140,6 +149,21 @@ class FurnitureSelector:
             "Center of the dining area for family harmony",
             "Avoid placing in direct line with the door",
             "Ensure good lighting",
+        ],
+        "sofa_bed": [
+            "Place against solid wall for stability",
+            "Allow clear path when converting to bed",
+            "Face the main entry point when in sofa mode",
+        ],
+        "folding_desk": [
+            "Position in well-lit area near natural light",
+            "Face the door while working (command position)",
+            "Keep wall behind clear for folding mechanism",
+        ],
+        "room_divider": [
+            "Use to separate sleep and living zones",
+            "Ensure chi flow is not completely blocked",
+            "Position to create privacy without closing off energy",
         ],
     }
 
