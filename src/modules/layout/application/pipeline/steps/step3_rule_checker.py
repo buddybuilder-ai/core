@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import replace
 from typing import Any, AsyncGenerator
 
 from src.modules.layout.application.dtos import PlacedFurniture
@@ -67,13 +68,25 @@ class RuleCheckerStep(BaseStep):
         # Keep previously resolved ones for history
         state.conflicts = [c for c in state.conflicts if c.resolved]
 
+        logger.info(f"🔍 STEP 3: Checking {len(items)} furniture items against rules")
+
         # --- Universal Standards ---
         yield self._emit_progress("Checking universal standards...", 0.2)
+        logger.info(f"   Checking universal standards (overlap, clearance, doors)...")
         universal_conflicts = self._check_universal_standards(items, room, spec)
+        logger.info(f"   ✓ Universal check: {len(universal_conflicts)} issues found")
+        for conflict in universal_conflicts[:3]:
+            logger.info(f"      - [{conflict.severity.value.upper()}] {conflict.description}")
+        if len(universal_conflicts) > 3:
+            logger.info(f"      ... and {len(universal_conflicts) - 3} more")
 
         # --- Feng Shui Principles ---
         yield self._emit_progress("Checking feng shui principles...", 0.6)
+        logger.info(f"   Checking feng shui principles (command pos, chi flow)...")
         feng_shui_conflicts = self._check_feng_shui(items, room, spec)
+        logger.info(f"   ✓ Feng shui check: {len(feng_shui_conflicts)} issues found")
+        for conflict in feng_shui_conflicts:
+            logger.info(f"      - [{conflict.severity.value.upper()}] {conflict.description}")
 
         # --- Score layout ---
         yield self._emit_progress("Scoring layout...", 0.8)
@@ -87,8 +100,11 @@ class RuleCheckerStep(BaseStep):
             "sha_chi_avoidance": scoring_result.score.sha_chi_avoidance,
         }
 
-        # Collect all conflicts
-        all_conflicts = universal_conflicts + feng_shui_conflicts
+        # Enrich conflict suggestions with RAG rule descriptions (no-op if empty)
+        rule_descs = state.rag_context.get("rule_descriptions", {})
+        all_conflicts = self._enrich_with_rag(
+            universal_conflicts + feng_shui_conflicts, rule_descs
+        )
         state.conflicts.extend(all_conflicts)
 
         # Emit each conflict
@@ -106,6 +122,51 @@ class RuleCheckerStep(BaseStep):
             "total_score": scoring_result.score.total,
             "grade": scoring_result.score.grade,
         })
+
+    # --- RAG enrichment ---
+
+    # Maps ConflictType value → rule_id in the knowledge base
+    _CONFLICT_RULE_MAP: dict[str, str] = {
+        "back_to_door": "cmd_001",
+        "bad_command_position": "cmd_001",
+        "sha_chi_alignment": "sha_001",
+        "element_imbalance": "elem_001",
+        "blocked_chi_flow": "chi_001",
+    }
+
+    @classmethod
+    def _enrich_with_rag(
+        cls,
+        conflicts: list[Conflict],
+        rule_descriptions: dict[str, str],
+    ) -> list[Conflict]:
+        """Append knowledge-base rule text to conflict suggestions where available.
+
+        Args:
+            conflicts: Detected conflicts.
+            rule_descriptions: Mapping of rule_id → description from RAG context.
+
+        Returns:
+            Same conflicts with enriched suggestion strings.
+        """
+        if not rule_descriptions:
+            return conflicts
+        enriched: list[Conflict] = []
+        for c in conflicts:
+            rule_id = cls._CONFLICT_RULE_MAP.get(c.conflict_type.value)
+            if rule_id and rule_id in rule_descriptions:
+                enriched.append(
+                    replace(
+                        c,
+                        suggestion=(
+                            f"{c.suggestion}  "
+                            f"(Rule: {rule_descriptions[rule_id]})"
+                        ),
+                    )
+                )
+            else:
+                enriched.append(c)
+        return enriched
 
     def _check_universal_standards(
         self,

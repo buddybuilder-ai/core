@@ -194,6 +194,9 @@ class PipelineState:
     # Feng Shui
     feng_shui_score: dict[str, Any] = field(default_factory=dict)
 
+    # RAG context retrieved between Step 1 and Step 2
+    rag_context: dict[str, Any] = field(default_factory=dict)
+
     @property
     def unresolved_conflicts(self) -> list[Conflict]:
         return [c for c in self.conflicts if not c.resolved]

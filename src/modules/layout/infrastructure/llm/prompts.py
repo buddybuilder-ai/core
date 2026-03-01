@@ -183,7 +183,9 @@ Please create a layout plan that:
 4. Balances the five elements
 5. Avoids sha chi (negative energy lines)
 
-Output ONLY valid JSON. Use the semantic schema — no raw x/z coordinates."""
+Output ONLY valid JSON. Use the semantic schema — no raw x/z coordinates.
+
+{extra_context}"""
 
 SCORING_PROMPT = """Evaluate this furniture layout for aesthetic quality and usability.
 

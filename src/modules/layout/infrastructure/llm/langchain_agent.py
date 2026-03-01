@@ -157,6 +157,7 @@ class FengShuiLLMAgent:
         windows: list[dict[str, Any]],
         furniture_list: list[dict[str, Any]],
         command_positions: list[dict[str, Any]],
+        extra_context: str = "",
     ) -> LLMResponse:
         """Use LLM to plan furniture layout using semantic placement format.
 
@@ -175,6 +176,7 @@ class FengShuiLLMAgent:
             windows: Window positions.
             furniture_list: Furniture to place.
             command_positions: Identified command positions.
+            extra_context: Optional RAG-retrieved rule text to inject into prompt.
 
         Returns:
             LLMResponse with content["placements"] as semantic placement dicts.
@@ -193,6 +195,7 @@ class FengShuiLLMAgent:
             windows=json.dumps(windows, indent=2) if windows else "None",
             furniture_list=self._format_furniture_list(furniture_list),
             command_positions=json.dumps(command_positions, indent=2),
+            extra_context=extra_context,
         )
 
         output_schema = {

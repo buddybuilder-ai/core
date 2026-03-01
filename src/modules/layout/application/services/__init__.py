@@ -51,6 +51,10 @@ from src.modules.layout.application.services.layout_resolver import (
     LayoutResolver,
     SemanticPlacementSchema,
 )
+from src.modules.layout.application.services.context_injector import (
+    ContextInjector,
+    RagContext,
+)
 
 __all__ = [
     "FallbackStrategy",
@@ -88,4 +92,7 @@ __all__ = [
     "LayoutResolutionResult",
     "LayoutResolver",
     "SemanticPlacementSchema",
+    # RAG context injection
+    "ContextInjector",
+    "RagContext",
 ]

@@ -182,12 +182,32 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
 
 
 async def _answer_question(message: str, mode: str) -> str:
-    """Answer a feng shui / design question directly via LLM.
+    """Answer a feng shui / design question directly via LLM with RAG augmentation.
+
+    Retrieves relevant feng shui rules from the knowledge base and prepends them
+    to the user message for context-aware answers.  Falls back to plain LLM if
+    RAG retrieval fails or returns no results.
 
     Reuses the same OpenRouter call logic as send_message().
     Returns the answer string, or an error message if the call fails.
     """
+    from src.modules.layout.application.services import ContextInjector
+
     system_prompt = _get_default_system_prompt(mode)
+
+    # RAG augmentation — graceful; never raises
+    rag_context = ""
+    try:
+        injector = ContextInjector()
+        rag = await injector.retrieve({"room_type": "", "user_message": message})
+        rag_context = rag.layout_prompt_context
+    except Exception:
+        pass
+
+    augmented_message = (
+        f"{rag_context}\n\nUser question: {message}" if rag_context else message
+    )
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -202,7 +222,7 @@ async def _answer_question(message: str, mode: str) -> str:
                     "model": settings.LLM_MODEL_RAG,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": message},
+                        {"role": "user", "content": augmented_message},
                     ],
                     "temperature": settings.LLM_TEMPERATURE_RAG,
                     "max_tokens": 1000,

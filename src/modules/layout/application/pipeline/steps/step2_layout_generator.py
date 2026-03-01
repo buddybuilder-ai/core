@@ -113,6 +113,10 @@ class LayoutGeneratorStep(BaseStep):
         yield self._emit_progress("LLM planning semantic layout...", 0.5)
         logger.info(f"🤖 Calling LLM for semantic layout plan...")
 
+        extra_ctx = state.rag_context.get("layout_prompt_context", "")
+        if extra_ctx:
+            logger.info(f"   Injecting {len(extra_ctx)} chars of RAG context into LLM prompt")
+
         llm_response = await self._llm_agent.plan_layout(
             room_type=room_type,
             width=room.width,
@@ -122,6 +126,7 @@ class LayoutGeneratorStep(BaseStep):
             windows=windows,
             furniture_list=furniture_list,
             command_positions=command_pos,
+            extra_context=extra_ctx,
         )
 
         if not llm_response.success:

@@ -78,6 +78,38 @@ class PipelineOrchestrator:
                 yield event
             self._check_step_ok(state, PipelineStep.STRUCTURED_DATA_BUILDER)
 
+            # RAG retrieval — between Step 1 and Step 2
+            # Graceful: ContextInjector never raises; empty context is a no-op
+            from src.modules.layout.application.services import ContextInjector
+
+            yield SSEEvent(
+                event_type=SSEEventType.STEP_PROGRESS,
+                data={
+                    "step": "rag_retrieval",
+                    "message": "Retrieving feng shui knowledge...",
+                    "progress": 0.0,
+                },
+            )
+            _injector = ContextInjector()
+            _rag = await _injector.retrieve(state.room_spec)
+            state.rag_context = {
+                "layout_prompt_context": _rag.layout_prompt_context,
+                "rule_descriptions": _rag.rule_descriptions,
+                "source_citations": _rag.source_citations,
+                "rules_retrieved": len(_rag.rules),
+            }
+            logger.info(
+                f"RAG retrieval: {len(_rag.rules)} rules retrieved for pipeline"
+            )
+            yield SSEEvent(
+                event_type=SSEEventType.STEP_PROGRESS,
+                data={
+                    "step": "rag_retrieval",
+                    "message": f"Retrieved {len(_rag.rules)} feng shui rules",
+                    "progress": 1.0,
+                },
+            )
+
             # Step 2: Layout Generator
             async for event in steps["layout_generator"].execute(state):
                 yield event
