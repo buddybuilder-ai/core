@@ -1,4 +1,5 @@
 """BuddyBuilder AI - FastAPI Application Factory."""
+import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
@@ -8,6 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config.settings import get_settings
 
 settings = get_settings()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+# Set specific loggers
+logging.getLogger("src.modules.layout").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager

@@ -52,19 +52,28 @@ class StructuredDataBuilderStep(BaseStep):
         if not raw:
             raise ValueError("No room specification provided")
 
+        logger.info(f"📋 STEP 1: Parsing and validating room specification")
+        logger.info(f"   Room type: {raw.get('room_type', 'bedroom')}")
+        logger.info(f"   Dimensions: {raw.get('width', 0)}m × {raw.get('depth', 0)}m")
+        logger.info(f"   Doors: {len(raw.get('doors', []))}, Windows: {len(raw.get('windows', []))}")
+
         # Validate input
         input_data = self._build_input_data(raw)
         analysis = self._input_analyzer.analyze(input_data)
 
         if analysis.has_errors:
             error_msg = "; ".join(analysis.error_messages)
+            logger.error(f"   ✗ Validation failed: {error_msg}")
             raise ValueError(f"Invalid input: {error_msg}")
+
+        logger.info(f"   ✓ Input validation passed")
 
         yield self._emit_progress("Building room model...", 0.5)
 
         # Build Room entity
         room_type_str = raw.get("room_type", "bedroom")
         room_type = ROOM_TYPE_MAP.get(room_type_str, RoomType.BEDROOM)
+        logger.info(f"   Building Room entity (type={room_type.value})...")
         dims = raw.get("dimensions", {})
 
         doors = self._parse_doors(raw.get("doors", []))

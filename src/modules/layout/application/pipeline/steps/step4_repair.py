@@ -58,12 +58,16 @@ class RepairStep(BaseStep):
 
         unresolved = state.unresolved_conflicts
         if not unresolved:
+            logger.info(f"🔧 STEP 4: No conflicts to repair - skipping")
             yield self._emit_progress("No conflicts to repair", 1.0)
             yield self._emit_completed({"repairs_applied": 0})
             return
 
         total = len(unresolved)
         repaired = 0
+
+        logger.info(f"🔧 STEP 4: Repairing {total} conflicts")
+        logger.info(f"   Strategy: Shift → Rotate → Swap → Remove (last resort)")
 
         for i, conflict in enumerate(unresolved):
             progress = (i + 1) / total
@@ -72,11 +76,15 @@ class RepairStep(BaseStep):
                 progress * 0.9,
             )
 
+            logger.info(f"   [{i+1}/{total}] {conflict.conflict_type.value}: {conflict.description[:60]}...")
             action = self._try_repair(conflict, state.layout_items, room)
             if action and action.success:
                 conflict.resolved = True
                 state.repair_actions.append(action)
                 repaired += 1
+                logger.info(f"      ✓ Fixed with {action.action_type.value}: {action.description}")
+            else:
+                logger.info(f"      ✗ Could not fix automatically")
 
                 yield SSEEvent(
                     event_type=SSEEventType.REPAIR_APPLIED,
