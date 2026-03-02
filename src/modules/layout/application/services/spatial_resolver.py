@@ -18,12 +18,12 @@ class FurnitureSize:
 
     Attributes:
         w: Width along x-axis in meters.
-        l: Length along z-axis in meters.
+        length: Length along z-axis in meters.
         h: Height along y-axis in meters.
     """
 
     w: float
-    l: float
+    length: float
     h: float
 
 
@@ -156,8 +156,8 @@ class SpatialResolver:
     def _footprint(self, size: FurnitureSize, rotation: int) -> tuple[float, float]:
         """Return (width_x, depth_z) after applying rotation."""
         if rotation in (90, 270):
-            return size.l, size.w
-        return size.w, size.l
+            return size.length, size.w
+        return size.w, size.length
 
     def _center_position(self, p: SemanticPlacement, room: RoomSpec) -> tuple[float, float, int]:
         w, length = self._footprint(p.size, 0)

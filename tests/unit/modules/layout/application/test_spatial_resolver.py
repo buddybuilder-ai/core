@@ -38,7 +38,7 @@ class TestSouthWallPlacement:
         bed = SemanticPlacement(
             furniture_id="bed_01",
             furniture_type="bed",
-            size=FurnitureSize(w=2.0, l=1.9, h=0.5),
+            size=FurnitureSize(w=2.0, length=1.9, h=0.5),
             target_wall="south",
             alignment="center",
             offset_from_wall=0.05,
@@ -57,7 +57,7 @@ class TestSouthWallPlacement:
         sem = SemanticPlacement(
             furniture_id="nightstand_01",
             furniture_type="nightstand",
-            size=FurnitureSize(w=0.5, l=0.5, h=0.6),
+            size=FurnitureSize(w=0.5, length=0.5, h=0.6),
             target_wall="south",
             alignment="left",
             offset_from_wall=0.0,
@@ -71,7 +71,7 @@ class TestSouthWallPlacement:
         sem = SemanticPlacement(
             furniture_id="nightstand_02",
             furniture_type="nightstand",
-            size=FurnitureSize(w=0.5, l=0.5, h=0.6),
+            size=FurnitureSize(w=0.5, length=0.5, h=0.6),
             target_wall="south",
             alignment="right",
             offset_from_wall=0.0,
@@ -83,11 +83,11 @@ class TestSouthWallPlacement:
 
 class TestNorthWallPlacement:
     def test_left_alignment_wardrobe(self, resolver: SpatialResolver, room: RoomSpec) -> None:
-        """Wardrobe left of north wall: x=0, z = depth - size.l - gap."""
+        """Wardrobe left of north wall: x=0, z = depth - size.length - gap."""
         wardrobe = SemanticPlacement(
             furniture_id="wardrobe_01",
             furniture_type="wardrobe",
-            size=FurnitureSize(w=1.2, l=0.6, h=2.0),
+            size=FurnitureSize(w=1.2, length=0.6, h=2.0),
             target_wall="north",
             alignment="left",
             offset_from_wall=0.05,
@@ -104,7 +104,7 @@ class TestNorthWallPlacement:
         sem = SemanticPlacement(
             furniture_id="shelf_01",
             furniture_type="shelf",
-            size=FurnitureSize(w=1.0, l=0.3, h=1.8),
+            size=FurnitureSize(w=1.0, length=0.3, h=1.8),
             target_wall="north",
             alignment="center",
             offset_from_wall=0.0,
@@ -120,7 +120,7 @@ class TestEastWallPlacement:
         sem = SemanticPlacement(
             furniture_id="dresser_01",
             furniture_type="dresser",
-            size=FurnitureSize(w=0.5, l=1.0, h=1.2),
+            size=FurnitureSize(w=0.5, length=1.0, h=1.2),
             target_wall="east",
             alignment="center",
             offset_from_wall=0.0,
@@ -138,7 +138,7 @@ class TestWestWallPlacement:
         sem = SemanticPlacement(
             furniture_id="bookcase_01",
             furniture_type="bookcase",
-            size=FurnitureSize(w=0.3, l=1.0, h=2.0),
+            size=FurnitureSize(w=0.3, length=1.0, h=2.0),
             target_wall="west",
             alignment="left",
             offset_from_wall=0.0,
@@ -161,7 +161,7 @@ class TestCenterPlacement:
         sem = SemanticPlacement(
             furniture_id="table_01",
             furniture_type="table",
-            size=FurnitureSize(w=1.2, l=0.8, h=0.75),
+            size=FurnitureSize(w=1.2, length=0.8, h=0.75),
             target_wall="center",
             alignment="center",
             offset_from_wall=0.0,
@@ -186,7 +186,7 @@ class TestPriorityOrdering:
             SemanticPlacement(
                 furniture_id="desk_01",
                 furniture_type="desk",
-                size=FurnitureSize(w=1.2, l=0.6, h=0.75),
+                size=FurnitureSize(w=1.2, length=0.6, h=0.75),
                 target_wall="north",
                 alignment="center",
                 offset_from_wall=0.05,
@@ -195,7 +195,7 @@ class TestPriorityOrdering:
             SemanticPlacement(
                 furniture_id="bed_01",
                 furniture_type="bed",
-                size=FurnitureSize(w=2.0, l=1.9, h=0.5),
+                size=FurnitureSize(w=2.0, length=1.9, h=0.5),
                 target_wall="south",
                 alignment="center",
                 offset_from_wall=0.05,
@@ -218,7 +218,7 @@ class TestClamping:
         sem = SemanticPlacement(
             furniture_id="giant_sofa_01",
             furniture_type="sofa",
-            size=FurnitureSize(w=10.0, l=1.0, h=0.9),
+            size=FurnitureSize(w=10.0, length=1.0, h=0.9),
             target_wall="south",
             alignment="center",
             offset_from_wall=0.0,
@@ -241,7 +241,7 @@ class TestBBoxIntegrity:
         sem = SemanticPlacement(
             furniture_id="bed_01",
             furniture_type="bed",
-            size=FurnitureSize(w=2.0, l=1.9, h=0.5),
+            size=FurnitureSize(w=2.0, length=1.9, h=0.5),
             target_wall="south",
             alignment="center",
             offset_from_wall=0.05,
@@ -249,7 +249,7 @@ class TestBBoxIntegrity:
         )
         results = resolver.resolve([sem], room)
         p = results[0]
-        # rotation=180 → footprint unchanged (w=2.0, l=1.9)
+        # rotation=180 → footprint unchanged (w=2.0, length=1.9)
         assert p.bbox.width == pytest.approx(2.0)
         assert p.bbox.depth == pytest.approx(1.9)
 
@@ -258,7 +258,7 @@ class TestBBoxIntegrity:
         sem = SemanticPlacement(
             furniture_id="dresser_01",
             furniture_type="dresser",
-            size=FurnitureSize(w=1.5, l=0.5, h=1.2),
+            size=FurnitureSize(w=1.5, length=0.5, h=1.2),
             target_wall="east",
             alignment="center",
             offset_from_wall=0.0,
