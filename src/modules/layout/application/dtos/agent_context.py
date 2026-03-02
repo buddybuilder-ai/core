@@ -1,14 +1,14 @@
 """Agent context DTOs for feng shui layout generation."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.domain.entities import Room
 from src.modules.layout.domain.value_objects import FengShuiScore
 
 
-class AgentPhase(str, Enum):
+class AgentPhase(StrEnum):
     """Phases of the feng shui layout agent workflow."""
 
     INITIALIZATION = "initialization"
@@ -26,7 +26,7 @@ class AgentPhase(str, Enum):
     FAILED = "failed"
 
 
-class PlacementStrategy(str, Enum):
+class PlacementStrategy(StrEnum):
     """Strategies for furniture placement."""
 
     COMMAND_POSITION = "command_position"  # Optimal feng shui position

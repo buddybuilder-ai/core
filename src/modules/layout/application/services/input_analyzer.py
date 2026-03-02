@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -20,7 +20,7 @@ from src.modules.layout.domain.entities import (
 from src.modules.layout.domain.exceptions import FengShuiAgentError
 
 
-class ValidationSeverity(str, Enum):
+class ValidationSeverity(StrEnum):
     """Severity level for validation issues."""
 
     ERROR = "error"

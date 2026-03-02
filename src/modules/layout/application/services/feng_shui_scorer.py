@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -20,7 +20,7 @@ from src.modules.layout.domain.value_objects import FengShuiScore
 from src.modules.layout.infrastructure.geometry import AABB
 
 
-class FengShuiElement(str, Enum):
+class FengShuiElement(StrEnum):
     """Five elements of feng shui."""
 
     WOOD = "wood"

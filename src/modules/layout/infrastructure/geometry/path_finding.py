@@ -1,7 +1,7 @@
 """Path finding algorithms for feng shui layout generation."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from heapq import heappop, heappush
 from typing import NamedTuple
 
@@ -13,7 +13,7 @@ from src.modules.layout.infrastructure.geometry.grid import (
 )
 
 
-class PathType(str, Enum):
+class PathType(StrEnum):
     """Types of paths in a room."""
 
     TRAFFIC = "traffic"  # Main traffic path through room

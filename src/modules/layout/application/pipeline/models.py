@@ -5,11 +5,11 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class PipelineStep(str, Enum):
+class PipelineStep(StrEnum):
     """The 5 steps of the agentic layout pipeline."""
 
     STRUCTURED_DATA_BUILDER = "structured_data_builder"
@@ -19,7 +19,7 @@ class PipelineStep(str, Enum):
     EXPLAINER = "explainer"
 
 
-class StepStatus(str, Enum):
+class StepStatus(StrEnum):
     """Status of a pipeline step."""
 
     PENDING = "pending"
@@ -29,7 +29,7 @@ class StepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class ConflictType(str, Enum):
+class ConflictType(StrEnum):
     """Types of layout conflicts detected by Rule Checker."""
 
     OVERLAP = "overlap"
@@ -46,7 +46,7 @@ class ConflictType(str, Enum):
     BLOCKED_CHI_FLOW = "blocked_chi_flow"
 
 
-class ConflictSeverity(str, Enum):
+class ConflictSeverity(StrEnum):
     """Severity levels for conflicts."""
 
     CRITICAL = "critical"  # Must fix (e.g. door blocked)
@@ -54,7 +54,7 @@ class ConflictSeverity(str, Enum):
     INFO = "info"  # Nice to fix (e.g. feng shui suggestion)
 
 
-class RepairActionType(str, Enum):
+class RepairActionType(StrEnum):
     """Types of repair actions."""
 
     SHIFT = "shift"
@@ -63,7 +63,7 @@ class RepairActionType(str, Enum):
     REMOVE = "remove"
 
 
-class SSEEventType(str, Enum):
+class SSEEventType(StrEnum):
     """SSE event types streamed to frontend."""
 
     PIPELINE_STARTED = "pipeline_started"

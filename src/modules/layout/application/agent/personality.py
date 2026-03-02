@@ -14,10 +14,10 @@ Usage:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class PersonalityMode(str, Enum):
+class PersonalityMode(StrEnum):
     """The 3 supported personality modes."""
 
     MENTOR = "mentor"

@@ -1,11 +1,11 @@
 """Collision detection algorithms for feng shui layout generation."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import NamedTuple
 
 
-class CollisionSeverity(str, Enum):
+class CollisionSeverity(StrEnum):
     """Severity levels for collision issues."""
 
     ERROR = "error"  # Furniture physically overlaps

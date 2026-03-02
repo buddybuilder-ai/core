@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.application.dtos import AgentContext, AgentPhase
 
 
-class TransitionResult(str, Enum):
+class TransitionResult(StrEnum):
     """Result of a state transition."""
 
     SUCCESS = "success"

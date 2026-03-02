@@ -1,7 +1,7 @@
 """Placement result DTOs for feng shui layout generation."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.application.dtos.agent_context import (
@@ -10,7 +10,7 @@ from src.modules.layout.application.dtos.agent_context import (
 )
 
 
-class PlacementStatus(str, Enum):
+class PlacementStatus(StrEnum):
     """Status of a placement operation."""
 
     SUCCESS = "success"
@@ -19,7 +19,7 @@ class PlacementStatus(str, Enum):
     SKIPPED = "skipped"  # Item intentionally skipped
 
 
-class PlacementFailureReason(str, Enum):
+class PlacementFailureReason(StrEnum):
     """Reasons for placement failure."""
 
     NO_SPACE = "no_space"

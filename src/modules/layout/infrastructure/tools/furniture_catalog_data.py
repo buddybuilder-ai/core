@@ -1,10 +1,10 @@
 """In-memory furniture catalog for feng shui layout agent."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class FurnitureCategory(str, Enum):
+class FurnitureCategory(StrEnum):
     """Categories of furniture."""
 
     # Bedroom
@@ -50,7 +50,7 @@ class FurnitureCategory(str, Enum):
     COAT_RACK = "coat_rack"
 
 
-class BudgetLevel(str, Enum):
+class BudgetLevel(StrEnum):
     """Budget levels for furniture."""
 
     LOW = "low"

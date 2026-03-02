@@ -1,14 +1,14 @@
 """Collision detector tool for feng shui layout agent."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.domain.value_objects import BoundingBox, Position3D
 from src.modules.layout.infrastructure.tools.base import BaseTool, ToolResult
 
 
-class CollisionType(str, Enum):
+class CollisionType(StrEnum):
     """Types of collisions that can occur."""
 
     FURNITURE_OVERLAP = "furniture_overlap"  # Two furniture items overlap

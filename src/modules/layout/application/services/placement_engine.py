@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -36,7 +36,7 @@ from src.modules.layout.infrastructure.geometry import (
 )
 
 
-class RotationStrategy(str, Enum):
+class RotationStrategy(StrEnum):
     """Strategies for rotation during placement."""
 
     FIXED = "fixed"  # No rotation
@@ -44,7 +44,7 @@ class RotationStrategy(str, Enum):
     TWO_WAY = "two_way"  # Try 0, 90 only
 
 
-class FallbackStrategy(str, Enum):
+class FallbackStrategy(StrEnum):
     """Fallback strategies when placement fails."""
 
     MOVE = "move"  # Try different positions

@@ -2,10 +2,10 @@
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class CellState(str, Enum):
+class CellState(StrEnum):
     """State of a grid cell."""
 
     EMPTY = "empty"

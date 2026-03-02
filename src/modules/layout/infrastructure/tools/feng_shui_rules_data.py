@@ -1,10 +1,10 @@
 """Hardcoded feng shui knowledge base for mock RAG search."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class RuleCategory(str, Enum):
+class RuleCategory(StrEnum):
     """Categories of feng shui rules."""
 
     COMMAND_POSITION = "command_position"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from src.modules.layout.domain.value_objects.coordinates import BoundingBox, Position3D
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from src.modules.layout.domain.entities.placement import Placement
 
 
-class RoomType(str, Enum):
+class RoomType(StrEnum):
     """Supported room types for feng shui analysis."""
 
     BEDROOM = "bedroom"
@@ -38,7 +38,7 @@ class RoomType(str, Enum):
         return essentials.get(self, [])
 
 
-class WallSide(str, Enum):
+class WallSide(StrEnum):
     """Wall sides for positioning doors and windows."""
 
     NORTH = "north"

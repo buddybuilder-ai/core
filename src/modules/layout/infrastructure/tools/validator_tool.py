@@ -1,13 +1,13 @@
 """Validator tool for feng shui layout agent."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.infrastructure.tools.base import BaseTool, ToolResult
 
 
-class ValidationLevel(str, Enum):
+class ValidationLevel(StrEnum):
     """Validation severity levels."""
 
     ERROR = "error"

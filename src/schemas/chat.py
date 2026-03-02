@@ -1,12 +1,12 @@
 """Chat schemas for RAG conversational AI."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ChatMode(str, Enum):
+class ChatMode(StrEnum):
     """Chat personality modes."""
 
     mentor = "mentor"

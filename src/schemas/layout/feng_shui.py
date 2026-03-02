@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class RoomType(str, Enum):
+class RoomType(StrEnum):
     """Supported room types for feng shui analysis."""
 
     BEDROOM = "bedroom"
@@ -20,7 +20,7 @@ class RoomType(str, Enum):
     STUDIO_APARTMENT = "studio_apartment"
 
 
-class FiveElement(str, Enum):
+class FiveElement(StrEnum):
     """Five elements in feng shui."""
 
     WOOD = "wood"
@@ -38,7 +38,7 @@ class RulePriority(int, Enum):
     RECOMMENDED = 3
 
 
-class WallSide(str, Enum):
+class WallSide(StrEnum):
     """Wall sides for positioning doors and windows."""
 
     NORTH = "north"

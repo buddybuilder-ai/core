@@ -1,11 +1,11 @@
 """Spatial analysis DTOs for feng shui layout generation."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ZoneQuality(str, Enum):
+class ZoneQuality(StrEnum):
     """Quality rating for zones."""
 
     EXCELLENT = "excellent"
@@ -15,7 +15,7 @@ class ZoneQuality(str, Enum):
     AVOID = "avoid"
 
 
-class FengShuiDirection(str, Enum):
+class FengShuiDirection(StrEnum):
     """Feng shui cardinal directions."""
 
     NORTH = "north"

@@ -1,7 +1,7 @@
 """Spatial calculator tool for feng shui layout agent."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.domain.entities import DoorPosition, Room, WallSide, WindowPosition
@@ -9,7 +9,7 @@ from src.modules.layout.domain.value_objects import Position3D
 from src.modules.layout.infrastructure.tools.base import BaseTool, ToolResult
 
 
-class ZoneType(str, Enum):
+class ZoneType(StrEnum):
     """Types of zones in a room."""
 
     COMMAND = "command"  # Best position for important furniture
