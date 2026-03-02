@@ -114,7 +114,7 @@ class AABB:
         """
         dx = max(0, max(self.min_x - other.max_x, other.min_x - self.max_x))
         dz = max(0, max(self.min_z - other.max_z, other.min_z - self.max_z))
-        return (dx * dx + dz * dz) ** 0.5
+        return float((dx * dx + dz * dz) ** 0.5)
 
     def expanded(self, amount: float) -> "AABB":
         """Create an expanded copy of this box.

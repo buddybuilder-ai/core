@@ -38,7 +38,8 @@ class BaseStep(abc.ABC):
         Yields:
             SSEEvent objects for streaming to client.
         """
-        ...
+        # pragma: no cover — abstract; yield makes this an async generator function
+        yield  # type: ignore[misc]
 
     async def run(self, state: PipelineState) -> StepResult:
         """Run the step and collect the result.
@@ -56,7 +57,7 @@ class BaseStep(abc.ABC):
         result = StepResult(step=self.step, status=StepStatus.RUNNING)
 
         try:
-            async for _event in self.execute(state):
+            async for _ in self.execute(state):
                 pass  # Events consumed by orchestrator's streaming path
             result.status = StepStatus.COMPLETED
         except Exception as e:
@@ -85,7 +86,7 @@ class BaseStep(abc.ABC):
             },
         )
 
-    def _emit_completed(self, data: dict | None = None) -> SSEEvent:
+    def _emit_completed(self, data: dict[str, object] | None = None) -> SSEEvent:
         return SSEEvent(
             event_type=SSEEventType.STEP_COMPLETED,
             data={"step": self.step.value, **(data or {})},

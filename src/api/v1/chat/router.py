@@ -1,5 +1,6 @@
 """Chat API endpoints for RAG conversational AI."""
 
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
@@ -110,7 +111,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
         SSE stream of events.
     """
 
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[str, None]:
         from src.modules.layout.application.agent.personality import (
             detect_mode_switch,
             detect_mood,
@@ -251,7 +252,7 @@ async def _answer_question(message: str, mode: str, mood: str = "neutral") -> st
                 timeout=60.0,
             )
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
+                return str(response.json()["choices"][0]["message"]["content"])
             return f"LLM error {response.status_code}: {response.text}"
     except Exception as exc:
         return f"Failed to answer question: {exc}"

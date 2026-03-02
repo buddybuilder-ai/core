@@ -117,13 +117,13 @@ class OutputBuilder:
         score_value = feng_shui_score.total if feng_shui_score else 0
 
         # Build score breakdown
-        score_breakdown = {}
+        score_breakdown: dict[str, float] = {}
         if feng_shui_score:
             score_breakdown = {
-                "command_position": feng_shui_score.command_position,
-                "five_elements": feng_shui_score.five_elements,
-                "chi_flow": feng_shui_score.chi_flow,
-                "sha_chi_avoidance": feng_shui_score.sha_chi_avoidance,
+                "command_position": float(feng_shui_score.command_position),
+                "five_elements": float(feng_shui_score.five_elements),
+                "chi_flow": float(feng_shui_score.chi_flow),
+                "sha_chi_avoidance": float(feng_shui_score.sha_chi_avoidance),
             }
 
         # Build recommendations

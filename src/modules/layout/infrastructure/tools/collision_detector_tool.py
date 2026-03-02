@@ -460,7 +460,7 @@ class CollisionDetectorTool(BaseTool[CollisionDetectorInput, CollisionDetectorOu
         z_gap = max(0, max(box1.min_z, box2.min_z) - min(box1.max_z, box2.max_z))
 
         # Return the Euclidean distance
-        return (x_gap**2 + z_gap**2) ** 0.5
+        return float((x_gap**2 + z_gap**2) ** 0.5)
 
     def to_langchain_tool_schema(self) -> dict[str, Any]:
         """Convert to LangChain tool schema."""

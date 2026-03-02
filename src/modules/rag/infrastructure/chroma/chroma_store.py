@@ -44,7 +44,7 @@ class ChromaStore:
             False if chromadb package is missing or server is unreachable.
         """
         try:
-            import chromadb  # type: ignore[import]
+            import chromadb
 
             settings = get_settings()
             self._client = await chromadb.AsyncHttpClient(
@@ -132,7 +132,7 @@ class ChromaStore:
         if not self._connected or self._collection is None:
             return 0
         try:
-            return await self._collection.count()
+            return int(await self._collection.count())
         except Exception:
             return 0
 

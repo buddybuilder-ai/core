@@ -113,7 +113,7 @@ def _read_file(path: Path) -> str:
 def _read_pdf(path: Path) -> str:
     """Extract text from a PDF using PyPDF2 (optional dependency)."""
     try:
-        import PyPDF2  # type: ignore[import]
+        import PyPDF2
 
         with open(path, "rb") as f:
             reader = PyPDF2.PdfReader(f)

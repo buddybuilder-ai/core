@@ -407,7 +407,7 @@ class PlacementGrid:
                 ) ** 0.5
                 # Prefer positions closer to walls but not too close
                 edge_dist = min(x, z, self.width - x - w, self.depth - z - d)
-                return edge_dist * 0.5 - dist_to_center * 0.3
+                return float(edge_dist * 0.5 - dist_to_center * 0.3)
 
             score_func = default_score
 

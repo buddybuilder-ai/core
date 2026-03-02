@@ -296,7 +296,7 @@ class RuleCheckerStep(BaseStep):
 
     # --- Helpers ---
 
-    def _build_boxes(self, items: list[dict]) -> list[AABB]:
+    def _build_boxes(self, items: list[dict[str, Any]]) -> list[AABB]:
         boxes = []
         for item in items:
             dims = item.get("dimensions", {})
@@ -315,7 +315,7 @@ class RuleCheckerStep(BaseStep):
             )
         return boxes
 
-    def _get_door_center(self, door: dict, room: Room) -> tuple[float, float]:
+    def _get_door_center(self, door: dict[str, Any], room: Room) -> tuple[float, float]:
         wall = door.get("wall", "south")
         offset = door.get("offset", 1.0)
         width = door.get("width", 0.9)
@@ -348,7 +348,7 @@ class RuleCheckerStep(BaseStep):
     ) -> bool:
         return abs(cx - dx) < w * 0.5 or abs(cz - dz) < d * 0.5
 
-    def _items_to_placed(self, items: list[dict]) -> list[PlacedFurniture]:
+    def _items_to_placed(self, items: list[dict[str, Any]]) -> list[PlacedFurniture]:
         result = []
         for item in items:
             dims = item.get("dimensions", {})

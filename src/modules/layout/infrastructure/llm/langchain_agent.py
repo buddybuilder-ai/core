@@ -391,29 +391,29 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                     error="Unexpected response type from LLM",
                 )
 
-            raw_response = response.content
+            raw_str = str(response.content)
             tokens_used = (
                 response.usage_metadata.get("total_tokens", 0) if response.usage_metadata else 0
             )
 
-            logger.debug(f"LLM response length: {len(raw_response)}, tokens: {tokens_used}")
+            logger.debug(f"LLM response length: {len(raw_str)}, tokens: {tokens_used}")
 
             # Parse JSON from response
             try:
                 # Try to extract JSON from the response
-                content = self._extract_json(raw_response)
+                content = self._extract_json(raw_str)
 
                 return LLMResponse(
                     success=True,
                     content=content,
-                    raw_response=raw_response,
+                    raw_response=raw_str,
                     tokens_used=tokens_used,
                 )
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON from LLM response: {e}")
                 return LLMResponse(
                     success=False,
-                    raw_response=raw_response,
+                    raw_response=raw_str,
                     tokens_used=tokens_used,
                     error=f"Failed to parse JSON: {e}",
                 )
@@ -522,9 +522,9 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         ]
         try:
             response = await self._llm.ainvoke(messages)
-            content = response.content if hasattr(response, "content") else ""
+            content = str(response.content) if hasattr(response, "content") else ""
             logger.info(f"explain_layout: generated {len(content)} chars (mode={personality_mode})")
-            return LLMResponse(content=content, raw_response={"text": content})
+            return LLMResponse(success=True, content=content, raw_response=content)
         except Exception as exc:
             logger.warning(f"explain_layout failed: {exc}")
             raise

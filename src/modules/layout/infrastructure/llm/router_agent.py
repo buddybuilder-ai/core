@@ -157,7 +157,7 @@ class RouterAgent:
 
         try:
             response = await self._llm.ainvoke(messages)
-            raw = response.content if hasattr(response, "content") else ""
+            raw = str(response.content) if hasattr(response, "content") else ""
             parsed = self._parse_json(raw)
 
             intent = str(parsed.get("intent", "")).lower().strip()
@@ -231,16 +231,16 @@ class RouterAgent:
         """Extract the first JSON object from LLM response text."""
         # Direct parse
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
+            return dict(json.loads(text))
+        except (json.JSONDecodeError, TypeError):
             pass
 
         # JSON in code block
         m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
         if m:
             try:
-                return json.loads(m.group(1))
-            except json.JSONDecodeError:
+                return dict(json.loads(m.group(1)))
+            except (json.JSONDecodeError, TypeError):
                 pass
 
         # Find first { ... } object
@@ -254,8 +254,8 @@ class RouterAgent:
                     depth -= 1
                     if depth == 0:
                         try:
-                            return json.loads(text[start : start + i + 1])
-                        except json.JSONDecodeError:
+                            return dict(json.loads(text[start : start + i + 1]))
+                        except (json.JSONDecodeError, TypeError):
                             break
 
         raise json.JSONDecodeError("No valid JSON found in router response", text, 0)

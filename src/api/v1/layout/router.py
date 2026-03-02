@@ -11,6 +11,8 @@ Deprecated / removed:
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
@@ -81,7 +83,7 @@ async def generate_layout_stream(
         "user_preferences": request.user_preferences or {},
     }
 
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[str, None]:
         async for event in orchestrator.run(room_spec, mode=mode):
             yield event.to_sse()
 

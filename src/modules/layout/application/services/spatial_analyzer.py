@@ -193,15 +193,15 @@ class SpatialAnalyzer:
         Returns:
             List of (x, z) positions for door centers.
         """
-        positions = []
+        positions: list[tuple[float, float]] = []
         for door in room.doors:
             door_center = door.offset + door.width / 2
             if door.wall == WallSide.SOUTH:
-                positions.append((door_center, 0))
+                positions.append((door_center, 0.0))
             elif door.wall == WallSide.NORTH:
                 positions.append((door_center, room.depth))
             elif door.wall == WallSide.WEST:
-                positions.append((0, door_center))
+                positions.append((0.0, door_center))
             elif door.wall == WallSide.EAST:
                 positions.append((room.width, door_center))
         return positions
@@ -405,23 +405,23 @@ class SpatialAnalyzer:
             zone_depth = 1.5  # 1.5m in front of door
 
             if door.wall == WallSide.SOUTH:
-                x = max(0, door.offset - 0.15)
-                z = 0
+                x = max(0.0, door.offset - 0.15)
+                z = 0.0
                 w = min(door.width + 0.3, room.width - x)
                 d = min(zone_depth, room.depth)
             elif door.wall == WallSide.NORTH:
-                x = max(0, door.offset - 0.15)
-                z = max(0, room.depth - zone_depth)
+                x = max(0.0, door.offset - 0.15)
+                z = max(0.0, room.depth - zone_depth)
                 w = min(door.width + 0.3, room.width - x)
                 d = min(zone_depth, room.depth - z)
             elif door.wall == WallSide.WEST:
-                x = 0
-                z = max(0, door.offset - 0.15)
+                x = 0.0
+                z = max(0.0, door.offset - 0.15)
                 w = min(zone_depth, room.width)
                 d = min(door.width + 0.3, room.depth - z)
             else:  # EAST
-                x = max(0, room.width - zone_depth)
-                z = max(0, door.offset - 0.15)
+                x = max(0.0, room.width - zone_depth)
+                z = max(0.0, door.offset - 0.15)
                 w = min(zone_depth, room.width - x)
                 d = min(door.width + 0.3, room.depth - z)
 
@@ -454,23 +454,23 @@ class SpatialAnalyzer:
             zone_depth = min(2.0, room.depth / 2)  # 2m or half room depth
 
             if window.wall == WallSide.SOUTH:
-                x = max(0, window.offset - 0.3)
-                z = 0
+                x = max(0.0, window.offset - 0.3)
+                z = 0.0
                 w = min(window.width + 0.6, room.width - x)
                 d = zone_depth
             elif window.wall == WallSide.NORTH:
-                x = max(0, window.offset - 0.3)
-                z = max(0, room.depth - zone_depth)
+                x = max(0.0, window.offset - 0.3)
+                z = max(0.0, room.depth - zone_depth)
                 w = min(window.width + 0.6, room.width - x)
                 d = zone_depth
             elif window.wall == WallSide.WEST:
-                x = 0
-                z = max(0, window.offset - 0.3)
+                x = 0.0
+                z = max(0.0, window.offset - 0.3)
                 w = zone_depth
                 d = min(window.width + 0.6, room.depth - z)
             else:  # EAST
-                x = max(0, room.width - zone_depth)
-                z = max(0, window.offset - 0.3)
+                x = max(0.0, room.width - zone_depth)
+                z = max(0.0, window.offset - 0.3)
                 w = zone_depth
                 d = min(window.width + 0.6, room.depth - z)
 

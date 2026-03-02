@@ -142,7 +142,7 @@ class StructuredDataBuilderStep(BaseStep):
             },
         }
 
-    def _parse_doors(self, doors_raw: list[dict]) -> list[DoorPosition]:
+    def _parse_doors(self, doors_raw: list[dict[str, Any]]) -> list[DoorPosition]:
         result = []
         for d in doors_raw:
             result.append(
@@ -154,7 +154,7 @@ class StructuredDataBuilderStep(BaseStep):
             )
         return result
 
-    def _parse_windows(self, windows_raw: list[dict]) -> list[WindowPosition]:
+    def _parse_windows(self, windows_raw: list[dict[str, Any]]) -> list[WindowPosition]:
         result = []
         for w in windows_raw:
             result.append(

@@ -340,7 +340,7 @@ class FengShuiScorer:
 
         # Score based on balance
         # Calculate deviation from ideal balance
-        total_deviation = 0
+        total_deviation = 0.0
         elements_present = 0
 
         for element, ideal_pct in self.IDEAL_ELEMENT_BALANCE.items():
@@ -683,7 +683,7 @@ class FengShuiScorer:
 
         # Calculate furniture area in center
         center_area = center_zone.area
-        furniture_in_center = 0
+        furniture_in_center = 0.0
 
         for item in furniture:
             item_box = AABB.from_position_and_size(item.pos_x, item.pos_z, item.width, item.depth)

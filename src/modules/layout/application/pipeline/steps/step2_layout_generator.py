@@ -50,7 +50,7 @@ class LayoutGeneratorStep(BaseStep):
         yield self._emit_started()
 
         spec = state.room_spec
-        room: Room = spec.get("_room")
+        room: Room | None = spec.get("_room")
 
         if not room:
             raise ValueError("Room not built — run Step 1 first")

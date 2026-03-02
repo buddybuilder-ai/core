@@ -91,11 +91,6 @@ class RepairStep(BaseStep):
             else:
                 logger.info("      ✗ Could not fix automatically")
 
-                yield SSEEvent(
-                    event_type=SSEEventType.REPAIR_APPLIED,
-                    data=action.to_dict(),
-                )
-
         # Emit updated layout after repairs
         if repaired > 0:
             yield SSEEvent(

@@ -54,7 +54,7 @@ class PathPoint:
 
     def distance_to(self, other: "PathPoint") -> float:
         """Calculate distance to another point."""
-        return ((self.x - other.x) ** 2 + (self.z - other.z) ** 2) ** 0.5
+        return float(((self.x - other.x) ** 2 + (self.z - other.z) ** 2) ** 0.5)
 
 
 @dataclass
@@ -417,7 +417,7 @@ class PathFinder:
         """Calculate heuristic distance (Euclidean)."""
         dx = abs(a.col - b.col)
         dz = abs(a.row - b.row)
-        return (dx * dx + dz * dz) ** 0.5
+        return float((dx * dx + dz * dz) ** 0.5)
 
     def _distance(self, a: GridPosition, b: GridPosition) -> float:
         """Calculate actual distance between adjacent cells."""
