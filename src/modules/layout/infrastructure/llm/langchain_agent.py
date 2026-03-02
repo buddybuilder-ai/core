@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 
 from src.config.settings import get_settings
 from src.modules.layout.infrastructure.llm.prompts import (
+    EXPLANATION_PROMPT,
     FENG_SHUI_SYSTEM_PROMPT,
     FURNITURE_SELECTION_PROMPT,
     LAYOUT_PLANNING_PROMPT,
@@ -32,6 +32,7 @@ class LLMConfig:
         max_tokens: Maximum tokens in response.
         timeout: Request timeout in seconds.
     """
+
     model: str = ""
     temperature: float = 0.1
     max_tokens: int = 4096
@@ -56,6 +57,7 @@ class LLMResponse:
         tokens_used: Number of tokens used.
         error: Error message if failed.
     """
+
     success: bool
     content: Any = None
     raw_response: str = ""
@@ -157,8 +159,15 @@ class FengShuiLLMAgent:
         windows: list[dict[str, Any]],
         furniture_list: list[dict[str, Any]],
         command_positions: list[dict[str, Any]],
+        extra_context: str = "",
     ) -> LLMResponse:
-        """Use LLM to plan furniture layout.
+        """Use LLM to plan furniture layout using semantic placement format.
+
+        The LLM outputs wall/alignment intent rather than raw x/z coordinates.
+        Response is validated with SemanticPlacementSchema; invalid items are
+        skipped with a warning.  If the LLM returns the old xyz format (detected
+        by presence of "pos_x"), items are converted to approximate semantic
+        format for backward compatibility.
 
         Args:
             room_type: Type of room.
@@ -169,10 +178,15 @@ class FengShuiLLMAgent:
             windows: Window positions.
             furniture_list: Furniture to place.
             command_positions: Identified command positions.
+            extra_context: Optional RAG-retrieved rule text to inject into prompt.
 
         Returns:
-            LLMResponse with layout plan.
+            LLMResponse with content["placements"] as semantic placement dicts.
         """
+        from src.modules.layout.application.services.layout_resolver import (
+            SemanticPlacementSchema,
+        )
+
         prompt = LAYOUT_PLANNING_PROMPT.format(
             room_type=room_type,
             width=width,
@@ -183,24 +197,109 @@ class FengShuiLLMAgent:
             windows=json.dumps(windows, indent=2) if windows else "None",
             furniture_list=self._format_furniture_list(furniture_list),
             command_positions=json.dumps(command_positions, indent=2),
+            extra_context=extra_context,
         )
 
-        return await self._invoke_with_json_output(
-            prompt,
-            output_schema={
-                "placements": [
-                    {
-                        "furniture_id": "string",
-                        "pos_x": "float - X position in meters",
-                        "pos_z": "float - Z position in meters",
-                        "rotation": "int - 0, 90, 180, or 270",
-                        "feng_shui_reasoning": "string - why placed here",
-                    }
-                ],
-                "chi_flow_notes": "string - notes about energy flow",
-                "warnings": ["string - any concerns"],
-            },
-        )
+        output_schema = {
+            "placements": [
+                {
+                    "furniture_id": "string",
+                    "furniture_type": "string - bed|desk|sofa|wardrobe|chair|...",
+                    "size": {"w": "float", "l": "float", "h": "float"},
+                    "target_wall": "north|south|east|west|center",
+                    "alignment": "left|center|right",
+                    "offset_from_wall": "float (meters)",
+                    "priority": "int (1=first)",
+                    "orientation": "string - human readable hint",
+                }
+            ],
+            "chi_flow_notes": "string - notes about energy flow",
+            "warnings": ["string - any concerns"],
+        }
+
+        response = await self._invoke_with_json_output(prompt, output_schema)
+        if not response.success or not isinstance(response.content, dict):
+            return response
+
+        raw_placements = response.content.get("placements", [])
+
+        # Backward compat: detect old xyz format and convert
+        if raw_placements and "pos_x" in raw_placements[0]:
+            logger.info("plan_layout: detected old xyz format — converting to semantic")
+            raw_placements = [
+                self._convert_xyz_to_semantic(p, width, depth) for p in raw_placements
+            ]
+
+        # Validate each placement; skip invalid ones
+        valid: list[dict[str, Any]] = []
+        for raw in raw_placements:
+            try:
+                schema = SemanticPlacementSchema.model_validate(raw)
+                valid.append(schema.model_dump())
+            except Exception as exc:
+                fid = raw.get("furniture_id", "<unknown>")
+                logger.warning(f"plan_layout: skipping invalid placement {fid!r}: {exc}")
+
+        response.content["placements"] = valid
+        return response
+
+    def _convert_xyz_to_semantic(
+        self, old: dict[str, Any], room_width: float, room_depth: float
+    ) -> dict[str, Any]:
+        """Convert old {pos_x, pos_z, rotation} format to approximate semantic format.
+
+        Uses position heuristics to guess target_wall/alignment.
+        """
+        fid = old.get("furniture_id", "unknown_01")
+        ftype = fid.split("_")[0]
+        pos_x = float(old.get("pos_x", room_width / 2))
+        pos_z = float(old.get("pos_z", room_depth / 2))
+        w = float(old.get("width", 1.0))
+        depth = float(old.get("depth", 1.0))
+        h = float(old.get("height", 1.0))
+
+        dist_south = pos_z
+        dist_north = room_depth - (pos_z + depth)
+        dist_west = pos_x
+        dist_east = room_width - (pos_x + w)
+        min_dist = min(dist_south, dist_north, dist_west, dist_east)
+        center_threshold = min(room_width, room_depth) * 0.2
+
+        if min_dist > center_threshold:
+            target_wall = "center"
+            alignment = "center"
+            offset = 0.0
+        elif min_dist == dist_south:
+            target_wall = "south"
+            rel = pos_x / max(room_width - w, 0.001)
+            alignment = "left" if rel < 0.33 else ("right" if rel > 0.66 else "center")
+            offset = round(dist_south, 2)
+        elif min_dist == dist_north:
+            target_wall = "north"
+            rel = pos_x / max(room_width - w, 0.001)
+            alignment = "left" if rel < 0.33 else ("right" if rel > 0.66 else "center")
+            offset = round(dist_north, 2)
+        elif min_dist == dist_west:
+            target_wall = "west"
+            rel = pos_z / max(room_depth - depth, 0.001)
+            alignment = "left" if rel < 0.33 else ("right" if rel > 0.66 else "center")
+            offset = round(dist_west, 2)
+        else:
+            target_wall = "east"
+            rel = pos_z / max(room_depth - depth, 0.001)
+            alignment = "left" if rel < 0.33 else ("right" if rel > 0.66 else "center")
+            offset = round(dist_east, 2)
+
+        return {
+            "furniture_id": fid,
+            "furniture_type": ftype,
+            "size": {"w": w, "l": depth, "h": h},
+            "target_wall": target_wall,
+            "alignment": alignment,
+            "offset_from_wall": max(0.0, offset),
+            "priority": old.get("priority", 99),
+            "orientation": old.get("feng_shui_reasoning", ""),
+        }
 
     async def score_layout(
         self,
@@ -208,41 +307,42 @@ class FengShuiLLMAgent:
         width: float,
         depth: float,
         furniture_placements: list[dict[str, Any]],
+        deterministic_score: int = 0,
     ) -> LLMResponse:
-        """Use LLM to score a furniture layout.
+        """Use LLM to judge aesthetic/usability quality (0-30 points).
+
+        The deterministic portion (0-70) is computed by collision_checker and
+        feng_shui_checker.  This method asks the LLM only for the remaining 30
+        points covering visual balance, natural light usage, and furniture
+        proportion.  The caller combines both scores:
+            total = deterministic_score + aesthetic_score
 
         Args:
             room_type: Type of room.
             width: Room width in meters.
             depth: Room depth in meters.
             furniture_placements: List of placed furniture with positions.
+            deterministic_score: Pre-computed code score (0-70) for context.
 
         Returns:
-            LLMResponse with scores and recommendations.
+            LLMResponse with aesthetic_score (0-30) and recommendations.
         """
         prompt = SCORING_PROMPT.format(
             room_type=room_type,
             width=width,
             depth=depth,
             furniture_placements=self._format_placements(furniture_placements),
+            deterministic_score=deterministic_score,
         )
 
         return await self._invoke_with_json_output(
             prompt,
             output_schema={
-                "scores": {
-                    "command_position": "int (0-30)",
-                    "five_elements": "int (0-20)",
-                    "chi_flow": "int (0-25)",
-                    "sha_chi_avoidance": "int (0-25)",
-                },
-                "total_score": "int (0-100)",
-                "grade": "string (A/B/C/D/F)",
-                "component_analysis": {
-                    "command_position": "string - analysis",
-                    "five_elements": "string - analysis",
-                    "chi_flow": "string - analysis",
-                    "sha_chi_avoidance": "string - analysis",
+                "aesthetic_score": "int (0-30)",
+                "aesthetic_breakdown": {
+                    "visual_balance": "int (0-10)",
+                    "natural_light_usage": "int (0-10)",
+                    "furniture_proportion": "int (0-10)",
                 },
                 "recommendations": ["string - top improvements"],
             },
@@ -291,27 +391,29 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                     error="Unexpected response type from LLM",
                 )
 
-            raw_response = response.content
-            tokens_used = response.usage_metadata.get("total_tokens", 0) if response.usage_metadata else 0
+            raw_str = str(response.content)
+            tokens_used = (
+                response.usage_metadata.get("total_tokens", 0) if response.usage_metadata else 0
+            )
 
-            logger.debug(f"LLM response length: {len(raw_response)}, tokens: {tokens_used}")
+            logger.debug(f"LLM response length: {len(raw_str)}, tokens: {tokens_used}")
 
             # Parse JSON from response
             try:
                 # Try to extract JSON from the response
-                content = self._extract_json(raw_response)
+                content = self._extract_json(raw_str)
 
                 return LLMResponse(
                     success=True,
                     content=content,
-                    raw_response=raw_response,
+                    raw_response=raw_str,
                     tokens_used=tokens_used,
                 )
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON from LLM response: {e}")
                 return LLMResponse(
                     success=False,
-                    raw_response=raw_response,
+                    raw_response=raw_str,
                     tokens_used=tokens_used,
                     error=f"Failed to parse JSON: {e}",
                 )
@@ -340,7 +442,8 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         # Try to find JSON in code blocks
         import re
-        json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+
+        json_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
         matches = re.findall(json_pattern, text)
 
         for match in matches:
@@ -350,7 +453,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                 continue
 
         # Try to find JSON object/array directly
-        for start, end in [('{', '}'), ('[', ']')]:
+        for start, end in [("{", "}"), ("[", "]")]:
             start_idx = text.find(start)
             if start_idx != -1:
                 # Find matching end
@@ -362,12 +465,69 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                         depth -= 1
                         if depth == 0:
                             try:
-                                return json.loads(text[start_idx:start_idx + i + 1])
+                                return json.loads(text[start_idx : start_idx + i + 1])
                             except json.JSONDecodeError:
                                 break
 
         # Last resort: raise error
         raise json.JSONDecodeError("No valid JSON found in response", text, 0)
+
+    async def explain_layout(
+        self,
+        room_type: str,
+        width: float,
+        depth: float,
+        items_summary: str,
+        conflicts_summary: str,
+        repairs_summary: str,
+        total_score: int,
+        grade: str,
+        remaining_issues: str,
+        personality_mode: str = "buddy",
+    ) -> LLMResponse:
+        """Generate a Thai natural-language explanation of the layout result.
+
+        Args:
+            room_type: The room type (e.g. "bedroom").
+            width: Room width in metres.
+            depth: Room depth in metres.
+            items_summary: Short text listing placed items.
+            conflicts_summary: Short text summarising conflicts found.
+            repairs_summary: Short text summarising repairs applied.
+            total_score: Feng shui score 0–100.
+            grade: Grade string (e.g. "Excellent").
+            remaining_issues: Short text listing unresolved issues.
+            personality_mode: "mentor", "buddy", or "fun".
+
+        Returns:
+            LLMResponse whose .content is a plain Thai text explanation.
+        """
+        from src.modules.layout.application.agent.personality import get_system_prompt
+
+        system_prompt = get_system_prompt(personality_mode)
+        prompt = EXPLANATION_PROMPT.format(
+            room_type=room_type,
+            width=width,
+            depth=depth,
+            items_summary=items_summary,
+            conflicts_summary=conflicts_summary,
+            repairs_summary=repairs_summary,
+            total_score=total_score,
+            grade=grade,
+            remaining_issues=remaining_issues,
+        )
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=prompt),
+        ]
+        try:
+            response = await self._llm.ainvoke(messages)
+            content = str(response.content) if hasattr(response, "content") else ""
+            logger.info(f"explain_layout: generated {len(content)} chars (mode={personality_mode})")
+            return LLMResponse(success=True, content=content, raw_response=content)
+        except Exception as exc:
+            logger.warning(f"explain_layout failed: {exc}")
+            raise
 
     def _format_catalog(self, catalog: list[dict[str, Any]]) -> str:
         """Format furniture catalog for prompt."""

@@ -246,9 +246,7 @@ class TestCommandPositionScoring:
             depth=4.0,
             height=2.8,
             room_type=RoomType.BEDROOM,
-            doors=[
-                DoorPosition(wall="south", offset=2.0, width=0.9)
-            ],
+            doors=[DoorPosition(wall="south", offset=2.0, width=0.9)],
         )
 
     @pytest.fixture
@@ -527,9 +525,7 @@ class TestShaChiAvoidance:
             depth=4.0,
             height=2.8,
             room_type=RoomType.BEDROOM,
-            doors=[
-                DoorPosition(wall="south", offset=2.0, width=0.9)
-            ],
+            doors=[DoorPosition(wall="south", offset=2.0, width=0.9)],
         )
 
     def test_avoid_door_alignment(

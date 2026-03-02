@@ -1,7 +1,7 @@
 """Spatial calculator tool for feng shui layout agent."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.domain.entities import DoorPosition, Room, WallSide, WindowPosition
@@ -9,7 +9,7 @@ from src.modules.layout.domain.value_objects import Position3D
 from src.modules.layout.infrastructure.tools.base import BaseTool, ToolResult
 
 
-class ZoneType(str, Enum):
+class ZoneType(StrEnum):
     """Types of zones in a room."""
 
     COMMAND = "command"  # Best position for important furniture
@@ -281,9 +281,7 @@ class SpatialCalculatorTool(BaseTool[SpatialAnalysisInput, SpatialAnalysisOutput
                 notes="Door swing area - keep clear",
             )
 
-    def _calculate_traffic_path(
-        self, room: Room, door: DoorPosition, clearance: float
-    ) -> Zone:
+    def _calculate_traffic_path(self, room: Room, door: DoorPosition, clearance: float) -> Zone:
         """Calculate traffic path from a door into the room."""
         door_pos = self._get_door_position(room, door)
         path_width = max(door.width, clearance * 2)
@@ -431,9 +429,7 @@ class SpatialCalculatorTool(BaseTool[SpatialAnalysisInput, SpatialAnalysisOutput
 
             # Filter out positions in blocked areas
             for pos in candidates:
-                is_blocked = any(
-                    zone.contains_point(pos.x, pos.z) for zone in blocked_areas
-                )
+                is_blocked = any(zone.contains_point(pos.x, pos.z) for zone in blocked_areas)
                 if not is_blocked:
                     command_positions.append(pos)
 
@@ -454,9 +450,7 @@ class SpatialCalculatorTool(BaseTool[SpatialAnalysisInput, SpatialAnalysisOutput
         else:  # WEST
             return Position3D(x=0, y=0, z=door.offset)
 
-    def _get_diagonal_positions(
-        self, room: Room, door_pos: Position3D
-    ) -> list[Position3D]:
+    def _get_diagonal_positions(self, room: Room, door_pos: Position3D) -> list[Position3D]:
         """Get diagonal positions from a door (command positions)."""
         positions = []
         margin = 0.8  # Distance from walls
@@ -498,9 +492,7 @@ class SpatialCalculatorTool(BaseTool[SpatialAnalysisInput, SpatialAnalysisOutput
 
         positions = []
         for pos in candidates:
-            is_blocked = any(
-                zone.contains_point(pos.x, pos.z) for zone in blocked_areas
-            )
+            is_blocked = any(zone.contains_point(pos.x, pos.z) for zone in blocked_areas)
             if not is_blocked:
                 positions.append(pos)
 

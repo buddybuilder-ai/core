@@ -197,7 +197,7 @@ class MockRagSearchTool(BaseRagSearchTool):
 
         # Apply filters
         if input_data.room_type:
-            room_rules = set(r.id for r in get_rules_for_room_type(input_data.room_type))
+            room_rules = {r.id for r in get_rules_for_room_type(input_data.room_type)}
             matched_rules = [r for r in matched_rules if r.id in room_rules]
 
         if input_data.furniture_types:
@@ -291,11 +291,7 @@ class MockRagSearchTool(BaseRagSearchTool):
         # Keyword matches (up to 0.4)
         if keywords:
             rule_text = (
-                rule.title.lower()
-                + " "
-                + rule.description.lower()
-                + " "
-                + " ".join(rule.keywords)
+                rule.title.lower() + " " + rule.description.lower() + " " + " ".join(rule.keywords)
             )
             matches = sum(1 for k in keywords if k in rule_text)
             keyword_score = min(matches / len(keywords), 1.0) * 0.4

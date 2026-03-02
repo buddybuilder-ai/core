@@ -18,7 +18,6 @@ from src.modules.layout.application.agent.state_machine import (
 from src.modules.layout.application.dtos import (
     AgentContext,
     AgentPhase,
-    PlacedFurniture,
     UserPreferences,
 )
 from src.modules.layout.application.dtos.placement_result import (
@@ -33,7 +32,6 @@ from src.modules.layout.application.services import (
     OutputBuilder,
     PlacementEngine,
     SpatialAnalyzer,
-    build_layout_report,
 )
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.value_objects import FengShuiScore
@@ -180,6 +178,7 @@ class LayoutOrchestrator:
                     FengShuiLLMAgent,
                     LLMConfig,
                 )
+
                 self._llm_agent = FengShuiLLMAgent(LLMConfig())
                 logger.info("LLM agent initialized successfully")
             except Exception as e:
@@ -225,6 +224,7 @@ class LayoutOrchestrator:
                     # Check if we should retry
                     if (
                         result.should_retry
+                        and self._context is not None
                         and self._state_machine.should_retry(self._context, phase)
                     ):
                         self._state_machine.record_retry(phase)
@@ -239,15 +239,14 @@ class LayoutOrchestrator:
                     )
 
             # Build final output
+            assert self._context is not None
             output = self._output_builder.build_from_context(self._context)
 
             return LayoutResponse(
                 success=True,
                 output=output,
                 feng_shui_score=(
-                    self._context.feng_shui_score.total
-                    if self._context.feng_shui_score
-                    else 0
+                    self._context.feng_shui_score.total if self._context.feng_shui_score else 0
                 ),
                 furniture_count=len(self._context.placed_furniture),
                 phase_results=phase_results,
@@ -367,6 +366,7 @@ class LayoutOrchestrator:
 
     async def _phase_input_analysis(self, request: LayoutRequest) -> PhaseResult:
         """Analyze input data."""
+        assert self._context is not None
         input_data = request.to_input_data()
         analysis = self._input_analyzer.analyze(input_data)
 
@@ -387,6 +387,7 @@ class LayoutOrchestrator:
 
     async def _phase_spatial_analysis(self) -> PhaseResult:
         """Analyze room spatial characteristics."""
+        assert self._context is not None
         analysis = self._spatial_analyzer.analyze(self._context.room)
 
         # Store in context metadata
@@ -409,6 +410,7 @@ class LayoutOrchestrator:
 
     async def _phase_rule_retrieval(self) -> PhaseResult:
         """Retrieve feng shui rules (optional phase)."""
+        assert self._context is not None
         # This phase can be skipped - rules are embedded in services
         self._context.advance_phase(AgentPhase.RULE_RETRIEVAL)
 
@@ -423,6 +425,7 @@ class LayoutOrchestrator:
         request: LayoutRequest,
     ) -> PhaseResult:
         """Select furniture for the room."""
+        assert self._context is not None
         usable_area = self._context.metadata.get(
             "usable_area",
             request.width * request.depth * 0.8,
@@ -458,6 +461,7 @@ class LayoutOrchestrator:
 
     async def _phase_placement_planning(self) -> PhaseResult:
         """Plan furniture placement."""
+        assert self._context is not None
         # Planning is integrated into execution
         self._context.advance_phase(AgentPhase.PLACEMENT_PLANNING)
 
@@ -468,6 +472,7 @@ class LayoutOrchestrator:
 
     async def _phase_placement_execution(self) -> PhaseResult:
         """Execute furniture placement."""
+        assert self._context is not None
         engine = PlacementEngine(
             room_width=self._context.room.width,
             room_depth=self._context.room.depth,
@@ -476,9 +481,6 @@ class LayoutOrchestrator:
         # Get spatial analysis if available
         spatial_analysis = None
         if "spatial_analysis" in self._context.metadata:
-            from src.modules.layout.application.dtos.spatial_analysis import (
-                SpatialAnalysisResult,
-            )
             # Note: Would need proper deserialization in production
             pass
 
@@ -505,6 +507,7 @@ class LayoutOrchestrator:
 
     async def _phase_collision_resolution(self) -> PhaseResult:
         """Resolve any placement collisions (optional phase)."""
+        assert self._context is not None
         # Collision resolution is handled during placement
         self._context.advance_phase(AgentPhase.COLLISION_RESOLUTION)
 
@@ -515,6 +518,7 @@ class LayoutOrchestrator:
 
     async def _phase_scoring(self) -> PhaseResult:
         """Score the layout using rule-based scorer or LLM."""
+        assert self._context is not None
         # Try LLM scoring if enabled
         if self._llm_agent and self._request:
             llm_result = await self._phase_scoring_with_llm()
@@ -554,6 +558,9 @@ class LayoutOrchestrator:
 
     async def _phase_scoring_with_llm(self) -> PhaseResult | None:
         """Score layout using LLM for intelligent analysis."""
+        assert self._context is not None
+        assert self._llm_agent is not None
+        assert self._request is not None
         try:
             # Prepare furniture placements for LLM
             placements = [
@@ -611,10 +618,7 @@ class LayoutOrchestrator:
             logger.info(f"LLM scoring complete: {score.total}/100 ({score.grade})")
 
             # Check if score is acceptable
-            if (
-                self.config.auto_retry_low_score
-                and score.total < self.config.min_acceptable_score
-            ):
+            if self.config.auto_retry_low_score and score.total < self.config.min_acceptable_score:
                 return PhaseResult(
                     phase=AgentPhase.SCORING,
                     result=TransitionResult.RETRY,
@@ -641,6 +645,7 @@ class LayoutOrchestrator:
 
     async def _phase_validation(self) -> PhaseResult:
         """Validate the layout."""
+        assert self._context is not None
         # Check for errors in context
         if self._context.validation_errors:
             return PhaseResult(
@@ -663,6 +668,7 @@ class LayoutOrchestrator:
 
     async def _phase_output_generation(self) -> PhaseResult:
         """Generate final output."""
+        assert self._context is not None
         self._context.advance_phase(AgentPhase.OUTPUT_GENERATION)
 
         return PhaseResult(

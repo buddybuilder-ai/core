@@ -1,14 +1,14 @@
 """Agent context DTOs for feng shui layout generation."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from src.modules.layout.domain.entities import DoorPosition, Room, WindowPosition
+from src.modules.layout.domain.entities import Room
 from src.modules.layout.domain.value_objects import FengShuiScore
 
 
-class AgentPhase(str, Enum):
+class AgentPhase(StrEnum):
     """Phases of the feng shui layout agent workflow."""
 
     INITIALIZATION = "initialization"
@@ -26,7 +26,7 @@ class AgentPhase(str, Enum):
     FAILED = "failed"
 
 
-class PlacementStrategy(str, Enum):
+class PlacementStrategy(StrEnum):
     """Strategies for furniture placement."""
 
     COMMAND_POSITION = "command_position"  # Optimal feng shui position
@@ -196,9 +196,7 @@ class AgentContext:
             if item.get("is_essential", False):
                 essential_categories.add(item.get("category"))
 
-        placed_categories = {
-            f.category for f in self.placed_furniture if f.is_essential
-        }
+        placed_categories = {f.category for f in self.placed_furniture if f.is_essential}
         return essential_categories.issubset(placed_categories)
 
     def advance_phase(self, next_phase: AgentPhase) -> None:
@@ -218,9 +216,7 @@ class AgentContext:
         self.retry_count += 1
         return self.can_retry
 
-    def get_placed_furniture_by_category(
-        self, category: str
-    ) -> list[PlacedFurniture]:
+    def get_placed_furniture_by_category(self, category: str) -> list[PlacedFurniture]:
         """Get placed furniture by category."""
         return [f for f in self.placed_furniture if f.category == category]
 

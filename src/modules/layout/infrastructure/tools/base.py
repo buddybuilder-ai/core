@@ -1,6 +1,7 @@
 """Base tool abstract class for feng shui layout agent."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Generic, TypeVar
@@ -21,7 +22,9 @@ class ToolError(Exception):
 class ToolInputError(ToolError):
     """Exception raised for invalid tool input."""
 
-    def __init__(self, tool_name: str, message: str, invalid_fields: list[str] | None = None) -> None:
+    def __init__(
+        self, tool_name: str, message: str, invalid_fields: list[str] | None = None
+    ) -> None:
         super().__init__(tool_name, message)
         self.invalid_fields = invalid_fields or []
 
@@ -119,7 +122,7 @@ class ToolResult(Generic[TOutput]):
             return self.data
         return default
 
-    def map(self, func: "callable[[TOutput], Any]") -> "ToolResult[Any]":
+    def map(self, func: Callable[[TOutput], Any]) -> "ToolResult[Any]":
         """Transform the data if successful.
 
         Args:

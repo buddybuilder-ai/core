@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from src.modules.layout.domain.value_objects.coordinates import BoundingBox, Position3D
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from src.modules.layout.domain.entities.placement import Placement
 
 
-class RoomType(str, Enum):
+class RoomType(StrEnum):
     """Supported room types for feng shui analysis."""
 
     BEDROOM = "bedroom"
@@ -21,6 +21,7 @@ class RoomType(str, Enum):
     DINING_ROOM = "dining_room"
     KITCHEN = "kitchen"
     BATHROOM = "bathroom"
+    STUDIO_APARTMENT = "studio_apartment"
 
     @property
     def essential_furniture(self) -> list[str]:
@@ -32,11 +33,12 @@ class RoomType(str, Enum):
             self.DINING_ROOM: ["dining_table", "dining_chair"],
             self.KITCHEN: ["cabinet", "counter"],
             self.BATHROOM: ["toilet", "sink"],
+            self.STUDIO_APARTMENT: ["sofa_bed", "compact_wardrobe", "folding_desk"],
         }
         return essentials.get(self, [])
 
 
-class WallSide(str, Enum):
+class WallSide(StrEnum):
     """Wall sides for positioning doors and windows."""
 
     NORTH = "north"
@@ -361,10 +363,7 @@ class Room:
 
     def get_natural_light_zones(self) -> list[BoundingBox]:
         """Get all natural light zones from windows."""
-        return [
-            window.get_natural_light_zone(self.width, self.depth)
-            for window in self.windows
-        ]
+        return [window.get_natural_light_zone(self.width, self.depth) for window in self.windows]
 
     def is_position_valid(self, position: Position3D) -> bool:
         """Check if a position is within room bounds."""

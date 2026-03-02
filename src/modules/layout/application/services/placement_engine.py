@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable
+from enum import StrEnum
+from typing import Any
 
 from src.modules.layout.application.dtos import (
     AgentContext,
@@ -21,7 +21,6 @@ from src.modules.layout.application.dtos.placement_result import (
     PlacementStatus,
 )
 from src.modules.layout.application.dtos.spatial_analysis import (
-    CommandPosition,
     SpatialAnalysisResult,
     ZoneQuality,
 )
@@ -37,7 +36,7 @@ from src.modules.layout.infrastructure.geometry import (
 )
 
 
-class RotationStrategy(str, Enum):
+class RotationStrategy(StrEnum):
     """Strategies for rotation during placement."""
 
     FIXED = "fixed"  # No rotation
@@ -45,7 +44,7 @@ class RotationStrategy(str, Enum):
     TWO_WAY = "two_way"  # Try 0, 90 only
 
 
-class FallbackStrategy(str, Enum):
+class FallbackStrategy(StrEnum):
     """Fallback strategies when placement fails."""
 
     MOVE = "move"  # Try different positions
@@ -369,9 +368,7 @@ class PlacementEngine:
 
         # Check collision with existing items
         for placed_box in self._placed_boxes:
-            collision_result = self.collision_detector.check_collision(
-                item_box, placed_box
-            )
+            collision_result = self.collision_detector.check_collision(item_box, placed_box)
             if collision_result.has_collision:
                 return PlacementAttempt(
                     furniture_id=item.id,
@@ -485,9 +482,7 @@ class PlacementEngine:
         elif fallback == FallbackStrategy.MOVE:
             # Try all available grid positions
             for rotation in rotations:
-                width, depth = self._get_rotated_dimensions(
-                    item.width, item.depth, rotation
-                )
+                width, depth = self._get_rotated_dimensions(item.width, item.depth, rotation)
 
                 candidates = self.grid.find_available_positions(
                     width=width,
@@ -495,7 +490,7 @@ class PlacementEngine:
                     margin=self.config.min_clearance,
                 )
 
-                for candidate in candidates[:self.config.max_placement_attempts]:
+                for candidate in candidates[: self.config.max_placement_attempts]:
                     attempt = self._try_placement(
                         selection=selection,
                         x=candidate.world_x,
@@ -572,26 +567,18 @@ class PlacementEngine:
 
         if strategy == PlacementStrategy.COMMAND_POSITION:
             candidates.extend(
-                self._get_command_position_candidates(
-                    width, depth, spatial_analysis, rotation
-                )
+                self._get_command_position_candidates(width, depth, spatial_analysis, rotation)
             )
 
         elif strategy == PlacementStrategy.WALL_ALIGNED:
-            candidates.extend(
-                self._get_wall_aligned_candidates(width, depth, rotation)
-            )
+            candidates.extend(self._get_wall_aligned_candidates(width, depth, rotation))
 
         elif strategy == PlacementStrategy.CENTER_ROOM:
-            candidates.extend(
-                self._get_center_room_candidates(width, depth, rotation)
-            )
+            candidates.extend(self._get_center_room_candidates(width, depth, rotation))
 
         elif strategy == PlacementStrategy.NEAR_WINDOW:
             candidates.extend(
-                self._get_near_window_candidates(
-                    width, depth, spatial_analysis, rotation
-                )
+                self._get_near_window_candidates(width, depth, spatial_analysis, rotation)
             )
 
         # Always fall back to grid-based candidates
@@ -607,7 +594,7 @@ class PlacementEngine:
 
         # Sort by score (higher is better)
         candidates.sort(key=lambda c: c.score, reverse=True)
-        return candidates[:self.config.max_placement_attempts]
+        return candidates[: self.config.max_placement_attempts]
 
     def _get_command_position_candidates(
         self,
@@ -753,10 +740,7 @@ class PlacementEngine:
         for dx, dz in offsets:
             x = center_x + dx
             z = center_z + dz
-            if (
-                0 <= x <= self.room_width - width
-                and 0 <= z <= self.room_depth - depth
-            ):
+            if 0 <= x <= self.room_width - width and 0 <= z <= self.room_depth - depth:
                 candidates.append(
                     PlacementCandidate(
                         position=self._world_to_grid_pos(x, z),

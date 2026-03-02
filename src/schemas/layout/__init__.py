@@ -2,6 +2,18 @@
 
 from pydantic import BaseModel, Field
 
+from src.schemas.layout.agent import (
+    AgentContext,
+    AgentExecutionTrace,
+    AgentStep,
+    FengShuiLayoutRequest,
+    FengShuiLayoutResponse,
+    LayoutConstraint,
+    LayoutMetadata,
+    PlacedFurnitureItem,
+    ToolCallResult,
+)
+
 # Import from base first (no circular dependency)
 from src.schemas.layout.base import RoomDimensions
 
@@ -21,17 +33,6 @@ from src.schemas.layout.feng_shui import (
     ShaChiLine,
     WallSide,
     WindowPosition,
-)
-from src.schemas.layout.agent import (
-    AgentContext,
-    AgentExecutionTrace,
-    AgentStep,
-    FengShuiLayoutRequest,
-    FengShuiLayoutResponse,
-    LayoutConstraint,
-    LayoutMetadata,
-    PlacedFurnitureItem,
-    ToolCallResult,
 )
 
 
@@ -56,9 +57,7 @@ class FurnitureItem(BaseModel):
 class DesignResponse(BaseModel):
     """Response schema for layout generation."""
 
-    items: list[FurnitureItem] = Field(
-        default_factory=list, description="List of furniture items"
-    )
+    items: list[FurnitureItem] = Field(default_factory=list, description="List of furniture items")
     reasoning: str = Field(..., description="AI reasoning for the layout")
 
 

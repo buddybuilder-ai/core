@@ -1,10 +1,10 @@
 """In-memory furniture catalog for feng shui layout agent."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class FurnitureCategory(str, Enum):
+class FurnitureCategory(StrEnum):
     """Categories of furniture."""
 
     # Bedroom
@@ -37,8 +37,20 @@ class FurnitureCategory(str, Enum):
     MIRROR = "mirror"
     RUG = "rug"
 
+    # Studio Apartment
+    SOFA_BED = "sofa_bed"
+    COMPACT_WARDROBE = "compact_wardrobe"
+    FOLDING_DESK = "folding_desk"
+    COMPACT_DINING = "compact_dining"
+    ROOM_DIVIDER = "room_divider"
+    SHOE_CABINET = "shoe_cabinet"
+    KITCHEN_COUNTER = "kitchen_counter"
+    MINI_FRIDGE = "mini_fridge"
+    MICROWAVE_STAND = "microwave_stand"
+    COAT_RACK = "coat_rack"
 
-class BudgetLevel(str, Enum):
+
+class BudgetLevel(StrEnum):
     """Budget levels for furniture."""
 
     LOW = "low"
@@ -578,9 +590,220 @@ ACCESSORIES: list[CatalogFurniture] = [
     ),
 ]
 
+# Studio Apartment Furniture
+STUDIO_APARTMENT_FURNITURE: list[CatalogFurniture] = [
+    # Sofa Bed - Essential sleeping/living
+    CatalogFurniture(
+        id="sofa_bed_001",
+        name="Modern Sofa Bed",
+        category=FurnitureCategory.SOFA_BED,
+        width=1.9,
+        depth=0.95,
+        height=0.85,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.8,
+        clearance_sides=0.5,
+        is_essential=True,
+        feng_shui_element="earth",
+        placement_notes="Place against wall, headboard should face command position",
+    ),
+    CatalogFurniture(
+        id="sofa_bed_002",
+        name="Compact Sofa Bed",
+        category=FurnitureCategory.SOFA_BED,
+        width=1.6,
+        depth=0.85,
+        height=0.8,
+        budget_level=BudgetLevel.LOW,
+        room_types=("studio_apartment",),
+        clearance_front=0.8,
+        clearance_sides=0.5,
+        is_essential=True,
+        feng_shui_element="earth",
+        placement_notes="Space-saving option for smaller studios",
+    ),
+    # Compact Wardrobe - Essential storage
+    CatalogFurniture(
+        id="compact_wardrobe_001",
+        name="Narrow Wardrobe",
+        category=FurnitureCategory.COMPACT_WARDROBE,
+        width=1.0,
+        depth=0.55,
+        height=2.0,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.7,
+        clearance_sides=0.3,
+        is_essential=True,
+        feng_shui_element="wood",
+        placement_notes="Place against wall, not blocking chi flow",
+    ),
+    CatalogFurniture(
+        id="compact_wardrobe_002",
+        name="Corner Wardrobe",
+        category=FurnitureCategory.COMPACT_WARDROBE,
+        width=0.8,
+        depth=0.8,
+        height=2.0,
+        budget_level=BudgetLevel.LOW,
+        room_types=("studio_apartment",),
+        clearance_front=0.6,
+        clearance_sides=0.3,
+        is_essential=True,
+        feng_shui_element="wood",
+        placement_notes="Fits in corners, maximizes space",
+    ),
+    # Folding Desk - Work zone
+    CatalogFurniture(
+        id="folding_desk_001",
+        name="Wall-Mounted Folding Desk",
+        category=FurnitureCategory.FOLDING_DESK,
+        width=1.0,
+        depth=0.5,
+        height=0.75,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.7,
+        clearance_sides=0.3,
+        is_essential=False,
+        feng_shui_element="wood",
+        placement_notes="Face room entrance, command position for work",
+    ),
+    CatalogFurniture(
+        id="folding_desk_002",
+        name="Compact Folding Table",
+        category=FurnitureCategory.FOLDING_DESK,
+        width=0.8,
+        depth=0.45,
+        height=0.75,
+        budget_level=BudgetLevel.LOW,
+        room_types=("studio_apartment",),
+        clearance_front=0.6,
+        clearance_sides=0.3,
+        is_essential=False,
+        feng_shui_element="wood",
+        placement_notes="Portable, can be moved as needed",
+    ),
+    # Compact Dining
+    CatalogFurniture(
+        id="compact_dining_001",
+        name="Drop-Leaf Dining Table",
+        category=FurnitureCategory.COMPACT_DINING,
+        width=0.9,
+        depth=0.7,
+        height=0.75,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.6,
+        clearance_sides=0.5,
+        is_essential=False,
+        feng_shui_element="earth",
+        placement_notes="Central location for dining zone",
+    ),
+    # Room Divider
+    CatalogFurniture(
+        id="room_divider_001",
+        name="3-Panel Room Divider",
+        category=FurnitureCategory.ROOM_DIVIDER,
+        width=1.5,
+        depth=0.05,
+        height=1.7,
+        budget_level=BudgetLevel.LOW,
+        room_types=("studio_apartment",),
+        clearance_front=0.3,
+        clearance_sides=0.3,
+        is_essential=False,
+        feng_shui_element="wood",
+        placement_notes="Separates sleeping from living areas, maintains chi flow",
+    ),
+    CatalogFurniture(
+        id="room_divider_002",
+        name="Bookshelf Room Divider",
+        category=FurnitureCategory.ROOM_DIVIDER,
+        width=1.2,
+        depth=0.3,
+        height=1.8,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.4,
+        clearance_sides=0.3,
+        is_essential=False,
+        feng_shui_element="wood",
+        placement_notes="Dual purpose: storage and space division",
+    ),
+    # Kitchen Zone
+    CatalogFurniture(
+        id="kitchen_counter_001",
+        name="Mini Kitchen Counter",
+        category=FurnitureCategory.KITCHEN_COUNTER,
+        width=1.2,
+        depth=0.6,
+        height=0.9,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.8,
+        clearance_sides=0.4,
+        is_essential=True,
+        feng_shui_element="fire",
+        placement_notes="Place away from bedroom zone, good ventilation",
+    ),
+    CatalogFurniture(
+        id="mini_fridge_001",
+        name="Compact Refrigerator",
+        category=FurnitureCategory.MINI_FRIDGE,
+        width=0.5,
+        depth=0.55,
+        height=0.85,
+        budget_level=BudgetLevel.MEDIUM,
+        room_types=("studio_apartment",),
+        clearance_front=0.5,
+        clearance_sides=0.3,
+        is_essential=True,
+        feng_shui_element="water",
+        placement_notes="Near kitchen zone, away from fire element",
+    ),
+    # Storage
+    CatalogFurniture(
+        id="shoe_cabinet_001",
+        name="Slim Shoe Cabinet",
+        category=FurnitureCategory.SHOE_CABINET,
+        width=0.8,
+        depth=0.35,
+        height=1.2,
+        budget_level=BudgetLevel.LOW,
+        room_types=("studio_apartment",),
+        clearance_front=0.5,
+        clearance_sides=0.3,
+        is_essential=False,
+        feng_shui_element="earth",
+        placement_notes="Near entrance, keeps clutter contained",
+    ),
+    CatalogFurniture(
+        id="coat_rack_001",
+        name="Standing Coat Rack",
+        category=FurnitureCategory.COAT_RACK,
+        width=0.4,
+        depth=0.4,
+        height=1.75,
+        budget_level=BudgetLevel.LOW,
+        room_types=("studio_apartment",),
+        clearance_front=0.5,
+        clearance_sides=0.4,
+        is_essential=False,
+        feng_shui_element="wood",
+        placement_notes="Near entrance for convenience",
+    ),
+]
+
 # Complete catalog
 FURNITURE_CATALOG: list[CatalogFurniture] = (
-    BEDROOM_FURNITURE + LIVING_ROOM_FURNITURE + OFFICE_FURNITURE + DINING_ROOM_FURNITURE + ACCESSORIES
+    BEDROOM_FURNITURE
+    + LIVING_ROOM_FURNITURE
+    + OFFICE_FURNITURE
+    + DINING_ROOM_FURNITURE
+    + ACCESSORIES
+    + STUDIO_APARTMENT_FURNITURE
 )
 
 

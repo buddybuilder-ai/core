@@ -1,14 +1,14 @@
 """Collision detector tool for feng shui layout agent."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.domain.value_objects import BoundingBox, Position3D
 from src.modules.layout.infrastructure.tools.base import BaseTool, ToolResult
 
 
-class CollisionType(str, Enum):
+class CollisionType(StrEnum):
     """Types of collisions that can occur."""
 
     FURNITURE_OVERLAP = "furniture_overlap"  # Two furniture items overlap
@@ -191,7 +191,9 @@ class CollisionDetectorTool(BaseTool[CollisionDetectorInput, CollisionDetectorOu
             errors.append("Minimum clearance must be non-negative")
         return errors
 
-    async def execute(self, input_data: CollisionDetectorInput) -> ToolResult[CollisionDetectorOutput]:
+    async def execute(
+        self, input_data: CollisionDetectorInput
+    ) -> ToolResult[CollisionDetectorOutput]:
         """Execute collision detection on placed items."""
         import time
 
@@ -458,7 +460,7 @@ class CollisionDetectorTool(BaseTool[CollisionDetectorInput, CollisionDetectorOu
         z_gap = max(0, max(box1.min_z, box2.min_z) - min(box1.max_z, box2.max_z))
 
         # Return the Euclidean distance
-        return (x_gap**2 + z_gap**2) ** 0.5
+        return float((x_gap**2 + z_gap**2) ** 0.5)
 
     def to_langchain_tool_schema(self) -> dict[str, Any]:
         """Convert to LangChain tool schema."""

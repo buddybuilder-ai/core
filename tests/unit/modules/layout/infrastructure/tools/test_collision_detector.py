@@ -21,8 +21,12 @@ class TestPlacedItem:
             id="bed_001",
             name="Queen Bed",
             bounding_box=BoundingBox(
-                min_x=1.0, min_y=0.0, min_z=2.0,
-                max_x=2.6, max_y=0.5, max_z=4.0,
+                min_x=1.0,
+                min_y=0.0,
+                min_z=2.0,
+                max_x=2.6,
+                max_y=0.5,
+                max_z=4.0,
             ),
         )
         assert item.id == "bed_001"
@@ -35,8 +39,12 @@ class TestPlacedItem:
             id="test",
             name="Test",
             bounding_box=BoundingBox(
-                min_x=0.0, min_y=0.0, min_z=0.0,
-                max_x=2.0, max_y=1.0, max_z=3.0,
+                min_x=0.0,
+                min_y=0.0,
+                min_z=0.0,
+                max_x=2.0,
+                max_y=1.0,
+                max_z=3.0,
             ),
         )
         assert item.width == 2.0
@@ -49,8 +57,12 @@ class TestPlacedItem:
             id="test",
             name="Test",
             bounding_box=BoundingBox(
-                min_x=0.0, min_y=0.0, min_z=0.0,
-                max_x=4.0, max_y=2.0, max_z=6.0,
+                min_x=0.0,
+                min_y=0.0,
+                min_z=0.0,
+                max_x=4.0,
+                max_y=2.0,
+                max_z=6.0,
             ),
         )
         center = item.center
@@ -64,8 +76,12 @@ class TestPlacedItem:
             id="test",
             name="Test",
             bounding_box=BoundingBox(
-                min_x=1.0, min_y=0.0, min_z=1.0,
-                max_x=3.0, max_y=1.0, max_z=3.0,
+                min_x=1.0,
+                min_y=0.0,
+                min_z=1.0,
+                max_x=3.0,
+                max_y=1.0,
+                max_z=3.0,
             ),
             clearance_required=0.5,
         )
@@ -137,16 +153,24 @@ class TestCollisionDetectorTool:
                 id="bed_001",
                 name="Bed",
                 bounding_box=BoundingBox(
-                    min_x=0.5, min_y=0.0, min_z=0.5,
-                    max_x=2.5, max_y=0.5, max_z=2.5,
+                    min_x=0.5,
+                    min_y=0.0,
+                    min_z=0.5,
+                    max_x=2.5,
+                    max_y=0.5,
+                    max_z=2.5,
                 ),
             ),
             PlacedItem(
                 id="desk_001",
                 name="Desk",
                 bounding_box=BoundingBox(
-                    min_x=3.5, min_y=0.0, min_z=0.5,
-                    max_x=4.9, max_y=0.75, max_z=1.2,
+                    min_x=3.5,
+                    min_y=0.0,
+                    min_z=0.5,
+                    max_x=4.9,
+                    max_y=0.75,
+                    max_z=1.2,
                 ),
             ),
         ]
@@ -159,16 +183,24 @@ class TestCollisionDetectorTool:
                 id="bed_001",
                 name="Bed",
                 bounding_box=BoundingBox(
-                    min_x=1.0, min_y=0.0, min_z=1.0,
-                    max_x=3.0, max_y=0.5, max_z=3.0,
+                    min_x=1.0,
+                    min_y=0.0,
+                    min_z=1.0,
+                    max_x=3.0,
+                    max_y=0.5,
+                    max_z=3.0,
                 ),
             ),
             PlacedItem(
                 id="desk_001",
                 name="Desk",
                 bounding_box=BoundingBox(
-                    min_x=2.5, min_y=0.0, min_z=2.5,
-                    max_x=4.0, max_y=0.75, max_z=3.5,
+                    min_x=2.5,
+                    min_y=0.0,
+                    min_z=2.5,
+                    max_x=4.0,
+                    max_y=0.75,
+                    max_z=3.5,
                 ),
             ),
         ]
@@ -181,7 +213,9 @@ class TestCollisionDetectorTool:
         """Test tool description property."""
         assert "collision" in tool.description.lower()
 
-    def test_validate_input_valid(self, tool: CollisionDetectorTool, non_overlapping_items: list[PlacedItem]) -> None:
+    def test_validate_input_valid(
+        self, tool: CollisionDetectorTool, non_overlapping_items: list[PlacedItem]
+    ) -> None:
         """Test validation with valid input."""
         input_data = CollisionDetectorInput(
             items=non_overlapping_items,
@@ -203,7 +237,9 @@ class TestCollisionDetectorTool:
         assert any("width" in e.lower() for e in errors)
 
     @pytest.mark.asyncio
-    async def test_no_collisions(self, tool: CollisionDetectorTool, non_overlapping_items: list[PlacedItem]) -> None:
+    async def test_no_collisions(
+        self, tool: CollisionDetectorTool, non_overlapping_items: list[PlacedItem]
+    ) -> None:
         """Test detection with no collisions."""
         input_data = CollisionDetectorInput(
             items=non_overlapping_items,
@@ -219,7 +255,9 @@ class TestCollisionDetectorTool:
         assert result.data.is_valid_layout is True
 
     @pytest.mark.asyncio
-    async def test_furniture_overlap_detection(self, tool: CollisionDetectorTool, overlapping_items: list[PlacedItem]) -> None:
+    async def test_furniture_overlap_detection(
+        self, tool: CollisionDetectorTool, overlapping_items: list[PlacedItem]
+    ) -> None:
         """Test detection of furniture overlap."""
         input_data = CollisionDetectorInput(
             items=overlapping_items,
@@ -245,8 +283,12 @@ class TestCollisionDetectorTool:
                 id="sofa_001",
                 name="Sofa",
                 bounding_box=BoundingBox(
-                    min_x=4.0, min_y=0.0, min_z=1.0,
-                    max_x=6.5, max_y=0.85, max_z=2.0,  # Extends 1.5m beyond 5.0m room
+                    min_x=4.0,
+                    min_y=0.0,
+                    min_z=1.0,
+                    max_x=6.5,
+                    max_y=0.85,
+                    max_z=2.0,  # Extends 1.5m beyond 5.0m room
                 ),
             ),
         ]
@@ -275,8 +317,12 @@ class TestCollisionDetectorTool:
                 id="wardrobe_001",
                 name="Wardrobe",
                 bounding_box=BoundingBox(
-                    min_x=-0.5, min_y=0.0, min_z=-0.3,
-                    max_x=1.0, max_y=2.0, max_z=1.0,
+                    min_x=-0.5,
+                    min_y=0.0,
+                    min_z=-0.3,
+                    max_x=1.0,
+                    max_y=2.0,
+                    max_z=1.0,
                 ),
             ),
         ]
@@ -299,15 +345,23 @@ class TestCollisionDetectorTool:
                 id="cabinet_001",
                 name="Cabinet",
                 bounding_box=BoundingBox(
-                    min_x=2.0, min_y=0.0, min_z=3.0,
-                    max_x=3.0, max_y=1.0, max_z=4.0,
+                    min_x=2.0,
+                    min_y=0.0,
+                    min_z=3.0,
+                    max_x=3.0,
+                    max_y=1.0,
+                    max_z=4.0,
                 ),
             ),
         ]
         door_swing_boxes = [
             BoundingBox(
-                min_x=2.0, min_y=0.0, min_z=3.0,
-                max_x=3.0, max_y=2.1, max_z=4.0,
+                min_x=2.0,
+                min_y=0.0,
+                min_z=3.0,
+                max_x=3.0,
+                max_y=2.1,
+                max_z=4.0,
             ),
         ]
         input_data = CollisionDetectorInput(
@@ -334,15 +388,23 @@ class TestCollisionDetectorTool:
                 id="bookshelf_001",
                 name="Bookshelf",
                 bounding_box=BoundingBox(
-                    min_x=1.5, min_y=0.0, min_z=0.0,
-                    max_x=3.0, max_y=1.8, max_z=0.5,
+                    min_x=1.5,
+                    min_y=0.0,
+                    min_z=0.0,
+                    max_x=3.0,
+                    max_y=1.8,
+                    max_z=0.5,
                 ),
             ),
         ]
         window_boxes = [
             BoundingBox(
-                min_x=1.0, min_y=0.0, min_z=0.0,
-                max_x=3.5, max_y=2.0, max_z=0.5,
+                min_x=1.0,
+                min_y=0.0,
+                min_z=0.0,
+                max_x=3.5,
+                max_y=2.0,
+                max_z=0.5,
             ),
         ]
         input_data = CollisionDetectorInput(
@@ -370,8 +432,12 @@ class TestCollisionDetectorTool:
                 id="bed_001",
                 name="Bed",
                 bounding_box=BoundingBox(
-                    min_x=0.5, min_y=0.0, min_z=0.5,
-                    max_x=2.5, max_y=0.5, max_z=2.5,
+                    min_x=0.5,
+                    min_y=0.0,
+                    min_z=0.5,
+                    max_x=2.5,
+                    max_y=0.5,
+                    max_z=2.5,
                 ),
                 clearance_required=0.6,
             ),
@@ -379,8 +445,12 @@ class TestCollisionDetectorTool:
                 id="nightstand_001",
                 name="Nightstand",
                 bounding_box=BoundingBox(
-                    min_x=2.7, min_y=0.0, min_z=1.0,
-                    max_x=3.2, max_y=0.6, max_z=1.5,
+                    min_x=2.7,
+                    min_y=0.0,
+                    min_z=1.0,
+                    max_x=3.2,
+                    max_y=0.6,
+                    max_z=1.5,
                 ),
                 clearance_required=0.3,
             ),
@@ -407,15 +477,23 @@ class TestCollisionDetectorTool:
                 id="desk_001",
                 name="Desk",
                 bounding_box=BoundingBox(
-                    min_x=1.5, min_y=0.0, min_z=0.0,
-                    max_x=3.0, max_y=0.75, max_z=0.5,
+                    min_x=1.5,
+                    min_y=0.0,
+                    min_z=0.0,
+                    max_x=3.0,
+                    max_y=0.75,
+                    max_z=0.5,
                 ),
             ),
         ]
         window_boxes = [
             BoundingBox(
-                min_x=1.0, min_y=0.0, min_z=0.0,
-                max_x=3.5, max_y=2.0, max_z=0.5,
+                min_x=1.0,
+                min_y=0.0,
+                min_z=0.0,
+                max_x=3.5,
+                max_y=2.0,
+                max_z=0.5,
             ),
         ]
         input_data = CollisionDetectorInput(
@@ -439,16 +517,24 @@ class TestCollisionDetectorTool:
                 id="problem_item",
                 name="Problem Item",
                 bounding_box=BoundingBox(
-                    min_x=-0.5, min_y=0.0, min_z=0.5,  # Extends beyond west wall
-                    max_x=1.5, max_y=1.0, max_z=2.5,
+                    min_x=-0.5,
+                    min_y=0.0,
+                    min_z=0.5,  # Extends beyond west wall
+                    max_x=1.5,
+                    max_y=1.0,
+                    max_z=2.5,
                 ),
             ),
             PlacedItem(
                 id="normal_item",
                 name="Normal Item",
                 bounding_box=BoundingBox(
-                    min_x=3.0, min_y=0.0, min_z=0.5,
-                    max_x=4.0, max_y=1.0, max_z=1.5,
+                    min_x=3.0,
+                    min_y=0.0,
+                    min_z=0.5,
+                    max_x=4.0,
+                    max_y=1.0,
+                    max_z=1.5,
                 ),
             ),
         ]
@@ -481,7 +567,9 @@ class TestCollisionDetectorTool:
         assert result.data.is_valid_layout is True
 
     @pytest.mark.asyncio
-    async def test_returns_metadata(self, tool: CollisionDetectorTool, overlapping_items: list[PlacedItem]) -> None:
+    async def test_returns_metadata(
+        self, tool: CollisionDetectorTool, overlapping_items: list[PlacedItem]
+    ) -> None:
         """Test that execution returns metadata."""
         input_data = CollisionDetectorInput(
             items=overlapping_items,
@@ -496,7 +584,9 @@ class TestCollisionDetectorTool:
         assert result.metadata["items_checked"] == 2
 
     @pytest.mark.asyncio
-    async def test_measures_execution_time(self, tool: CollisionDetectorTool, non_overlapping_items: list[PlacedItem]) -> None:
+    async def test_measures_execution_time(
+        self, tool: CollisionDetectorTool, non_overlapping_items: list[PlacedItem]
+    ) -> None:
         """Test that execution time is measured."""
         input_data = CollisionDetectorInput(
             items=non_overlapping_items,
@@ -534,15 +624,23 @@ class TestCollisionDetectorOutput:
                 id="item1",
                 name="Item 1",
                 bounding_box=BoundingBox(
-                    min_x=-0.5, min_y=0.0, min_z=0.5,  # Wall collision (error)
-                    max_x=1.5, max_y=1.0, max_z=2.5,
+                    min_x=-0.5,
+                    min_y=0.0,
+                    min_z=0.5,  # Wall collision (error)
+                    max_x=1.5,
+                    max_y=1.0,
+                    max_z=2.5,
                 ),
             ),
         ]
         window_boxes = [
             BoundingBox(
-                min_x=0.0, min_y=0.0, min_z=0.0,
-                max_x=2.0, max_y=2.0, max_z=1.0,  # Window blocked (warning)
+                min_x=0.0,
+                min_y=0.0,
+                min_z=0.0,
+                max_x=2.0,
+                max_y=2.0,
+                max_z=1.0,  # Window blocked (warning)
             ),
         ]
         input_data = CollisionDetectorInput(

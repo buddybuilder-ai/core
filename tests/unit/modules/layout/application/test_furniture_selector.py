@@ -21,9 +21,7 @@ from src.modules.layout.infrastructure.tools.base import ToolResult
 class MockFurnitureDbTool(InMemoryFurnitureDbTool):
     """Mock furniture database tool for testing."""
 
-    async def execute(
-        self, input_data: FurnitureSearchInput
-    ) -> ToolResult[FurnitureSearchOutput]:
+    async def execute(self, input_data: FurnitureSearchInput) -> ToolResult[FurnitureSearchOutput]:
         """Execute mock furniture query using parent implementation."""
         return await super().execute(input_data)
 
@@ -161,9 +159,7 @@ class TestFurnitureSelector:
         return FurnitureSelector(furniture_tool=mock_tool)
 
     @pytest.mark.asyncio
-    async def test_select_furniture_bedroom(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_select_furniture_bedroom(self, selector: FurnitureSelector) -> None:
         """Test selecting furniture for bedroom."""
         result = await selector.select_furniture(
             room_type="bedroom",
@@ -176,9 +172,7 @@ class TestFurnitureSelector:
         assert beds[0].is_essential
 
     @pytest.mark.asyncio
-    async def test_select_furniture_office(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_select_furniture_office(self, selector: FurnitureSelector) -> None:
         """Test selecting furniture for office."""
         result = await selector.select_furniture(
             room_type="office",
@@ -192,9 +186,7 @@ class TestFurnitureSelector:
         assert "chair" in categories
 
     @pytest.mark.asyncio
-    async def test_select_furniture_living_room(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_select_furniture_living_room(self, selector: FurnitureSelector) -> None:
         """Test selecting furniture for living room."""
         result = await selector.select_furniture(
             room_type="living_room",
@@ -206,9 +198,7 @@ class TestFurnitureSelector:
         assert len(sofas) == 1
 
     @pytest.mark.asyncio
-    async def test_select_furniture_with_preferences(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_select_furniture_with_preferences(self, selector: FurnitureSelector) -> None:
         """Test selecting furniture with user preferences."""
         preferences = UserPreferences(
             style_preference="modern",
@@ -222,9 +212,7 @@ class TestFurnitureSelector:
         assert len(result.selections) > 0
 
     @pytest.mark.asyncio
-    async def test_select_furniture_limited_space(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_select_furniture_limited_space(self, selector: FurnitureSelector) -> None:
         """Test selecting furniture with limited space."""
         result = await selector.select_furniture(
             room_type="bedroom",
@@ -234,9 +222,7 @@ class TestFurnitureSelector:
         assert len(result.selections) > 0 or len(result.warnings) > 0
 
     @pytest.mark.asyncio
-    async def test_select_furniture_max_items(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_select_furniture_max_items(self, selector: FurnitureSelector) -> None:
         """Test selecting furniture with max items limit."""
         result = await selector.select_furniture(
             room_type="bedroom",
@@ -246,9 +232,7 @@ class TestFurnitureSelector:
         assert len(result.selections) <= 2
 
     @pytest.mark.asyncio
-    async def test_feng_shui_notes_included(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_feng_shui_notes_included(self, selector: FurnitureSelector) -> None:
         """Test feng shui notes are included for relevant items."""
         result = await selector.select_furniture(
             room_type="bedroom",
@@ -262,9 +246,7 @@ class TestFurnitureSelector:
         assert len(bed_selection.feng_shui_notes) > 0
 
     @pytest.mark.asyncio
-    async def test_total_area_calculated(
-        self, selector: FurnitureSelector
-    ) -> None:
+    async def test_total_area_calculated(self, selector: FurnitureSelector) -> None:
         """Test total area needed is calculated."""
         result = await selector.select_furniture(
             room_type="bedroom",

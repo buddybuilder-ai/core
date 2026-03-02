@@ -10,11 +10,11 @@ from src.modules.layout.application.dtos import (
     UserPreferences,
 )
 from src.modules.layout.infrastructure.tools import (
+    BudgetLevel,
+    FurnitureCategory,
     FurnitureSearchInput,
     FurnitureSearchResult,
     InMemoryFurnitureDbTool,
-    FurnitureCategory,
-    BudgetLevel,
 )
 
 
@@ -109,6 +109,7 @@ class FurnitureSelector:
         "living_room": ["sofa"],
         "office": ["desk", "chair"],
         "dining_room": ["dining_table"],
+        "studio_apartment": ["sofa_bed", "compact_wardrobe"],
     }
 
     # Standard furniture categories by room type
@@ -117,6 +118,14 @@ class FurnitureSelector:
         "living_room": ["sofa", "coffee_table", "tv_stand", "armchair", "bookshelf"],
         "office": ["desk", "chair", "bookshelf", "filing_cabinet"],
         "dining_room": ["dining_table", "dining_chair", "sideboard"],
+        "studio_apartment": [
+            "sofa_bed",
+            "compact_wardrobe",
+            "folding_desk",
+            "compact_dining",
+            "shoe_cabinet",
+            "room_divider",
+        ],
     }
 
     # Feng shui placement notes by category
@@ -140,6 +149,21 @@ class FurnitureSelector:
             "Center of the dining area for family harmony",
             "Avoid placing in direct line with the door",
             "Ensure good lighting",
+        ],
+        "sofa_bed": [
+            "Place against solid wall for stability",
+            "Allow clear path when converting to bed",
+            "Face the main entry point when in sofa mode",
+        ],
+        "folding_desk": [
+            "Position in well-lit area near natural light",
+            "Face the door while working (command position)",
+            "Keep wall behind clear for folding mechanism",
+        ],
+        "room_divider": [
+            "Use to separate sleep and living zones",
+            "Ensure chi flow is not completely blocked",
+            "Position to create privacy without closing off energy",
         ],
     }
 
@@ -188,9 +212,7 @@ class FurnitureSelector:
             return result
 
         # Map budget level
-        budget_level = self.BUDGET_MAPPING.get(
-            preferences.budget_level, BudgetLevel.MEDIUM
-        )
+        budget_level = self.BUDGET_MAPPING.get(preferences.budget_level, BudgetLevel.MEDIUM)
 
         # Query furniture for each category
         selected_area = 0.0
@@ -285,9 +307,7 @@ class FurnitureSelector:
             Best matching item or None.
         """
         # Filter by size
-        fitting_items = [
-            item for item in items if item.total_footprint <= available_area
-        ]
+        fitting_items = [item for item in items if item.total_footprint <= available_area]
 
         if not fitting_items:
             return None
@@ -302,9 +322,7 @@ class FurnitureSelector:
         scored_items.sort(key=lambda x: x[0], reverse=True)
         return scored_items[0][1]
 
-    def _score_item(
-        self, item: FurnitureSearchResult, preferences: UserPreferences
-    ) -> float:
+    def _score_item(self, item: FurnitureSearchResult, preferences: UserPreferences) -> float:
         """Score an item based on preferences.
 
         Args:

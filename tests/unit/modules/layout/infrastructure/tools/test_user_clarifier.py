@@ -353,9 +353,7 @@ class TestClarifierOutput:
     def test_all_resolved_when_empty_pending(self) -> None:
         """Test all_resolved is True when no pending questions."""
         output = ClarifierOutput(
-            resolved_answers=[
-                ClarificationAnswer("q1", "yes", QuestionStatus.ANSWERED)
-            ],
+            resolved_answers=[ClarificationAnswer("q1", "yes", QuestionStatus.ANSWERED)],
             pending_questions=[],
             has_pending_required=False,
             all_resolved=True,
@@ -384,19 +382,13 @@ class TestUserClarifierTool:
 
     def test_validate_input_duplicate_ids(self, tool: UserClarifierTool) -> None:
         """Test validation catches duplicate question IDs."""
-        q1 = ClarificationQuestion(
-            id="same_id", question="Q1?", question_type=QuestionType.YES_NO
-        )
-        q2 = ClarificationQuestion(
-            id="same_id", question="Q2?", question_type=QuestionType.NUMERIC
-        )
+        q1 = ClarificationQuestion(id="same_id", question="Q1?", question_type=QuestionType.YES_NO)
+        q2 = ClarificationQuestion(id="same_id", question="Q2?", question_type=QuestionType.NUMERIC)
         input_data = ClarifierInput(questions=[q1, q2])
         errors = tool.validate_input(input_data)
         assert any("Duplicate" in e for e in errors)
 
-    def test_validate_input_multiple_choice_no_options(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_validate_input_multiple_choice_no_options(self, tool: UserClarifierTool) -> None:
         """Test validation catches multiple choice without options."""
         question = ClarificationQuestion(
             id="q1",
@@ -408,9 +400,7 @@ class TestUserClarifierTool:
         errors = tool.validate_input(input_data)
         assert any("no options" in e for e in errors)
 
-    def test_validate_input_unknown_answer_reference(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_validate_input_unknown_answer_reference(self, tool: UserClarifierTool) -> None:
         """Test validation catches answers for unknown questions."""
         input_data = ClarifierInput(
             questions=[],
@@ -420,9 +410,7 @@ class TestUserClarifierTool:
         assert any("unknown question" in e for e in errors)
 
     @pytest.mark.asyncio
-    async def test_execute_with_provided_answers(
-        self, tool: UserClarifierTool
-    ) -> None:
+    async def test_execute_with_provided_answers(self, tool: UserClarifierTool) -> None:
         """Test execution with pre-provided answers."""
         question = ClarificationQuestion(
             id="q1",
@@ -444,9 +432,7 @@ class TestUserClarifierTool:
         assert not result.data.resolved_answers[0].was_default
 
     @pytest.mark.asyncio
-    async def test_execute_with_defaults_applied(
-        self, tool: UserClarifierTool
-    ) -> None:
+    async def test_execute_with_defaults_applied(self, tool: UserClarifierTool) -> None:
         """Test execution applies defaults for optional questions."""
         question = ClarificationQuestion(
             id="q1",
@@ -472,9 +458,7 @@ class TestUserClarifierTool:
         assert result.data.resolved_answers[0].status == QuestionStatus.SKIPPED
 
     @pytest.mark.asyncio
-    async def test_execute_required_stays_pending(
-        self, tool: UserClarifierTool
-    ) -> None:
+    async def test_execute_required_stays_pending(self, tool: UserClarifierTool) -> None:
         """Test required questions without answers stay pending."""
         question = ClarificationQuestion(
             id="q1",
@@ -498,9 +482,7 @@ class TestUserClarifierTool:
         assert len(result.data.pending_questions) == 1
 
     @pytest.mark.asyncio
-    async def test_execute_invalid_answer_stays_pending(
-        self, tool: UserClarifierTool
-    ) -> None:
+    async def test_execute_invalid_answer_stays_pending(self, tool: UserClarifierTool) -> None:
         """Test questions with invalid answers stay pending."""
         question = ClarificationQuestion(
             id="q1",
@@ -521,9 +503,7 @@ class TestUserClarifierTool:
         assert len(result.data.pending_questions) == 1
 
     @pytest.mark.asyncio
-    async def test_execute_no_defaults_when_disabled(
-        self, tool: UserClarifierTool
-    ) -> None:
+    async def test_execute_no_defaults_when_disabled(self, tool: UserClarifierTool) -> None:
         """Test defaults not applied when auto_apply_defaults is False."""
         question = ClarificationQuestion(
             id="q1",
@@ -546,9 +526,7 @@ class TestUserClarifierTool:
         assert len(result.data.pending_questions) == 1
 
     @pytest.mark.asyncio
-    async def test_execute_no_defaults_when_skip_disabled(
-        self, tool: UserClarifierTool
-    ) -> None:
+    async def test_execute_no_defaults_when_skip_disabled(self, tool: UserClarifierTool) -> None:
         """Test defaults not applied when allow_skip is False."""
         question = ClarificationQuestion(
             id="q1",
@@ -611,9 +589,7 @@ class TestUserClarifierTool:
     async def test_execute_metadata(self, tool: UserClarifierTool) -> None:
         """Test execution metadata is populated."""
         questions = [
-            ClarificationQuestion(
-                id="q1", question="Q1?", question_type=QuestionType.YES_NO
-            ),
+            ClarificationQuestion(id="q1", question="Q1?", question_type=QuestionType.YES_NO),
             ClarificationQuestion(
                 id="q2",
                 question="Q2?",
@@ -652,9 +628,7 @@ class TestUserClarifierToolHelpers:
         question = tool.get_predefined_question("nonexistent")
         assert question is None
 
-    def test_get_questions_for_room_type_bedroom(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_get_questions_for_room_type_bedroom(self, tool: UserClarifierTool) -> None:
         """Test getting questions for bedroom."""
         questions = tool.get_questions_for_room_type("bedroom")
         categories = {q.category for q in questions}
@@ -670,17 +644,13 @@ class TestUserClarifierToolHelpers:
         assert "desk_facing_preference" in ids
         assert "work_style" in ids
 
-    def test_get_questions_for_room_type_living_room(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_get_questions_for_room_type_living_room(self, tool: UserClarifierTool) -> None:
         """Test getting questions for living room."""
         questions = tool.get_questions_for_room_type("living_room")
         ids = {q.id for q in questions}
         assert "sofa_configuration" in ids
 
-    def test_get_questions_for_room_type_includes_general(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_get_questions_for_room_type_includes_general(self, tool: UserClarifierTool) -> None:
         """Test that general questions are included for any room type."""
         questions = tool.get_questions_for_room_type("bedroom")
         categories = {q.category for q in questions}
@@ -709,12 +679,8 @@ class TestUserClarifierToolHelpers:
 
     def test_create_custom_question_unique_ids(self, tool: UserClarifierTool) -> None:
         """Test that custom questions get unique IDs."""
-        q1 = tool.create_custom_question(
-            question="Q1?", question_type=QuestionType.YES_NO
-        )
-        q2 = tool.create_custom_question(
-            question="Q2?", question_type=QuestionType.YES_NO
-        )
+        q1 = tool.create_custom_question(question="Q1?", question_type=QuestionType.YES_NO)
+        q2 = tool.create_custom_question(question="Q2?", question_type=QuestionType.YES_NO)
         assert q1.id != q2.id
 
 
@@ -726,16 +692,12 @@ class TestUserClarifierToolPredefinedQuestions:
         """Create tool instance."""
         return UserClarifierTool()
 
-    def test_predefined_questions_have_defaults(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_predefined_questions_have_defaults(self, tool: UserClarifierTool) -> None:
         """Test that all predefined questions have default values."""
         for qid, question in tool.PREDEFINED_QUESTIONS.items():
             assert question.default_value is not None, f"{qid} missing default"
 
-    def test_predefined_multiple_choice_have_options(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_predefined_multiple_choice_have_options(self, tool: UserClarifierTool) -> None:
         """Test multiple choice questions have options."""
         for qid, question in tool.PREDEFINED_QUESTIONS.items():
             if question.question_type == QuestionType.MULTIPLE_CHOICE:
@@ -759,9 +721,7 @@ class TestUserClarifierToolPredefinedQuestions:
         assert q.category == "office"
         assert "door" in q.default_value.lower()
 
-    def test_predefined_dining_capacity_is_required(
-        self, tool: UserClarifierTool
-    ) -> None:
+    def test_predefined_dining_capacity_is_required(self, tool: UserClarifierTool) -> None:
         """Test dining capacity is a required question."""
         q = tool.PREDEFINED_QUESTIONS["dining_capacity"]
         assert q.priority == QuestionPriority.REQUIRED
@@ -789,9 +749,7 @@ class TestUserClarifierToolLangChainSchema:
         tool = UserClarifierTool()
         schema = tool.to_langchain_tool_schema()
 
-        question_props = schema["parameters"]["properties"]["questions"]["items"][
-            "properties"
-        ]
+        question_props = schema["parameters"]["properties"]["questions"]["items"]["properties"]
         assert "question_type" in question_props
         enum_values = question_props["question_type"]["enum"]
         assert "multiple_choice" in enum_values
@@ -851,9 +809,7 @@ class TestUserClarifierToolIntegration:
         tool = UserClarifierTool()
         input_data = ClarifierInput(
             questions=[
-                ClarificationQuestion(
-                    id="q1", question="Test?", question_type=QuestionType.YES_NO
-                )
+                ClarificationQuestion(id="q1", question="Test?", question_type=QuestionType.YES_NO)
             ],
             answers={"q1": "yes"},
         )

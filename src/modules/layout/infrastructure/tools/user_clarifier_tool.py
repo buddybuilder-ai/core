@@ -1,14 +1,14 @@
 """User clarifier tool for feng shui layout agent."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
 from src.modules.layout.infrastructure.tools.base import BaseTool, ToolResult
 
 
-class QuestionType(str, Enum):
+class QuestionType(StrEnum):
     """Types of clarification questions."""
 
     MULTIPLE_CHOICE = "multiple_choice"
@@ -17,7 +17,7 @@ class QuestionType(str, Enum):
     NUMERIC = "numeric"
 
 
-class QuestionPriority(str, Enum):
+class QuestionPriority(StrEnum):
     """Priority levels for clarification questions."""
 
     REQUIRED = "required"
@@ -25,7 +25,7 @@ class QuestionPriority(str, Enum):
     OPTIONAL = "optional"
 
 
-class QuestionStatus(str, Enum):
+class QuestionStatus(StrEnum):
     """Status of a clarification question."""
 
     PENDING = "pending"
@@ -163,9 +163,7 @@ class ClarifierOutput:
 
     def get_pending_required(self) -> list[ClarificationQuestion]:
         """Get pending required questions."""
-        return [
-            q for q in self.pending_questions if q.priority == QuestionPriority.REQUIRED
-        ]
+        return [q for q in self.pending_questions if q.priority == QuestionPriority.REQUIRED]
 
 
 class UserClarifierTool(BaseTool[ClarifierInput, ClarifierOutput]):

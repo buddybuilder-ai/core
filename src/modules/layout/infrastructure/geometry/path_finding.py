@@ -1,7 +1,7 @@
 """Path finding algorithms for feng shui layout generation."""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from heapq import heappop, heappush
 from typing import NamedTuple
 
@@ -13,7 +13,7 @@ from src.modules.layout.infrastructure.geometry.grid import (
 )
 
 
-class PathType(str, Enum):
+class PathType(StrEnum):
     """Types of paths in a room."""
 
     TRAFFIC = "traffic"  # Main traffic path through room
@@ -54,7 +54,7 @@ class PathPoint:
 
     def distance_to(self, other: "PathPoint") -> float:
         """Calculate distance to another point."""
-        return ((self.x - other.x) ** 2 + (self.z - other.z) ** 2) ** 0.5
+        return float(((self.x - other.x) ** 2 + (self.z - other.z) ** 2) ** 0.5)
 
 
 @dataclass
@@ -417,7 +417,7 @@ class PathFinder:
         """Calculate heuristic distance (Euclidean)."""
         dx = abs(a.col - b.col)
         dz = abs(a.row - b.row)
-        return (dx * dx + dz * dz) ** 0.5
+        return float((dx * dx + dz * dz) ** 0.5)
 
     def _distance(self, a: GridPosition, b: GridPosition) -> float:
         """Calculate actual distance between adjacent cells."""
@@ -539,10 +539,7 @@ def find_direct_line_path(
 
     line_box = AABB(min_x=min_x, min_z=min_z, max_x=max_x, max_z=max_z)
 
-    for obstacle in obstacles:
-        if line_box.intersects(obstacle):
-            return False
-    return True
+    return all(not line_box.intersects(obstacle) for obstacle in obstacles)
 
 
 def calculate_path_efficiency(

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from src.modules.layout.domain.value_objects.coordinates import BoundingBox, Position3D
 
 
-class FurnitureCategory(str, Enum):
+class FurnitureCategory(StrEnum):
     """Furniture categories."""
 
     # Bedroom
@@ -75,7 +75,7 @@ class FurnitureCategory(str, Enum):
         )
 
 
-class FiveElement(str, Enum):
+class FiveElement(StrEnum):
     """Five elements in feng shui."""
 
     WOOD = "wood"

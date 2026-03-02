@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable
+from enum import StrEnum
+from typing import Any
 
 from src.modules.layout.application.dtos import AgentContext, AgentPhase
 
 
-class TransitionResult(str, Enum):
+class TransitionResult(StrEnum):
     """Result of a state transition."""
 
     SUCCESS = "success"
@@ -246,10 +247,7 @@ class AgentStateMachine:
 
         # Check custom transition conditions
         for transition in self._custom_transitions:
-            if (
-                transition.from_phase == current_phase
-                and transition.to_phase == target_phase
-            ):
+            if transition.from_phase == current_phase and transition.to_phase == target_phase:
                 if not transition.can_transition(context):
                     return False
 
@@ -276,10 +274,7 @@ class AgentStateMachine:
 
         # Execute custom transition callbacks
         for transition in self._custom_transitions:
-            if (
-                transition.from_phase == context.phase
-                and transition.to_phase == target_phase
-            ):
+            if transition.from_phase == context.phase and transition.to_phase == target_phase:
                 transition.execute(context)
 
         # Record history

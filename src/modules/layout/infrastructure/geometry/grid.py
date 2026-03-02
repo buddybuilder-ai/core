@@ -1,11 +1,11 @@
 """Placement grid for feng shui layout generation."""
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Callable, Iterator
+from enum import StrEnum
 
 
-class CellState(str, Enum):
+class CellState(StrEnum):
     """State of a grid cell."""
 
     EMPTY = "empty"
@@ -85,9 +85,7 @@ class GridRect:
 
     def contains(self, pos: GridPosition) -> bool:
         """Check if a position is within this rectangle."""
-        return (
-            self.row <= pos.row < self.end_row and self.col <= pos.col < self.end_col
-        )
+        return self.row <= pos.row < self.end_row and self.col <= pos.col < self.end_col
 
     def overlaps(self, other: "GridRect") -> bool:
         """Check if this rectangle overlaps with another."""
@@ -192,9 +190,7 @@ class PlacementGrid:
         self.rows = int(round(self.depth / self.cell_size))
 
         # Initialize all cells as empty
-        self.cells = [
-            [CellState.EMPTY for _ in range(self.cols)] for _ in range(self.rows)
-        ]
+        self.cells = [[CellState.EMPTY for _ in range(self.cols)] for _ in range(self.rows)]
 
     def get_cell(self, pos: GridPosition) -> CellState | None:
         """Get the state of a cell.
@@ -245,10 +241,7 @@ class PlacementGrid:
         Returns:
             True if all cells in the rectangle are empty.
         """
-        for pos in rect.positions():
-            if not self.is_available(pos):
-                return False
-        return True
+        return all(self.is_available(pos) for pos in rect.positions())
 
     def mark_occupied(
         self,
@@ -414,15 +407,13 @@ class PlacementGrid:
                 ) ** 0.5
                 # Prefer positions closer to walls but not too close
                 edge_dist = min(x, z, self.width - x - w, self.depth - z - d)
-                return edge_dist * 0.5 - dist_to_center * 0.3
+                return float(edge_dist * 0.5 - dist_to_center * 0.3)
 
             score_func = default_score
 
         # Score all candidates
         for candidate in candidates:
-            candidate.score = score_func(
-                candidate.world_x, candidate.world_z, width, depth
-            )
+            candidate.score = score_func(candidate.world_x, candidate.world_z, width, depth)
 
         # Sort by score (highest first) and return best
         candidates.sort()
@@ -449,9 +440,7 @@ class PlacementGrid:
         Returns:
             Available area in square meters.
         """
-        empty_cells = sum(
-            1 for row in self.cells for cell in row if cell == CellState.EMPTY
-        )
+        empty_cells = sum(1 for row in self.cells for cell in row if cell == CellState.EMPTY)
         return empty_cells * self.cell_size * self.cell_size
 
     def clear(self) -> None:

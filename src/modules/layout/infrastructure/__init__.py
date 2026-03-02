@@ -27,6 +27,8 @@ from src.modules.layout.infrastructure.geometry import (
     find_direct_line_path,
 )
 from src.modules.layout.infrastructure.tools import (
+    FENG_SHUI_RULES,
+    FURNITURE_CATALOG,
     BaseTool,
     BudgetLevel,
     CatalogFurniture,
@@ -39,9 +41,7 @@ from src.modules.layout.infrastructure.tools import (
     CollisionDetectorOutput,
     CollisionDetectorTool,
     CollisionType,
-    FENG_SHUI_RULES,
     FengShuiRule,
-    FURNITURE_CATALOG,
     FurnitureSearchInput,
     FurnitureSearchOutput,
     FurnitureSearchResult,

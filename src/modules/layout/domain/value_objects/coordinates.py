@@ -66,9 +66,9 @@ class Position3D:
         Returns:
             Distance in meters.
         """
-        return (
-            (self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2
-        ) ** 0.5
+        return float(
+            ((self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2) ** 0.5
+        )
 
     def distance_2d(self, other: Position3D) -> float:
         """Calculate 2D distance (ignoring height) to another position.
@@ -79,7 +79,7 @@ class Position3D:
         Returns:
             Distance in meters on the floor plane (x-z).
         """
-        return ((self.x - other.x) ** 2 + (self.z - other.z) ** 2) ** 0.5
+        return float(((self.x - other.x) ** 2 + (self.z - other.z) ** 2) ** 0.5)
 
     def translate(self, dx: float = 0, dy: float = 0, dz: float = 0) -> Position3D:
         """Create new position translated by given offsets.

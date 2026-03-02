@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -20,7 +20,7 @@ from src.modules.layout.domain.entities import (
 from src.modules.layout.domain.exceptions import FengShuiAgentError
 
 
-class ValidationSeverity(str, Enum):
+class ValidationSeverity(StrEnum):
     """Severity level for validation issues."""
 
     ERROR = "error"
@@ -68,26 +68,20 @@ class InputAnalysisResult:
     @property
     def has_warnings(self) -> bool:
         """Check if there are any warning-level issues."""
-        return any(
-            issue.severity == ValidationSeverity.WARNING for issue in self.issues
-        )
+        return any(issue.severity == ValidationSeverity.WARNING for issue in self.issues)
 
     @property
     def error_messages(self) -> list[str]:
         """Get all error messages."""
         return [
-            issue.message
-            for issue in self.issues
-            if issue.severity == ValidationSeverity.ERROR
+            issue.message for issue in self.issues if issue.severity == ValidationSeverity.ERROR
         ]
 
     @property
     def warning_messages(self) -> list[str]:
         """Get all warning messages."""
         return [
-            issue.message
-            for issue in self.issues
-            if issue.severity == ValidationSeverity.WARNING
+            issue.message for issue in self.issues if issue.severity == ValidationSeverity.WARNING
         ]
 
     def to_dict(self) -> dict[str, Any]:
@@ -142,6 +136,8 @@ class InputAnalyzer:
         "dining_room": RoomType.DINING_ROOM,
         "diningroom": RoomType.DINING_ROOM,
         "dining": RoomType.DINING_ROOM,
+        "studio_apartment": RoomType.STUDIO_APARTMENT,
+        "studio": RoomType.STUDIO_APARTMENT,
     }
 
     # Valid wall sides
@@ -513,9 +509,7 @@ class InputAnalyzer:
         depth = dims_result.get("depth", 0)
 
         for idx, door in enumerate(raw_doors):
-            door_issues, valid_door = self._validate_single_door(
-                door, idx, width, depth
-            )
+            door_issues, valid_door = self._validate_single_door(door, idx, width, depth)
             issues.extend(door_issues)
             if valid_door:
                 doors.append(valid_door)
@@ -683,9 +677,7 @@ class InputAnalyzer:
         depth = dims_result.get("depth", 0)
 
         for idx, window in enumerate(raw_windows):
-            window_issues, valid_window = self._validate_single_window(
-                window, idx, width, depth
-            )
+            window_issues, valid_window = self._validate_single_window(window, idx, width, depth)
             issues.extend(window_issues)
             if valid_window:
                 windows.append(valid_window)
@@ -798,7 +790,7 @@ class InputAnalyzer:
             issues.append(
                 ValidationIssue(
                     field=f"{field_prefix}.offset",
-                    message=f"Window extends beyond wall",
+                    message="Window extends beyond wall",
                     severity=ValidationSeverity.WARNING,
                 )
             )
@@ -843,9 +835,7 @@ class InputAnalyzer:
         return UserPreferences(
             budget_level=prefs_data.get("budget_level", "medium"),
             style_preference=prefs_data.get("style_preference", "modern"),
-            natural_light_priority=prefs_data.get(
-                "natural_light_priority", "somewhat_important"
-            ),
+            natural_light_priority=prefs_data.get("natural_light_priority", "somewhat_important"),
             privacy_priority=prefs_data.get("privacy_priority", "somewhat_important"),
             accessibility_needs=prefs_data.get("accessibility_needs", []),
             existing_furniture=prefs_data.get("existing_furniture", []),

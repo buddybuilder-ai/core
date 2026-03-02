@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class RoomType(str, Enum):
+class RoomType(StrEnum):
     """Supported room types for feng shui analysis."""
 
     BEDROOM = "bedroom"
@@ -17,9 +17,10 @@ class RoomType(str, Enum):
     DINING_ROOM = "dining_room"
     KITCHEN = "kitchen"
     BATHROOM = "bathroom"
+    STUDIO_APARTMENT = "studio_apartment"
 
 
-class FiveElement(str, Enum):
+class FiveElement(StrEnum):
     """Five elements in feng shui."""
 
     WOOD = "wood"
@@ -37,7 +38,7 @@ class RulePriority(int, Enum):
     RECOMMENDED = 3
 
 
-class WallSide(str, Enum):
+class WallSide(StrEnum):
     """Wall sides for positioning doors and windows."""
 
     NORTH = "north"
@@ -77,9 +78,7 @@ class WindowPosition(BaseModel):
     offset: float = Field(..., ge=0, description="Offset from wall start in meters")
     width: float = Field(..., gt=0, description="Window width in meters")
     height: float = Field(default=1.2, gt=0, description="Window height in meters")
-    sill_height: float = Field(
-        default=0.9, ge=0, description="Height from floor to window sill"
-    )
+    sill_height: float = Field(default=0.9, ge=0, description="Height from floor to window sill")
 
 
 class FurnitureDimensions(BaseModel):
@@ -116,9 +115,7 @@ class FengShuiRule(BaseModel):
     rule_id: str = Field(..., description="Unique rule identifier")
     description: str = Field(..., description="Rule description")
     priority: RulePriority = Field(..., description="Rule priority level")
-    room_types: list[RoomType] = Field(
-        default_factory=list, description="Applicable room types"
-    )
+    room_types: list[RoomType] = Field(default_factory=list, description="Applicable room types")
     furniture_categories: list[str] | None = Field(
         default=None, description="Applicable furniture categories"
     )
@@ -146,16 +143,12 @@ class FengShuiScoreBreakdown(BaseModel):
     Total possible: 100 points
     """
 
-    command_position: int = Field(
-        ..., ge=0, le=30, description="Command position score (0-30)"
-    )
+    command_position: int = Field(..., ge=0, le=30, description="Command position score (0-30)")
     five_elements_balance: int = Field(
         ..., ge=0, le=20, description="Five elements balance score (0-20)"
     )
     chi_flow: int = Field(..., ge=0, le=25, description="Chi flow score (0-25)")
-    sha_chi_avoidance: int = Field(
-        ..., ge=0, le=25, description="Sha chi avoidance score (0-25)"
-    )
+    sha_chi_avoidance: int = Field(..., ge=0, le=25, description="Sha chi avoidance score (0-25)")
 
     @property
     def total(self) -> int:
@@ -199,12 +192,8 @@ class FengShuiRecommendation(BaseModel):
 
     category: str = Field(..., description="Recommendation category")
     description: str = Field(..., description="What to do")
-    priority: RulePriority = Field(
-        default=RulePriority.RECOMMENDED, description="Importance level"
-    )
-    expected_improvement: int = Field(
-        default=0, ge=0, description="Expected score improvement"
-    )
+    priority: RulePriority = Field(default=RulePriority.RECOMMENDED, description="Importance level")
+    expected_improvement: int = Field(default=0, ge=0, description="Expected score improvement")
 
 
 class ElementBalance(BaseModel):
@@ -262,9 +251,7 @@ class CommandPosition(BaseModel):
     """
 
     furniture_id: str = Field(..., description="Furniture ID")
-    is_in_position: bool = Field(
-        default=False, description="Whether in command position"
-    )
+    is_in_position: bool = Field(default=False, description="Whether in command position")
     can_see_door: bool = Field(default=False, description="Has view of door")
     has_wall_backing: bool = Field(default=False, description="Has solid wall behind")
     distance_from_ideal: float = Field(
@@ -288,9 +275,7 @@ class ShaChiLine(BaseModel):
     from_element: str = Field(..., description="Starting element ID")
     to_element: str = Field(..., description="Ending element ID")
     intensity: int = Field(default=5, ge=1, le=10, description="Intensity (1-10)")
-    mitigation: str | None = Field(
-        default=None, description="Suggested mitigation strategy"
-    )
+    mitigation: str | None = Field(default=None, description="Suggested mitigation strategy")
 
 
 class FengShuiAnalysis(BaseModel):
@@ -320,6 +305,4 @@ class FengShuiAnalysis(BaseModel):
         default_factory=list, description="Improvement recommendations"
     )
     warnings: list[str] = Field(default_factory=list, description="Critical warnings")
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata"
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")

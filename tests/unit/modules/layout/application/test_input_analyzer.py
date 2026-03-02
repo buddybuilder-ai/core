@@ -2,13 +2,13 @@
 
 import pytest
 
+from src.modules.layout.application.dtos import AgentPhase
 from src.modules.layout.application.services import (
-    InputAnalyzer,
     InputAnalysisResult,
+    InputAnalyzer,
     ValidationIssue,
     ValidationSeverity,
 )
-from src.modules.layout.application.dtos import AgentPhase
 
 
 class TestValidationIssue:
@@ -96,9 +96,7 @@ class TestInputAnalyzer:
             "windows": [{"wall": "east", "offset": 1.5, "width": 1.5, "height": 1.2}],
         }
 
-    def test_analyze_valid_input(
-        self, analyzer: InputAnalyzer, valid_input: dict
-    ) -> None:
+    def test_analyze_valid_input(self, analyzer: InputAnalyzer, valid_input: dict) -> None:
         """Test analyzing valid input."""
         result = analyzer.analyze(valid_input)
         assert result.is_valid
@@ -308,17 +306,13 @@ class TestInputAnalyzer:
         assert context.room_type == "bedroom"
         assert context.phase == AgentPhase.INITIALIZATION
 
-    def test_create_context_from_invalid_result(
-        self, analyzer: InputAnalyzer
-    ) -> None:
+    def test_create_context_from_invalid_result(self, analyzer: InputAnalyzer) -> None:
         """Test creating context from invalid analysis raises error."""
         result = InputAnalysisResult(is_valid=False, room=None)
         with pytest.raises(ValueError):
             analyzer.create_context(result)
 
-    def test_create_context_includes_warnings(
-        self, analyzer: InputAnalyzer
-    ) -> None:
+    def test_create_context_includes_warnings(self, analyzer: InputAnalyzer) -> None:
         """Test that context includes warnings from analysis."""
         input_data = {
             "room_type": "bedroom",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.modules.layout.application.dtos import (
@@ -12,7 +12,6 @@ from src.modules.layout.application.dtos import (
 from src.modules.layout.application.dtos.placement_result import (
     BatchPlacementResult,
     LayoutOutput,
-    PlacementStatus,
 )
 from src.modules.layout.application.services.feng_shui_scorer import ScoringResult
 from src.modules.layout.domain.entities import Room
@@ -118,28 +117,24 @@ class OutputBuilder:
         score_value = feng_shui_score.total if feng_shui_score else 0
 
         # Build score breakdown
-        score_breakdown = {}
+        score_breakdown: dict[str, float] = {}
         if feng_shui_score:
             score_breakdown = {
-                "command_position": feng_shui_score.command_position,
-                "five_elements": feng_shui_score.five_elements,
-                "chi_flow": feng_shui_score.chi_flow,
-                "sha_chi_avoidance": feng_shui_score.sha_chi_avoidance,
+                "command_position": float(feng_shui_score.command_position),
+                "five_elements": float(feng_shui_score.five_elements),
+                "chi_flow": float(feng_shui_score.chi_flow),
+                "sha_chi_avoidance": float(feng_shui_score.sha_chi_avoidance),
             }
 
         # Build recommendations
         recommendations = []
         if self.config.include_recommendations:
-            recommendations = self._build_recommendations(
-                feng_shui_score, scoring_result
-            )
+            recommendations = self._build_recommendations(feng_shui_score, scoring_result)
 
         # Build warnings
         warnings = []
         if self.config.include_warnings:
-            warnings = self._build_warnings(
-                placed_furniture, feng_shui_score, placement_result
-            )
+            warnings = self._build_warnings(placed_furniture, feng_shui_score, placement_result)
 
         # Build metadata
         metadata = {}
@@ -218,9 +213,7 @@ class OutputBuilder:
         # Check placement result
         if placement_result:
             if placement_result.failed_count > 0:
-                warnings.append(
-                    f"{placement_result.failed_count} item(s) could not be placed."
-                )
+                warnings.append(f"{placement_result.failed_count} item(s) could not be placed.")
 
             if not placement_result.all_essential_placed:
                 warnings.append(
@@ -269,9 +262,7 @@ class OutputBuilder:
             "essential_count": essential_count,
             "optional_count": optional_count,
             "total_area": round(total_furniture_area, 2),
-            "coverage_ratio": round(
-                total_furniture_area / (room.width * room.depth), 2
-            ),
+            "coverage_ratio": round(total_furniture_area / (room.width * room.depth), 2),
         }
 
         # Score metadata
@@ -287,9 +278,7 @@ class OutputBuilder:
         # Placement metadata
         if placement_result and self.config.include_placement_details:
             metadata["placement"] = {
-                "total_attempts": sum(
-                    len(r.attempts) for r in placement_result.results
-                ),
+                "total_attempts": sum(len(r.attempts) for r in placement_result.results),
                 "success_rate": round(placement_result.success_rate, 2),
                 "execution_time_ms": round(placement_result.execution_time_ms, 2),
             }

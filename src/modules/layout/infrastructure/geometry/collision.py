@@ -1,11 +1,11 @@
 """Collision detection algorithms for feng shui layout generation."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import NamedTuple
 
 
-class CollisionSeverity(str, Enum):
+class CollisionSeverity(StrEnum):
     """Severity levels for collision issues."""
 
     ERROR = "error"  # Furniture physically overlaps
@@ -114,7 +114,7 @@ class AABB:
         """
         dx = max(0, max(self.min_x - other.max_x, other.min_x - self.max_x))
         dz = max(0, max(self.min_z - other.max_z, other.min_z - self.max_z))
-        return (dx * dx + dz * dz) ** 0.5
+        return float((dx * dx + dz * dz) ** 0.5)
 
     def expanded(self, amount: float) -> "AABB":
         """Create an expanded copy of this box.
@@ -151,9 +151,7 @@ class AABB:
         )
 
     @classmethod
-    def from_position_and_size(
-        cls, x: float, z: float, width: float, depth: float
-    ) -> "AABB":
+    def from_position_and_size(cls, x: float, z: float, width: float, depth: float) -> "AABB":
         """Create AABB from position and dimensions.
 
         Args:
@@ -269,9 +267,7 @@ class CollisionDetector:
             raise ValueError("Room dimensions must be positive")
         self.room_width = room_width
         self.room_depth = room_depth
-        self.room_bounds = AABB(
-            min_x=0, min_z=0, max_x=room_width, max_z=room_depth
-        )
+        self.room_bounds = AABB(min_x=0, min_z=0, max_x=room_width, max_z=room_depth)
 
     def check_collision(self, box1: AABB, box2: AABB) -> CollisionResult:
         """Check for collision between two bounding boxes.
@@ -290,7 +286,7 @@ class CollisionDetector:
                 has_collision=True,
                 severity=CollisionSeverity.ERROR,
                 overlap_area=overlap_area,
-                distance=-overlap_area**0.5,  # Negative distance for overlap
+                distance=-(overlap_area**0.5),  # Negative distance for overlap
                 message=f"Items overlap with area {overlap_area:.3f}m²",
             )
 
@@ -367,12 +363,8 @@ class CollisionDetector:
             or box.max_z > self.room_depth
         ):
             # Calculate how far outside
-            overflow_x = max(
-                0, max(-box.min_x, box.max_x - self.room_width)
-            )
-            overflow_z = max(
-                0, max(-box.min_z, box.max_z - self.room_depth)
-            )
+            overflow_x = max(0, max(-box.min_x, box.max_x - self.room_width))
+            overflow_z = max(0, max(-box.min_z, box.max_z - self.room_depth))
             overflow = max(overflow_x, overflow_z)
             return CollisionResult(
                 has_collision=True,
@@ -451,9 +443,7 @@ class CollisionDetector:
 
         return violations
 
-    def find_all_collisions(
-        self, boxes: list[AABB]
-    ) -> list[tuple[int, int, CollisionResult]]:
+    def find_all_collisions(self, boxes: list[AABB]) -> list[tuple[int, int, CollisionResult]]:
         """Find all collisions between a list of items.
 
         Args:
@@ -517,9 +507,7 @@ class CollisionDetector:
         # Default for other rotations
         return clearance.front, clearance.back, clearance.left, clearance.right
 
-    def _wall_result(
-        self, wall: str, distance: float, min_distance: float
-    ) -> CollisionResult:
+    def _wall_result(self, wall: str, distance: float, min_distance: float) -> CollisionResult:
         """Create a wall proximity result.
 
         Args:
@@ -585,7 +573,7 @@ def check_rotated_collision(
             has_collision=True,
             severity=CollisionSeverity.ERROR,
             overlap_area=overlap_area,
-            distance=-overlap_area**0.5,
+            distance=-(overlap_area**0.5),
             message=f"Rotated items collide with overlap {overlap_area:.3f}m²",
         )
 

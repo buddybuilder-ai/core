@@ -11,7 +11,6 @@ from src.modules.layout.application.dtos.placement_result import (
     BatchPlacementResult,
     PlacementStatus,
 )
-from src.modules.layout.application.services.feng_shui_scorer import ScoringResult
 from src.modules.layout.application.services.output_builder import (
     LayoutReport,
     OutputBuilder,
@@ -89,9 +88,7 @@ class TestOutputBuilder:
             depth=4.0,
             height=2.8,
             room_type=RoomType.BEDROOM,
-            doors=[
-                DoorPosition(wall="south", offset=2.0, width=0.9)
-            ],
+            doors=[DoorPosition(wall="south", offset=2.0, width=0.9)],
         )
 
     @pytest.fixture

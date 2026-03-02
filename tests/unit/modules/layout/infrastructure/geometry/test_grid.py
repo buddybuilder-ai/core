@@ -133,9 +133,7 @@ class TestGridRect:
 
     def test_from_world_rect(self) -> None:
         """Test creating from world coordinates."""
-        rect = GridRect.from_world_rect(
-            x=1.0, z=2.0, width=0.5, depth=0.3, cell_size=0.1
-        )
+        rect = GridRect.from_world_rect(x=1.0, z=2.0, width=0.5, depth=0.3, cell_size=0.1)
         assert rect.col == 10  # x / cell_size
         assert rect.row == 20  # z / cell_size
         assert rect.cols == 5  # round(width / cell_size)
@@ -143,9 +141,7 @@ class TestGridRect:
 
     def test_from_world_rect_minimum_size(self) -> None:
         """Test that from_world_rect creates at least 1x1 rect."""
-        rect = GridRect.from_world_rect(
-            x=0, z=0, width=0.01, depth=0.01, cell_size=0.1
-        )
+        rect = GridRect.from_world_rect(x=0, z=0, width=0.01, depth=0.01, cell_size=0.1)
         assert rect.cols >= 1
         assert rect.rows >= 1
 
@@ -179,26 +175,16 @@ class TestPlacementCandidate:
 
     def test_comparison_higher_score_first(self) -> None:
         """Test that higher scores sort first."""
-        c1 = PlacementCandidate(
-            position=GridPosition(0, 0), world_x=0, world_z=0, score=50
-        )
-        c2 = PlacementCandidate(
-            position=GridPosition(0, 0), world_x=0, world_z=0, score=80
-        )
+        c1 = PlacementCandidate(position=GridPosition(0, 0), world_x=0, world_z=0, score=50)
+        c2 = PlacementCandidate(position=GridPosition(0, 0), world_x=0, world_z=0, score=80)
         assert c2 < c1  # Higher score is "less than" for sorting
 
     def test_sorting(self) -> None:
         """Test sorting candidates by score."""
         candidates = [
-            PlacementCandidate(
-                position=GridPosition(0, 0), world_x=0, world_z=0, score=30
-            ),
-            PlacementCandidate(
-                position=GridPosition(0, 0), world_x=0, world_z=0, score=90
-            ),
-            PlacementCandidate(
-                position=GridPosition(0, 0), world_x=0, world_z=0, score=60
-            ),
+            PlacementCandidate(position=GridPosition(0, 0), world_x=0, world_z=0, score=30),
+            PlacementCandidate(position=GridPosition(0, 0), world_x=0, world_z=0, score=90),
+            PlacementCandidate(position=GridPosition(0, 0), world_x=0, world_z=0, score=60),
         ]
         sorted_candidates = sorted(candidates)
         assert sorted_candidates[0].score == 90
@@ -304,9 +290,7 @@ class TestPlacementGridRectOperations:
         rect = GridRect(row=0, col=0, rows=2, cols=2)
         assert grid.is_rect_available(rect)
 
-    def test_is_rect_available_partially_occupied(
-        self, grid: PlacementGrid
-    ) -> None:
+    def test_is_rect_available_partially_occupied(self, grid: PlacementGrid) -> None:
         """Test is_rect_available when one cell is occupied."""
         grid.set_cell(GridPosition(row=1, col=1), CellState.OCCUPIED)
         rect = GridRect(row=0, col=0, rows=3, cols=3)
@@ -331,9 +315,7 @@ class TestPlacementGridMarkOccupied:
         assert grid.get_cell(GridPosition(row=1, col=0)) == CellState.OCCUPIED
         assert grid.get_cell(GridPosition(row=1, col=1)) == CellState.OCCUPIED
 
-    def test_mark_occupied_fails_when_not_available(
-        self, grid: PlacementGrid
-    ) -> None:
+    def test_mark_occupied_fails_when_not_available(self, grid: PlacementGrid) -> None:
         """Test mark_occupied fails when area is occupied."""
         grid.mark_occupied("item1", x=0, z=0, width=1.0, depth=1.0)
         result = grid.mark_occupied("item2", x=0.5, z=0.5, width=1.0, depth=1.0)
@@ -358,9 +340,7 @@ class TestPlacementGridMarkZones:
         grid.mark_blocked(x=0, z=0, width=1.0, depth=1.0)
         assert grid.get_cell(GridPosition(row=0, col=0)) == CellState.BLOCKED
 
-    def test_mark_blocked_does_not_overwrite_occupied(
-        self, grid: PlacementGrid
-    ) -> None:
+    def test_mark_blocked_does_not_overwrite_occupied(self, grid: PlacementGrid) -> None:
         """Test that blocked doesn't overwrite occupied."""
         grid.set_cell(GridPosition(row=0, col=0), CellState.OCCUPIED)
         grid.mark_blocked(x=0, z=0, width=0.5, depth=0.5)
@@ -371,9 +351,7 @@ class TestPlacementGridMarkZones:
         grid.mark_traffic(x=0, z=0, width=1.0, depth=0.5)
         assert grid.get_cell(GridPosition(row=0, col=0)) == CellState.TRAFFIC
 
-    def test_mark_traffic_does_not_overwrite_occupied(
-        self, grid: PlacementGrid
-    ) -> None:
+    def test_mark_traffic_does_not_overwrite_occupied(self, grid: PlacementGrid) -> None:
         """Test that traffic doesn't overwrite occupied."""
         grid.set_cell(GridPosition(row=0, col=0), CellState.OCCUPIED)
         grid.mark_traffic(x=0, z=0, width=0.5, depth=0.5)
@@ -437,9 +415,7 @@ class TestPlacementGridFindPositions:
 
     def test_find_positions_with_margin(self, grid: PlacementGrid) -> None:
         """Test finding positions with margin."""
-        candidates = grid.find_available_positions(
-            width=0.5, depth=0.5, margin=0.5
-        )
+        candidates = grid.find_available_positions(width=0.5, depth=0.5, margin=0.5)
         # Larger effective size means fewer positions
         assert len(candidates) < 16
 
@@ -460,9 +436,7 @@ class TestPlacementGridFindBestPosition:
         """Create a test grid."""
         return PlacementGrid(width=4.0, depth=4.0, cell_size=0.5)
 
-    def test_find_best_position_with_default_scoring(
-        self, grid: PlacementGrid
-    ) -> None:
+    def test_find_best_position_with_default_scoring(self, grid: PlacementGrid) -> None:
         """Test finding best position with default scoring."""
         result = grid.find_best_position(width=0.5, depth=0.5)
         assert result is not None
@@ -475,9 +449,7 @@ class TestPlacementGridFindBestPosition:
             # Prefer top-left corner
             return -(x + z)
 
-        result = grid.find_best_position(
-            width=0.5, depth=0.5, score_func=prefer_corner
-        )
+        result = grid.find_best_position(width=0.5, depth=0.5, score_func=prefer_corner)
         assert result is not None
         assert result.world_x == pytest.approx(0.0)
         assert result.world_z == pytest.approx(0.0)
@@ -521,9 +493,7 @@ class TestPlacementGridStatistics:
         rate = grid.get_occupancy_rate()
         assert rate == pytest.approx(0.25)  # 4/16
 
-    def test_get_occupancy_rate_includes_blocked(
-        self, grid: PlacementGrid
-    ) -> None:
+    def test_get_occupancy_rate_includes_blocked(self, grid: PlacementGrid) -> None:
         """Test that occupancy rate includes blocked cells."""
         grid.mark_blocked(x=0, z=0, width=1.0, depth=1.0)
         rate = grid.get_occupancy_rate()
@@ -635,16 +605,12 @@ class TestPlacementGridIntegration:
             edge_dist = min(x, z, grid.width - x - w, grid.depth - z - d)
             return -edge_dist if edge_dist > 0 else 100
 
-        result = grid.find_best_position(
-            width=0.6, depth=0.4, score_func=prefer_against_wall
-        )
+        result = grid.find_best_position(width=0.6, depth=0.4, score_func=prefer_against_wall)
 
         assert result is not None
         # Should not overlap with sofa
         sofa_rect = GridRect.from_world_rect(0.5, 0.5, 2.0, 0.8, 0.1)
-        item_rect = GridRect.from_world_rect(
-            result.world_x, result.world_z, 0.6, 0.4, 0.1
-        )
+        item_rect = GridRect.from_world_rect(result.world_x, result.world_z, 0.6, 0.4, 0.1)
         assert not sofa_rect.overlaps(item_rect)
 
     def test_rotation_based_placement(self) -> None:
