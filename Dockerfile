@@ -21,7 +21,7 @@ COPY pyproject.toml ./
 COPY src/ ./src/
 
 # Install dependencies and build wheels
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir --upgrade pip hatchling && \
     pip wheel --no-cache-dir --wheel-dir /wheels .
 
 # -----------------------------------------------------------------------------
