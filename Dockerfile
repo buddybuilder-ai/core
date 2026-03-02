@@ -17,11 +17,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files needed for installation
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 # Install dependencies and build wheels
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir --upgrade pip hatchling && \
     pip wheel --no-cache-dir --wheel-dir /wheels .
 
 # -----------------------------------------------------------------------------

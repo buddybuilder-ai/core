@@ -1,6 +1,8 @@
 """BuddyBuilder AI - FastAPI Application Factory."""
-from contextlib import asynccontextmanager
+
+import logging
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +10,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config.settings import get_settings
 
 settings = get_settings()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+# Set specific loggers
+logging.getLogger("src.modules.layout").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -53,8 +67,9 @@ def create_app() -> FastAPI:
         return {"status": "ready"}
 
     # Include API routers
-    # from src.api.v1.router import api_v1_router
-    # app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
+    from src.api.v1.router import api_v1_router
+
+    app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
 
     return app
 
