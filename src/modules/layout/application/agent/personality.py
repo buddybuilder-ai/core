@@ -43,13 +43,30 @@ _PROMPTS: dict[str, str] = {
 }
 
 _MOOD_SOFTENERS: list[str] = [
-    "หงุดหงิด", "เบื่อ", "ไม่ชอบ", "แย่", "เสียใจ",
-    "frustrated", "annoyed", "ugh", "hate", "terrible",
+    "หงุดหงิด",
+    "เบื่อ",
+    "ไม่ชอบ",
+    "แย่",
+    "เสียใจ",
+    "frustrated",
+    "annoyed",
+    "ugh",
+    "hate",
+    "terrible",
 ]
 
 _MOOD_ENERGIZERS: list[str] = [
-    "ว้าว", "เยี่ยม", "สุดยอด", "ดีมาก", "ชอบมาก",
-    "excited", "wow", "amazing", "love", "awesome", "great",
+    "ว้าว",
+    "เยี่ยม",
+    "สุดยอด",
+    "ดีมาก",
+    "ชอบมาก",
+    "excited",
+    "wow",
+    "amazing",
+    "love",
+    "awesome",
+    "great",
 ]
 
 _MODE_KEYWORDS: dict[str, list[str]] = {

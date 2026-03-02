@@ -145,9 +145,7 @@ class ContextInjector:
 
         return queries
 
-    async def _run_queries(
-        self, queries: list[RagSearchInput]
-    ) -> list[RuleSearchResult]:
+    async def _run_queries(self, queries: list[RagSearchInput]) -> list[RuleSearchResult]:
         """Execute all queries, collect results. Ignores individual query errors."""
         results: list[RuleSearchResult] = []
         for q in queries:

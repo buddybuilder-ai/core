@@ -21,13 +21,15 @@ from src.modules.layout.infrastructure.geometry.collision import AABB
 
 
 def _make_placement(
-    fid: str, x: float, z: float, w: float, depth: float, rotation: int = 0
+    fid: str, x: float, z: float, w: float, l: float, rotation: int = 0
 ) -> PhysicalPlacement:
     return PhysicalPlacement(
         furniture_id=fid,
-        x=x, y=0.0, z=z,
+        x=x,
+        y=0.0,
+        z=z,
         rotation=rotation,
-        bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=depth),
+        bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=l),
     )
 
 
@@ -150,7 +152,7 @@ class TestWealthCornerNotEmpty:
 class TestMirrorNotFacingBed:
     def test_mirror_facing_bed_violation(self) -> None:
         """Mirror sharing x-range with bed → violation."""
-        bed    = _make_placement("bed_01",    x=1.0, z=2.0, w=2.0, l=1.9)
+        bed = _make_placement("bed_01", x=1.0, z=2.0, w=2.0, l=1.9)
         mirror = _make_placement("mirror_01", x=1.5, z=0.5, w=0.5, l=0.1)
         result = _rule_mirror_not_facing_bed(mirror, bed)
         assert not result.passed
@@ -158,7 +160,7 @@ class TestMirrorNotFacingBed:
 
     def test_mirror_not_facing_bed_passes(self) -> None:
         """Mirror with no x-overlap with bed → passes."""
-        bed    = _make_placement("bed_01",    x=2.0, z=2.0, w=2.0, l=1.9)
+        bed = _make_placement("bed_01", x=2.0, z=2.0, w=2.0, l=1.9)
         mirror = _make_placement("mirror_01", x=0.0, z=0.5, w=0.5, l=0.1)
         result = _rule_mirror_not_facing_bed(mirror, bed)
         assert result.passed
@@ -207,8 +209,8 @@ class TestCheckFengShuiIntegration:
     def test_returns_six_violations(self, room: RoomSpec) -> None:
         """check_feng_shui should always return exactly 6 violation results."""
         placements = [
-            _make_placement("bed_01",   x=1.0, z=1.5, w=2.0, l=1.9, rotation=180),
-            _make_placement("desk_01",  x=0.1, z=3.5, w=1.2, l=0.6),
+            _make_placement("bed_01", x=1.0, z=1.5, w=2.0, l=1.9, rotation=180),
+            _make_placement("desk_01", x=0.1, z=3.5, w=1.2, l=0.6),
             _make_placement("plant_01", x=2.5, z=3.1, w=0.3, l=0.3),
         ]
         violations = check_feng_shui(placements, room)

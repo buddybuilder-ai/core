@@ -99,9 +99,7 @@ class PipelineOrchestrator:
                 "source_citations": _rag.source_citations,
                 "rules_retrieved": len(_rag.rules),
             }
-            logger.info(
-                f"RAG retrieval: {len(_rag.rules)} rules retrieved for pipeline"
-            )
+            logger.info(f"RAG retrieval: {len(_rag.rules)} rules retrieved for pipeline")
             yield SSEEvent(
                 event_type=SSEEventType.STEP_PROGRESS,
                 data={
@@ -127,10 +125,7 @@ class PipelineOrchestrator:
 
                 # If no unresolved conflicts, break
                 if not state.unresolved_conflicts:
-                    logger.info(
-                        f"No conflicts after iteration {iteration} — "
-                        f"skipping repair"
-                    )
+                    logger.info(f"No conflicts after iteration {iteration} — skipping repair")
                     break
 
                 # Last iteration? Don't repair, just report
@@ -169,9 +164,7 @@ class PipelineOrchestrator:
                 data={"error": str(e), "pipeline_id": state.pipeline_id},
             )
 
-    async def run_sync(
-        self, room_spec: dict[str, Any], mode: str = "buddy"
-    ) -> PipelineResult:
+    async def run_sync(self, room_spec: dict[str, Any], mode: str = "buddy") -> PipelineResult:
         """Run the pipeline and return the final result (non-streaming).
 
         Args:
@@ -207,9 +200,7 @@ class PipelineOrchestrator:
         if state.step_results:
             last = state.step_results[-1]
             if last.step == step and last.status == StepStatus.FAILED:
-                raise RuntimeError(
-                    f"Step {step.value} failed: {last.error}"
-                )
+                raise RuntimeError(f"Step {step.value} failed: {last.error}")
 
     def _build_result(
         self,

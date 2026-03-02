@@ -47,9 +47,7 @@ async def send_message(
     """
     try:
         # Use system prompt if provided, otherwise use mode-based default
-        system_prompt = request.system_prompt or _get_default_system_prompt(
-            request.mode.value
-        )
+        system_prompt = request.system_prompt or _get_default_system_prompt(request.mode.value)
 
         # Call OpenRouter API with extended timeout for free models
         async with httpx.AsyncClient() as client:
@@ -111,6 +109,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     Returns:
         SSE stream of events.
     """
+
     async def event_generator():
         from src.modules.layout.application.agent.personality import (
             detect_mode_switch,
@@ -228,9 +227,7 @@ async def _answer_question(message: str, mode: str, mood: str = "neutral") -> st
     except Exception:
         pass
 
-    augmented_message = (
-        f"{rag_context}\n\nUser question: {message}" if rag_context else message
-    )
+    augmented_message = f"{rag_context}\n\nUser question: {message}" if rag_context else message
 
     try:
         async with httpx.AsyncClient() as client:

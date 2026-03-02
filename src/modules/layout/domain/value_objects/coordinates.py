@@ -66,9 +66,7 @@ class Position3D:
         Returns:
             Distance in meters.
         """
-        return (
-            (self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2
-        ) ** 0.5
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2) ** 0.5
 
     def distance_2d(self, other: Position3D) -> float:
         """Calculate 2D distance (ignoring height) to another position.

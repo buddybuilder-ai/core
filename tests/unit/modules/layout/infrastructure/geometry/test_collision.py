@@ -438,9 +438,7 @@ class TestCollisionDetectorCheckWallProximity:
         assert results["west"].distance == pytest.approx(1.0)  # x=1
         assert results["east"].distance == pytest.approx(3.0)  # 5-2=3
 
-    def test_check_wall_proximity_with_min_distance(
-        self, detector: CollisionDetector
-    ) -> None:
+    def test_check_wall_proximity_with_min_distance(self, detector: CollisionDetector) -> None:
         """Test wall proximity with minimum distance requirement."""
         box = AABB.from_position_and_size(0.2, 0.2, 1, 1)
         results = detector.check_wall_proximity(box, min_distance=0.5)

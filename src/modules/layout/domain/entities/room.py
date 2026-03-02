@@ -363,10 +363,7 @@ class Room:
 
     def get_natural_light_zones(self) -> list[BoundingBox]:
         """Get all natural light zones from windows."""
-        return [
-            window.get_natural_light_zone(self.width, self.depth)
-            for window in self.windows
-        ]
+        return [window.get_natural_light_zone(self.width, self.depth) for window in self.windows]
 
     def is_position_valid(self, position: Position3D) -> bool:
         """Check if a position is within room bounds."""

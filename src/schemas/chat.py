@@ -18,9 +18,7 @@ class SourceDocument(BaseModel):
     """Source document from RAG retrieval."""
 
     content: str = Field(..., description="Content of the source document")
-    metadata: dict[str, Any] | None = Field(
-        default=None, description="Document metadata"
-    )
+    metadata: dict[str, Any] | None = Field(default=None, description="Document metadata")
 
 
 class ChatRequest(BaseModel):
@@ -28,9 +26,7 @@ class ChatRequest(BaseModel):
 
     text: str = Field(..., min_length=1, description="User message text")
     mode: ChatMode = Field(..., description="Chat personality mode")
-    system_prompt: str | None = Field(
-        default=None, description="Optional system prompt override"
-    )
+    system_prompt: str | None = Field(default=None, description="Optional system prompt override")
 
 
 class ChatResponse(BaseModel):

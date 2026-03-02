@@ -213,7 +213,9 @@ class SampleOutput:
 class SampleTool(BaseTool[SampleInput, SampleOutput]):
     """Sample tool implementation for testing."""
 
-    def __init__(self, should_fail: bool = False, validation_errors: list[str] | None = None) -> None:
+    def __init__(
+        self, should_fail: bool = False, validation_errors: list[str] | None = None
+    ) -> None:
         self._should_fail = should_fail
         self._validation_errors = validation_errors or []
 
@@ -346,7 +348,10 @@ class TestBaseTool:
         assert result.success is False
         assert "validation failed" in result.error.lower()
         assert "value must be positive" in result.error
-        assert result.metadata["validation_errors"] == ["value must be positive", "name is required"]
+        assert result.metadata["validation_errors"] == [
+            "value must be positive",
+            "name is required",
+        ]
 
     @pytest.mark.asyncio
     async def test_safe_execute_catches_exceptions(self) -> None:

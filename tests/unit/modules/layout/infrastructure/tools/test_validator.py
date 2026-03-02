@@ -212,7 +212,9 @@ class TestValidatorTool:
         assert len(errors) > 0
 
     @pytest.mark.asyncio
-    async def test_valid_layout_passes(self, tool: ValidatorTool, valid_bedroom_layout: ValidatorInput) -> None:
+    async def test_valid_layout_passes(
+        self, tool: ValidatorTool, valid_bedroom_layout: ValidatorInput
+    ) -> None:
         """Test that valid layout passes validation."""
         result = await tool.execute(valid_bedroom_layout)
 
@@ -497,13 +499,16 @@ class TestValidatorTool:
         assert result.success is True
         # Should pass because rotation makes it fit
         bounds_errors = [
-            i for i in result.data.issues
+            i
+            for i in result.data.issues
             if i.code == "ITEM_OUT_OF_BOUNDS" and i.level == ValidationLevel.ERROR
         ]
         assert len(bounds_errors) == 0
 
     @pytest.mark.asyncio
-    async def test_returns_metadata(self, tool: ValidatorTool, valid_bedroom_layout: ValidatorInput) -> None:
+    async def test_returns_metadata(
+        self, tool: ValidatorTool, valid_bedroom_layout: ValidatorInput
+    ) -> None:
         """Test that validation returns metadata."""
         result = await tool.execute(valid_bedroom_layout)
 
@@ -514,7 +519,9 @@ class TestValidatorTool:
         assert result.metadata["items_validated"] == 2
 
     @pytest.mark.asyncio
-    async def test_measures_execution_time(self, tool: ValidatorTool, valid_bedroom_layout: ValidatorInput) -> None:
+    async def test_measures_execution_time(
+        self, tool: ValidatorTool, valid_bedroom_layout: ValidatorInput
+    ) -> None:
         """Test that execution time is measured."""
         result = await tool.execute(valid_bedroom_layout)
 

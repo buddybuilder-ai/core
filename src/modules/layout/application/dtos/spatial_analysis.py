@@ -70,10 +70,7 @@ class AnalysisZone:
 
     def contains_point(self, x: float, z: float) -> bool:
         """Check if a point is within this zone."""
-        return (
-            self.x <= x <= self.x + self.width
-            and self.z <= z <= self.z + self.depth
-        )
+        return self.x <= x <= self.x + self.width and self.z <= z <= self.z + self.depth
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""

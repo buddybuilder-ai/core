@@ -217,15 +217,11 @@ class TestFengShuiLayoutResponse:
         """Test success property."""
         assert sample_response.success is True
 
-    def test_furniture_count_property(
-        self, sample_response: FengShuiLayoutResponse
-    ) -> None:
+    def test_furniture_count_property(self, sample_response: FengShuiLayoutResponse) -> None:
         """Test furniture_count property."""
         assert sample_response.furniture_count == 2
 
-    def test_essential_count_property(
-        self, sample_response: FengShuiLayoutResponse
-    ) -> None:
+    def test_essential_count_property(self, sample_response: FengShuiLayoutResponse) -> None:
         """Test essential_count property."""
         assert sample_response.essential_count == 1
 

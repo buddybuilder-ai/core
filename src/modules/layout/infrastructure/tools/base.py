@@ -21,7 +21,9 @@ class ToolError(Exception):
 class ToolInputError(ToolError):
     """Exception raised for invalid tool input."""
 
-    def __init__(self, tool_name: str, message: str, invalid_fields: list[str] | None = None) -> None:
+    def __init__(
+        self, tool_name: str, message: str, invalid_fields: list[str] | None = None
+    ) -> None:
         super().__init__(tool_name, message)
         self.invalid_fields = invalid_fields or []
 

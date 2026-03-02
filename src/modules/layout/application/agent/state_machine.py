@@ -247,10 +247,7 @@ class AgentStateMachine:
 
         # Check custom transition conditions
         for transition in self._custom_transitions:
-            if (
-                transition.from_phase == current_phase
-                and transition.to_phase == target_phase
-            ):
+            if transition.from_phase == current_phase and transition.to_phase == target_phase:
                 if not transition.can_transition(context):
                     return False
 
@@ -277,10 +274,7 @@ class AgentStateMachine:
 
         # Execute custom transition callbacks
         for transition in self._custom_transitions:
-            if (
-                transition.from_phase == context.phase
-                and transition.to_phase == target_phase
-            ):
+            if transition.from_phase == context.phase and transition.to_phase == target_phase:
                 transition.execute(context)
 
         # Record history

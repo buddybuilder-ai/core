@@ -37,9 +37,7 @@ class TestHealthCheck:
 class TestGenerateLayoutStream:
     """Tests for the SSE streaming endpoint /layout/generate/stream."""
 
-    def test_stream_endpoint_returns_streaming_response(
-        self, client: TestClient
-    ) -> None:
+    def test_stream_endpoint_returns_streaming_response(self, client: TestClient) -> None:
         """Verify the endpoint returns an SSE stream (not a JSON body)."""
         with client.stream(
             "POST",
@@ -53,9 +51,7 @@ class TestGenerateLayoutStream:
             assert response.status_code == 200
             assert "text/event-stream" in response.headers["content-type"]
 
-    def test_stream_endpoint_with_mode_param(
-        self, client: TestClient
-    ) -> None:
+    def test_stream_endpoint_with_mode_param(self, client: TestClient) -> None:
         """Verify the mode query param is accepted without error."""
         with client.stream(
             "POST",
@@ -68,9 +64,7 @@ class TestGenerateLayoutStream:
         ) as response:
             assert response.status_code == 200
 
-    def test_stream_endpoint_invalid_room_type(
-        self, client: TestClient
-    ) -> None:
+    def test_stream_endpoint_invalid_room_type(self, client: TestClient) -> None:
         """Verify validation error on invalid room_type."""
         response = client.post(
             "/api/v1/layout/generate/stream",
@@ -82,9 +76,7 @@ class TestGenerateLayoutStream:
         )
         assert response.status_code == 422
 
-    def test_stream_endpoint_invalid_budget(
-        self, client: TestClient
-    ) -> None:
+    def test_stream_endpoint_invalid_budget(self, client: TestClient) -> None:
         """Verify validation error on invalid budget_level."""
         response = client.post(
             "/api/v1/layout/generate/stream",
@@ -96,9 +88,7 @@ class TestGenerateLayoutStream:
         )
         assert response.status_code == 422
 
-    def test_removed_generate_endpoint_is_gone(
-        self, client: TestClient
-    ) -> None:
+    def test_removed_generate_endpoint_is_gone(self, client: TestClient) -> None:
         """Confirm /layout/generate (the old mock) no longer exists."""
         response = client.post(
             "/api/v1/layout/generate",
@@ -110,9 +100,7 @@ class TestGenerateLayoutStream:
         )
         assert response.status_code == 404 or response.status_code == 405
 
-    def test_removed_feng_shui_endpoint_is_gone(
-        self, client: TestClient
-    ) -> None:
+    def test_removed_feng_shui_endpoint_is_gone(self, client: TestClient) -> None:
         """Confirm /layout/feng-shui no longer exists."""
         response = client.post(
             "/api/v1/layout/feng-shui",

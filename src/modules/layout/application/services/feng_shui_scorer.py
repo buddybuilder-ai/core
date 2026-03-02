@@ -177,15 +177,9 @@ class FengShuiScorer:
         command_score, command_details = self._score_command_position(
             room, placed_furniture, spatial_analysis
         )
-        elements_score, elements_details = self._score_five_elements(
-            placed_furniture
-        )
-        chi_score, chi_details = self._score_chi_flow(
-            room, placed_furniture, spatial_analysis
-        )
-        sha_chi_score, sha_chi_details = self._score_sha_chi_avoidance(
-            room, placed_furniture
-        )
+        elements_score, elements_details = self._score_five_elements(placed_furniture)
+        chi_score, chi_details = self._score_chi_flow(room, placed_furniture, spatial_analysis)
+        sha_chi_score, sha_chi_details = self._score_sha_chi_avoidance(room, placed_furniture)
 
         # Create final score
         result.score = FengShuiScore(
@@ -229,9 +223,7 @@ class FengShuiScorer:
         }
 
         # Get key furniture items
-        key_items = [
-            f for f in furniture if f.category in self.COMMAND_POSITION_CATEGORIES
-        ]
+        key_items = [f for f in furniture if f.category in self.COMMAND_POSITION_CATEGORIES]
 
         if not key_items:
             details["reason"] = "No key furniture items found"
@@ -260,8 +252,7 @@ class FengShuiScorer:
                 min_dist = float("inf")
                 for cmd_pos in command_positions:
                     dist = math.sqrt(
-                        (item.center_x - cmd_pos.x) ** 2
-                        + (item.center_z - cmd_pos.z) ** 2
+                        (item.center_x - cmd_pos.x) ** 2 + (item.center_z - cmd_pos.z) ** 2
                     )
                     min_dist = min(min_dist, dist)
 
@@ -304,9 +295,7 @@ class FengShuiScorer:
         else:
             final_score = 15
 
-        details["average_item_score"] = (
-            total_item_score / items_evaluated if items_evaluated else 0
-        )
+        details["average_item_score"] = total_item_score / items_evaluated if items_evaluated else 0
         return final_score, details
 
     def _score_five_elements(
@@ -332,9 +321,7 @@ class FengShuiScorer:
         element_counts: dict[FengShuiElement, int] = dict.fromkeys(FengShuiElement, 0)
 
         for item in furniture:
-            element = self.CATEGORY_ELEMENTS.get(
-                item.category, FengShuiElement.EARTH
-            )
+            element = self.CATEGORY_ELEMENTS.get(item.category, FengShuiElement.EARTH)
             element_counts[element] += 1
 
         total_items = len(furniture)
@@ -470,9 +457,7 @@ class FengShuiScorer:
             if self._is_aligned_with_door(item, door_x, door_z):
                 if item.category in self.COMMAND_POSITION_CATEGORIES:
                     issues_count += 2
-                    details["issues"].append(
-                        f"{item.name} is in direct line with door"
-                    )
+                    details["issues"].append(f"{item.name} is in direct line with door")
                 else:
                     issues_count += 1
 
@@ -480,9 +465,7 @@ class FengShuiScorer:
             if item.category in self.COMMAND_POSITION_CATEGORIES:
                 if self._has_back_to_door(item, door_x, door_z):
                     issues_count += 2
-                    details["issues"].append(
-                        f"{item.name} has back to door"
-                    )
+                    details["issues"].append(f"{item.name} has back to door")
 
         # Check for blocked exits
         if self._is_exit_blocked(room, furniture, door_x, door_z):
@@ -551,8 +534,10 @@ class FengShuiScorer:
 
             # Simple check: is the other item between this item and door?
             if self._blocks_line_of_sight(
-                item_center_x, item_center_z,
-                door_x, door_z,
+                item_center_x,
+                item_center_z,
+                door_x,
+                door_z,
                 other_box,
             ):
                 return False
@@ -577,10 +562,7 @@ class FengShuiScorer:
         # Check if box overlaps the bounding region
         # More detailed check would use line-box intersection
         return not (
-            box.max_x < min_x
-            or box.min_x > max_x
-            or box.max_z < min_z
-            or box.min_z > max_z
+            box.max_x < min_x or box.min_x > max_x or box.max_z < min_z or box.min_z > max_z
         )
 
     def _is_aligned_with_door(
@@ -638,9 +620,7 @@ class FengShuiScorer:
         """Check if door exit is blocked."""
         # Create door clearance zone (0.9m from door)
         clearance = 0.9
-        door_zone = AABB.from_center_and_size(
-            door_x, door_z, clearance * 2, clearance * 2
-        )
+        door_zone = AABB.from_center_and_size(door_x, door_z, clearance * 2, clearance * 2)
 
         # Check if any furniture intersects the door zone
         for item in furniture:
@@ -665,10 +645,8 @@ class FengShuiScorer:
         min_gap = float("inf")
 
         for i, item1 in enumerate(furniture):
-            box1 = AABB.from_position_and_size(
-                item1.pos_x, item1.pos_z, item1.width, item1.depth
-            )
-            for item2 in furniture[i + 1:]:
+            box1 = AABB.from_position_and_size(item1.pos_x, item1.pos_z, item1.width, item1.depth)
+            for item2 in furniture[i + 1 :]:
                 box2 = AABB.from_position_and_size(
                     item2.pos_x, item2.pos_z, item2.width, item2.depth
                 )
@@ -708,9 +686,7 @@ class FengShuiScorer:
         furniture_in_center = 0
 
         for item in furniture:
-            item_box = AABB.from_position_and_size(
-                item.pos_x, item.pos_z, item.width, item.depth
-            )
+            item_box = AABB.from_position_and_size(item.pos_x, item.pos_z, item.width, item.depth)
             intersection = center_zone.intersection(item_box)
             if intersection:
                 furniture_in_center += intersection.area

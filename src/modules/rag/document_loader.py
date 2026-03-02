@@ -31,7 +31,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Approximate word-count limits (1 token ≈ 0.75 words for English/Thai)
-_CHUNK_WORDS = 375   # ≈ 500 tokens
+_CHUNK_WORDS = 375  # ≈ 500 tokens
 _OVERLAP_WORDS = 38  # ≈ 50 tokens
 
 
@@ -135,9 +135,7 @@ def _read_pdf(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _chunk_text(
-    text: str, chunk_words: int, overlap_words: int
-) -> list[str]:
+def _chunk_text(text: str, chunk_words: int, overlap_words: int) -> list[str]:
     """Split text into overlapping word-count chunks."""
     # Normalise whitespace
     text = re.sub(r"\s+", " ", text).strip()
@@ -179,13 +177,15 @@ def _prepare_records(
         chunk_id = hashlib.md5(f"{path.name}:{i}:{chunk[:40]}".encode()).hexdigest()[:16]
         ids.append(chunk_id)
         docs.append(chunk)
-        metas.append({
-            "source": path.name,
-            "topic": topic,
-            "language": language,
-            "chunk_index": i,
-            "total_chunks": len(chunks),
-        })
+        metas.append(
+            {
+                "source": path.name,
+                "topic": topic,
+                "language": language,
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+            }
+        )
 
     return ids, docs, metas
 
@@ -201,21 +201,13 @@ def _derive_topic(stem: str) -> str:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Load feng shui documents into ChromaDB"
-    )
+    parser = argparse.ArgumentParser(description="Load feng shui documents into ChromaDB")
     parser.add_argument(
         "--paths", nargs="+", required=True, help="File paths to load (.pdf, .md, .txt)"
     )
-    parser.add_argument(
-        "--language", default="en", choices=["en", "th"], help="Document language"
-    )
-    parser.add_argument(
-        "--chunk-size", type=int, default=_CHUNK_WORDS, help="Words per chunk"
-    )
-    parser.add_argument(
-        "--chunk-overlap", type=int, default=_OVERLAP_WORDS, help="Overlap words"
-    )
+    parser.add_argument("--language", default="en", choices=["en", "th"], help="Document language")
+    parser.add_argument("--chunk-size", type=int, default=_CHUNK_WORDS, help="Words per chunk")
+    parser.add_argument("--chunk-overlap", type=int, default=_OVERLAP_WORDS, help="Overlap words")
     return parser.parse_args()
 
 

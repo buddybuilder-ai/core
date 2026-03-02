@@ -363,7 +363,11 @@ def get_rules_for_room_type(room_type: str) -> list[FengShuiRule]:
 
 def get_rules_for_furniture(furniture_type: str) -> list[FengShuiRule]:
     """Get all rules applicable to a furniture type."""
-    return [r for r in FENG_SHUI_RULES if furniture_type in r.furniture_types or len(r.furniture_types) == 0]
+    return [
+        r
+        for r in FENG_SHUI_RULES
+        if furniture_type in r.furniture_types or len(r.furniture_types) == 0
+    ]
 
 
 def search_rules_by_keywords(keywords: list[str]) -> list[tuple[FengShuiRule, int]]:
@@ -380,11 +384,7 @@ def search_rules_by_keywords(keywords: list[str]) -> list[tuple[FengShuiRule, in
     for rule in FENG_SHUI_RULES:
         match_count = 0
         rule_text = (
-            rule.title.lower()
-            + " "
-            + rule.description.lower()
-            + " "
-            + " ".join(rule.keywords)
+            rule.title.lower() + " " + rule.description.lower() + " " + " ".join(rule.keywords)
         )
 
         for keyword in keywords:

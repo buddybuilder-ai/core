@@ -57,9 +57,7 @@ class FurnitureItem(BaseModel):
 class DesignResponse(BaseModel):
     """Response schema for layout generation."""
 
-    items: list[FurnitureItem] = Field(
-        default_factory=list, description="List of furniture items"
-    )
+    items: list[FurnitureItem] = Field(default_factory=list, description="List of furniture items")
     reasoning: str = Field(..., description="AI reasoning for the layout")
 
 

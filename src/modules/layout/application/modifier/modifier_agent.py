@@ -162,8 +162,7 @@ class ModifierAgent:
             if not collisions:
                 break
             logger.debug(
-                f"ModifierAgent: repair attempt {attempt + 1}, "
-                f"{len(collisions)} collisions"
+                f"ModifierAgent: repair attempt {attempt + 1}, {len(collisions)} collisions"
             )
             physical, collisions = self._nudge_repair(physical, collisions, room_w, room_d)
 
@@ -223,7 +222,9 @@ class ModifierAgent:
                 room_d,
             )
             category = item.get("category", "").lower()
-            if target_type and (target_type in category or target_type in semantic.get("furniture_id", "").lower()):
+            if target_type and (
+                target_type in category or target_type in semantic.get("furniture_id", "").lower()
+            ):
                 semantic = dict(semantic)
                 semantic["orientation"] = modification_hint
             result.append(semantic)
@@ -278,19 +279,21 @@ class ModifierAgent:
     ) -> list[dict[str, Any]]:
         """Copy name/category/is_essential/dimensions from current_layout into new physical items."""
         catalog: dict[str, dict[str, Any]] = {
-            item.get("furniture_id", item.get("id", "")): item
-            for item in current_layout
+            item.get("furniture_id", item.get("id", "")): item for item in current_layout
         }
         result = []
         for item in physical:
             fid = item.get("furniture_id", item.get("id", ""))
             src = catalog.get(fid, {})
-            result.append({
-                **item,
-                "name": src.get("name", item.get("name", fid)),
-                "category": src.get("category", item.get("category", fid.split("_")[0])),
-                "is_essential": src.get("is_essential", item.get("is_essential", True)),
-                "dimensions": item.get("dimensions") or src.get("dimensions", {"width": 1.0, "depth": 1.0, "height": 1.0}),
-                "feng_shui_notes": src.get("feng_shui_notes", ""),
-            })
+            result.append(
+                {
+                    **item,
+                    "name": src.get("name", item.get("name", fid)),
+                    "category": src.get("category", item.get("category", fid.split("_")[0])),
+                    "is_essential": src.get("is_essential", item.get("is_essential", True)),
+                    "dimensions": item.get("dimensions")
+                    or src.get("dimensions", {"width": 1.0, "depth": 1.0, "height": 1.0}),
+                    "feng_shui_notes": src.get("feng_shui_notes", ""),
+                }
+            )
         return result

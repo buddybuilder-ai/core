@@ -35,8 +35,14 @@ logger = logging.getLogger(__name__)
 # How far to try shifting (meters)
 SHIFT_INCREMENTS = [0.3, 0.5, 0.8, 1.0]
 SHIFT_DIRECTIONS = [
-    (1, 0), (-1, 0), (0, 1), (0, -1),
-    (1, 1), (-1, 1), (1, -1), (-1, -1),
+    (1, 0),
+    (-1, 0),
+    (0, 1),
+    (0, -1),
+    (1, 1),
+    (-1, 1),
+    (1, -1),
+    (-1, -1),
 ]
 
 
@@ -45,9 +51,7 @@ class RepairStep(BaseStep):
 
     step = PipelineStep.REPAIR
 
-    async def execute(
-        self, state: PipelineState
-    ) -> AsyncGenerator[SSEEvent, None]:
+    async def execute(self, state: PipelineState) -> AsyncGenerator[SSEEvent, None]:
         yield self._emit_started()
 
         spec = state.room_spec
@@ -75,7 +79,9 @@ class RepairStep(BaseStep):
                 progress * 0.9,
             )
 
-            logger.info(f"   [{i+1}/{total}] {conflict.conflict_type.value}: {conflict.description[:60]}...")
+            logger.info(
+                f"   [{i + 1}/{total}] {conflict.conflict_type.value}: {conflict.description[:60]}..."
+            )
             action = self._try_repair(conflict, state.layout_items, room)
             if action and action.success:
                 conflict.resolved = True
@@ -97,10 +103,12 @@ class RepairStep(BaseStep):
                 data={"items": state.layout_items, "step": self.step.value},
             )
 
-        yield self._emit_completed({
-            "repairs_applied": repaired,
-            "remaining_conflicts": len(state.unresolved_conflicts),
-        })
+        yield self._emit_completed(
+            {
+                "repairs_applied": repaired,
+                "remaining_conflicts": len(state.unresolved_conflicts),
+            }
+        )
 
     def _try_repair(
         self,
@@ -276,9 +284,7 @@ class RepairStep(BaseStep):
 
         return None
 
-    def _find_item(
-        self, item_id: str, items: list[dict[str, Any]]
-    ) -> dict[str, Any] | None:
+    def _find_item(self, item_id: str, items: list[dict[str, Any]]) -> dict[str, Any] | None:
         for item in items:
             if item.get("id") == item_id:
                 return item

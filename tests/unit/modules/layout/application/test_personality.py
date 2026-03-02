@@ -1,6 +1,5 @@
 """Unit tests for the personality module."""
 
-
 from src.modules.layout.application.agent.personality import (
     PersonalityMode,
     detect_mode_switch,

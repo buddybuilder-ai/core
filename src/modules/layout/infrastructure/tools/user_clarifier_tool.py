@@ -163,9 +163,7 @@ class ClarifierOutput:
 
     def get_pending_required(self) -> list[ClarificationQuestion]:
         """Get pending required questions."""
-        return [
-            q for q in self.pending_questions if q.priority == QuestionPriority.REQUIRED
-        ]
+        return [q for q in self.pending_questions if q.priority == QuestionPriority.REQUIRED]
 
 
 class UserClarifierTool(BaseTool[ClarifierInput, ClarifierOutput]):

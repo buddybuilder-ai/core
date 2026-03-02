@@ -291,11 +291,7 @@ class MockRagSearchTool(BaseRagSearchTool):
         # Keyword matches (up to 0.4)
         if keywords:
             rule_text = (
-                rule.title.lower()
-                + " "
-                + rule.description.lower()
-                + " "
-                + " ".join(rule.keywords)
+                rule.title.lower() + " " + rule.description.lower() + " " + " ".join(rule.keywords)
             )
             matches = sum(1 for k in keywords if k in rule_text)
             keyword_score = min(matches / len(keywords), 1.0) * 0.4

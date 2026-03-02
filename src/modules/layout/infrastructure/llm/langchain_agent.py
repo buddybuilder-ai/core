@@ -32,6 +32,7 @@ class LLMConfig:
         max_tokens: Maximum tokens in response.
         timeout: Request timeout in seconds.
     """
+
     model: str = ""
     temperature: float = 0.1
     max_tokens: int = 4096
@@ -56,6 +57,7 @@ class LLMResponse:
         tokens_used: Number of tokens used.
         error: Error message if failed.
     """
+
     success: bool
     content: Any = None
     raw_response: str = ""
@@ -225,8 +227,7 @@ class FengShuiLLMAgent:
         if raw_placements and "pos_x" in raw_placements[0]:
             logger.info("plan_layout: detected old xyz format — converting to semantic")
             raw_placements = [
-                self._convert_xyz_to_semantic(p, width, depth)
-                for p in raw_placements
+                self._convert_xyz_to_semantic(p, width, depth) for p in raw_placements
             ]
 
         # Validate each placement; skip invalid ones
@@ -259,8 +260,8 @@ class FengShuiLLMAgent:
 
         dist_south = pos_z
         dist_north = room_depth - (pos_z + depth)
-        dist_west  = pos_x
-        dist_east  = room_width - (pos_x + w)
+        dist_west = pos_x
+        dist_east = room_width - (pos_x + w)
         min_dist = min(dist_south, dist_north, dist_west, dist_east)
         center_threshold = min(room_width, room_depth) * 0.2
 
@@ -391,7 +392,9 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                 )
 
             raw_response = response.content
-            tokens_used = response.usage_metadata.get("total_tokens", 0) if response.usage_metadata else 0
+            tokens_used = (
+                response.usage_metadata.get("total_tokens", 0) if response.usage_metadata else 0
+            )
 
             logger.debug(f"LLM response length: {len(raw_response)}, tokens: {tokens_used}")
 
@@ -439,7 +442,8 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         # Try to find JSON in code blocks
         import re
-        json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+
+        json_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
         matches = re.findall(json_pattern, text)
 
         for match in matches:
@@ -449,7 +453,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                 continue
 
         # Try to find JSON object/array directly
-        for start, end in [('{', '}'), ('[', ']')]:
+        for start, end in [("{", "}"), ("[", "]")]:
             start_idx = text.find(start)
             if start_idx != -1:
                 # Find matching end
@@ -461,7 +465,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                         depth -= 1
                         if depth == 0:
                             try:
-                                return json.loads(text[start_idx:start_idx + i + 1])
+                                return json.loads(text[start_idx : start_idx + i + 1])
                             except json.JSONDecodeError:
                                 break
 

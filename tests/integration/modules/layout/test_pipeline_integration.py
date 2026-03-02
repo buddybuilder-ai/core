@@ -104,6 +104,7 @@ async def _collect_events(room_spec: dict, mode: str = "buddy") -> list[dict]:
 # TestPipelineNewLayout
 # ===========================================================================
 
+
 @pytest.mark.integration
 class TestPipelineNewLayout:
     """Test the full new_layout pipeline flow with mocked LLM."""
@@ -128,9 +129,7 @@ class TestPipelineNewLayout:
     async def test_all_required_step_started_events_present(self, mock_both_steps):
         events = await _collect_events(MINIMAL_ROOM_SPEC)
         step_started = [
-            e["data"].get("step")
-            for e in events
-            if e["type"] == SSEEventType.STEP_STARTED
+            e["data"].get("step") for e in events if e["type"] == SSEEventType.STEP_STARTED
         ]
         assert "structured_data_builder" in step_started
         assert "layout_generator" in step_started
@@ -141,9 +140,9 @@ class TestPipelineNewLayout:
     async def test_pipeline_emits_rag_progress_events(self, mock_both_steps):
         events = await _collect_events(MINIMAL_ROOM_SPEC)
         rag_events = [
-            e for e in events
-            if e["type"] == SSEEventType.STEP_PROGRESS
-            and e["data"].get("step") == "rag_retrieval"
+            e
+            for e in events
+            if e["type"] == SSEEventType.STEP_PROGRESS and e["data"].get("step") == "rag_retrieval"
         ]
         assert len(rag_events) >= 2
 
@@ -179,6 +178,7 @@ class TestPipelineNewLayout:
 # TestPipelineRAGContext
 # ===========================================================================
 
+
 @pytest.mark.integration
 class TestPipelineRAGContext:
     """Verify RAG context is retrieved and injected between Step 1 and Step 2."""
@@ -188,7 +188,8 @@ class TestPipelineRAGContext:
         """RAG progress events (0.0 start, 1.0 end) appear between steps 1 and 2."""
         events = await _collect_events(MINIMAL_ROOM_SPEC)
         rag_done = [
-            e for e in events
+            e
+            for e in events
             if e["type"] == SSEEventType.STEP_PROGRESS
             and e["data"].get("step") == "rag_retrieval"
             and e["data"].get("progress") == 1.0
@@ -207,6 +208,7 @@ class TestPipelineRAGContext:
 # ===========================================================================
 # TestPipelineRepairLoop
 # ===========================================================================
+
 
 @pytest.mark.integration
 class TestPipelineRepairLoop:
@@ -236,9 +238,7 @@ class TestPipelineRepairLoop:
             events = await _collect_events(MINIMAL_ROOM_SPEC)
 
         step_started_names = [
-            e["data"].get("step")
-            for e in events
-            if e["type"] == SSEEventType.STEP_STARTED
+            e["data"].get("step") for e in events if e["type"] == SSEEventType.STEP_STARTED
         ]
         assert "repair" in step_started_names
 
@@ -247,9 +247,7 @@ class TestPipelineRepairLoop:
         """Explainer step always runs regardless of conflict count."""
         events = await _collect_events(MINIMAL_ROOM_SPEC)
         step_started_names = [
-            e["data"].get("step")
-            for e in events
-            if e["type"] == SSEEventType.STEP_STARTED
+            e["data"].get("step") for e in events if e["type"] == SSEEventType.STEP_STARTED
         ]
         assert "explainer" in step_started_names
 
@@ -258,22 +256,19 @@ class TestPipelineRepairLoop:
 # TestPipelineFallback
 # ===========================================================================
 
+
 @pytest.mark.integration
 class TestPipelineFallback:
     """Test fallback paths when LLM calls fail."""
 
     @pytest.mark.asyncio
-    async def test_explainer_falls_back_to_template_on_llm_error(
-        self, mock_llm_step2_fallback
-    ):
+    async def test_explainer_falls_back_to_template_on_llm_error(self, mock_llm_step2_fallback):
         """If explain_layout raises, pipeline still completes via template explanation."""
         with patch(
             "src.modules.layout.application.pipeline.steps.step5_explainer.FengShuiLLMAgent"
         ) as MockAgent5:
             instance5 = MagicMock()
-            instance5.explain_layout = AsyncMock(
-                side_effect=RuntimeError("LLM timeout")
-            )
+            instance5.explain_layout = AsyncMock(side_effect=RuntimeError("LLM timeout"))
             MockAgent5.return_value = instance5
 
             events = await _collect_events(MINIMAL_ROOM_SPEC)
@@ -283,9 +278,7 @@ class TestPipelineFallback:
         assert events[-1]["data"].get("error") is None
 
     @pytest.mark.asyncio
-    async def test_step2_heuristic_fallback_produces_layout_items(
-        self, mock_both_steps
-    ):
+    async def test_step2_heuristic_fallback_produces_layout_items(self, mock_both_steps):
         """When plan_layout returns success=False, heuristic fallback places items."""
         events = await _collect_events(MINIMAL_ROOM_SPEC)
         completed = events[-1]["data"]
@@ -296,6 +289,7 @@ class TestPipelineFallback:
 # ===========================================================================
 # TestPipelineSSEEventStructure
 # ===========================================================================
+
 
 @pytest.mark.integration
 class TestPipelineSSEEventStructure:
@@ -348,6 +342,7 @@ class TestPipelineSSEEventStructure:
 # ===========================================================================
 # TestPipelinePersonalityModes
 # ===========================================================================
+
 
 @pytest.mark.integration
 class TestPipelinePersonalityModes:

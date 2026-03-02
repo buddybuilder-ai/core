@@ -20,7 +20,7 @@ from src.modules.layout.application.services.spatial_resolver import (
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide
 from src.modules.layout.infrastructure.geometry.collision import AABB
 
-DOOR_CLEARANCE = 0.80   # metres
+DOOR_CLEARANCE = 0.80  # metres
 WALKWAY_CLEARANCE = 0.60  # metres
 
 
@@ -66,9 +66,8 @@ def check_collisions(
 # Individual check functions
 # ---------------------------------------------------------------------------
 
-def _check_out_of_bounds(
-    placements: list[PhysicalPlacement], room: RoomSpec
-) -> list[Collision]:
+
+def _check_out_of_bounds(placements: list[PhysicalPlacement], room: RoomSpec) -> list[Collision]:
     collisions: list[Collision] = []
     for p in placements:
         b = p.bbox
@@ -76,19 +75,21 @@ def _check_out_of_bounds(
             overflow_x = max(0.0, -b.min_x, b.max_x - room.width)
             overflow_z = max(0.0, -b.min_z, b.max_z - room.depth)
             overflow = max(overflow_x, overflow_z)
-            collisions.append(Collision(
-                type="out_of_bounds",
-                severity="critical",
-                furniture_ids=[p.furniture_id],
-                description=f"{p.furniture_id} extends {overflow:.2f}m outside room bounds",
-            ))
+            collisions.append(
+                Collision(
+                    type="out_of_bounds",
+                    severity="critical",
+                    furniture_ids=[p.furniture_id],
+                    description=f"{p.furniture_id} extends {overflow:.2f}m outside room bounds",
+                )
+            )
     return collisions
 
 
 def _check_overlaps(placements: list[PhysicalPlacement]) -> list[Collision]:
     collisions: list[Collision] = []
     for i, a in enumerate(placements):
-        for b in placements[i + 1:]:
+        for b in placements[i + 1 :]:
             if not a.bbox.intersects(b.bbox):
                 continue
             inter = a.bbox.intersection(b.bbox)
@@ -98,14 +99,14 @@ def _check_overlaps(placements: list[PhysicalPlacement]) -> list[Collision]:
                 axis_desc = f"{inter.width:.2f}m on x-axis"
             else:
                 axis_desc = f"{inter.depth:.2f}m on z-axis"
-            collisions.append(Collision(
-                type="overlap",
-                severity="critical",
-                furniture_ids=[a.furniture_id, b.furniture_id],
-                description=(
-                    f"{a.furniture_id} overlaps with {b.furniture_id} by {axis_desc}"
-                ),
-            ))
+            collisions.append(
+                Collision(
+                    type="overlap",
+                    severity="critical",
+                    furniture_ids=[a.furniture_id, b.furniture_id],
+                    description=(f"{a.furniture_id} overlaps with {b.furniture_id} by {axis_desc}"),
+                )
+            )
     return collisions
 
 
@@ -122,41 +123,43 @@ def _door_clearance_box(door: DoorPosition, room: RoomSpec) -> AABB:
     return AABB(min_x=room.width - c, min_z=off, max_x=room.width, max_z=off + w)
 
 
-def _check_door_clearances(
-    placements: list[PhysicalPlacement], room: RoomSpec
-) -> list[Collision]:
+def _check_door_clearances(placements: list[PhysicalPlacement], room: RoomSpec) -> list[Collision]:
     collisions: list[Collision] = []
     for i, door in enumerate(room.doors):
         clear_box = _door_clearance_box(door, room)
         for p in placements:
             if p.bbox.intersects(clear_box):
-                collisions.append(Collision(
-                    type="door_blocked",
-                    severity="critical",
-                    furniture_ids=[p.furniture_id],
-                    description=(
-                        f"{p.furniture_id} blocks {DOOR_CLEARANCE * 100:.0f}cm "
-                        f"clearance zone of door_{i + 1} on {door.wall.value} wall"
-                    ),
-                ))
+                collisions.append(
+                    Collision(
+                        type="door_blocked",
+                        severity="critical",
+                        furniture_ids=[p.furniture_id],
+                        description=(
+                            f"{p.furniture_id} blocks {DOOR_CLEARANCE * 100:.0f}cm "
+                            f"clearance zone of door_{i + 1} on {door.wall.value} wall"
+                        ),
+                    )
+                )
     return collisions
 
 
 def _check_walkway_clearances(placements: list[PhysicalPlacement]) -> list[Collision]:
     collisions: list[Collision] = []
     for i, a in enumerate(placements):
-        for b in placements[i + 1:]:
+        for b in placements[i + 1 :]:
             if a.bbox.intersects(b.bbox):
                 continue  # already reported as overlap
             dist = a.bbox.distance_to(b.bbox)
             if 0.0 < dist < WALKWAY_CLEARANCE:
-                collisions.append(Collision(
-                    type="insufficient_clearance",
-                    severity="major",
-                    furniture_ids=[a.furniture_id, b.furniture_id],
-                    description=(
-                        f"{a.furniture_id} and {b.furniture_id} are {dist:.2f}m apart "
-                        f"(minimum {WALKWAY_CLEARANCE}m required)"
-                    ),
-                ))
+                collisions.append(
+                    Collision(
+                        type="insufficient_clearance",
+                        severity="major",
+                        furniture_ids=[a.furniture_id, b.furniture_id],
+                        description=(
+                            f"{a.furniture_id} and {b.furniture_id} are {dist:.2f}m apart "
+                            f"(minimum {WALKWAY_CLEARANCE}m required)"
+                        ),
+                    )
+                )
     return collisions

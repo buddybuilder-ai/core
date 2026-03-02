@@ -178,6 +178,7 @@ class LayoutOrchestrator:
                     FengShuiLLMAgent,
                     LLMConfig,
                 )
+
                 self._llm_agent = FengShuiLLMAgent(LLMConfig())
                 logger.info("LLM agent initialized successfully")
             except Exception as e:
@@ -221,9 +222,8 @@ class LayoutOrchestrator:
 
                 if not result.is_success:
                     # Check if we should retry
-                    if (
-                        result.should_retry
-                        and self._state_machine.should_retry(self._context, phase)
+                    if result.should_retry and self._state_machine.should_retry(
+                        self._context, phase
                     ):
                         self._state_machine.record_retry(phase)
                         continue
@@ -243,9 +243,7 @@ class LayoutOrchestrator:
                 success=True,
                 output=output,
                 feng_shui_score=(
-                    self._context.feng_shui_score.total
-                    if self._context.feng_shui_score
-                    else 0
+                    self._context.feng_shui_score.total if self._context.feng_shui_score else 0
                 ),
                 furniture_count=len(self._context.placed_furniture),
                 phase_results=phase_results,
@@ -606,10 +604,7 @@ class LayoutOrchestrator:
             logger.info(f"LLM scoring complete: {score.total}/100 ({score.grade})")
 
             # Check if score is acceptable
-            if (
-                self.config.auto_retry_low_score
-                and score.total < self.config.min_acceptable_score
-            ):
+            if self.config.auto_retry_low_score and score.total < self.config.min_acceptable_score:
                 return PhaseResult(
                     phase=AgentPhase.SCORING,
                     result=TransitionResult.RETRY,

@@ -394,16 +394,12 @@ class TestPlacement:
                 scale=1.5,  # > 1.0
             )
 
-    def test_effective_dimensions_no_rotation(
-        self, sample_placement: Placement
-    ) -> None:
+    def test_effective_dimensions_no_rotation(self, sample_placement: Placement) -> None:
         """Test effective dimensions without rotation."""
         assert sample_placement.effective_width == 2.0
         assert sample_placement.effective_depth == 0.9
 
-    def test_effective_dimensions_with_rotation(
-        self, sample_furniture: Furniture
-    ) -> None:
+    def test_effective_dimensions_with_rotation(self, sample_furniture: Furniture) -> None:
         """Test effective dimensions with 90 degree rotation."""
         placement = Placement(
             furniture=sample_furniture,
@@ -414,9 +410,7 @@ class TestPlacement:
         assert placement.effective_width == 0.9
         assert placement.effective_depth == 2.0
 
-    def test_effective_dimensions_with_scale(
-        self, sample_furniture: Furniture
-    ) -> None:
+    def test_effective_dimensions_with_scale(self, sample_furniture: Furniture) -> None:
         """Test effective dimensions with scale."""
         placement = Placement(
             furniture=sample_furniture,

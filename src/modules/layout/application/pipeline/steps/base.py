@@ -29,9 +29,7 @@ class BaseStep(abc.ABC):
         self.config = config
 
     @abc.abstractmethod
-    async def execute(
-        self, state: PipelineState
-    ) -> AsyncGenerator[SSEEvent, None]:
+    async def execute(self, state: PipelineState) -> AsyncGenerator[SSEEvent, None]:
         """Execute the step, yielding SSE events as progress is made.
 
         Args:

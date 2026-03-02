@@ -212,9 +212,7 @@ class FurnitureSelector:
             return result
 
         # Map budget level
-        budget_level = self.BUDGET_MAPPING.get(
-            preferences.budget_level, BudgetLevel.MEDIUM
-        )
+        budget_level = self.BUDGET_MAPPING.get(preferences.budget_level, BudgetLevel.MEDIUM)
 
         # Query furniture for each category
         selected_area = 0.0
@@ -309,9 +307,7 @@ class FurnitureSelector:
             Best matching item or None.
         """
         # Filter by size
-        fitting_items = [
-            item for item in items if item.total_footprint <= available_area
-        ]
+        fitting_items = [item for item in items if item.total_footprint <= available_area]
 
         if not fitting_items:
             return None
@@ -326,9 +322,7 @@ class FurnitureSelector:
         scored_items.sort(key=lambda x: x[0], reverse=True)
         return scored_items[0][1]
 
-    def _score_item(
-        self, item: FurnitureSearchResult, preferences: UserPreferences
-    ) -> float:
+    def _score_item(self, item: FurnitureSearchResult, preferences: UserPreferences) -> float:
         """Score an item based on preferences.
 
         Args:

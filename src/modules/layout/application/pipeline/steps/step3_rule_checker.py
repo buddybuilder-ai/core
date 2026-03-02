@@ -51,9 +51,7 @@ class RuleCheckerStep(BaseStep):
         super().__init__(config)
         self._scorer = FengShuiScorer()
 
-    async def execute(
-        self, state: PipelineState
-    ) -> AsyncGenerator[SSEEvent, None]:
+    async def execute(self, state: PipelineState) -> AsyncGenerator[SSEEvent, None]:
         yield self._emit_started()
 
         items = state.layout_items
@@ -103,9 +101,7 @@ class RuleCheckerStep(BaseStep):
 
         # Enrich conflict suggestions with RAG rule descriptions (no-op if empty)
         rule_descs = state.rag_context.get("rule_descriptions", {})
-        all_conflicts = self._enrich_with_rag(
-            universal_conflicts + feng_shui_conflicts, rule_descs
-        )
+        all_conflicts = self._enrich_with_rag(universal_conflicts + feng_shui_conflicts, rule_descs)
         state.conflicts.extend(all_conflicts)
 
         # Emit each conflict
@@ -115,14 +111,16 @@ class RuleCheckerStep(BaseStep):
                 data=conflict.to_dict(),
             )
 
-        yield self._emit_completed({
-            "universal_issues": len(universal_conflicts),
-            "feng_shui_issues": len(feng_shui_conflicts),
-            "total_conflicts": len(all_conflicts),
-            "feng_shui_score": state.feng_shui_score,
-            "total_score": scoring_result.score.total,
-            "grade": scoring_result.score.grade,
-        })
+        yield self._emit_completed(
+            {
+                "universal_issues": len(universal_conflicts),
+                "feng_shui_issues": len(feng_shui_conflicts),
+                "total_conflicts": len(all_conflicts),
+                "feng_shui_score": state.feng_shui_score,
+                "total_score": scoring_result.score.total,
+                "grade": scoring_result.score.grade,
+            }
+        )
 
     # --- RAG enrichment ---
 
@@ -159,10 +157,7 @@ class RuleCheckerStep(BaseStep):
                 enriched.append(
                     replace(
                         c,
-                        suggestion=(
-                            f"{c.suggestion}  "
-                            f"(Rule: {rule_descriptions[rule_id]})"
-                        ),
+                        suggestion=(f"{c.suggestion}  (Rule: {rule_descriptions[rule_id]})"),
                     )
                 )
             else:
@@ -180,28 +175,32 @@ class RuleCheckerStep(BaseStep):
 
         # Check overlaps + clearance between all pairs
         for i, (item_a, box_a) in enumerate(zip(items, boxes)):
-            for item_b, box_b in zip(items[i + 1:], boxes[i + 1:]):
+            for item_b, box_b in zip(items[i + 1 :], boxes[i + 1 :]):
                 if box_a.intersects(box_b):
-                    conflicts.append(Conflict(
-                        conflict_type=ConflictType.OVERLAP,
-                        severity=ConflictSeverity.CRITICAL,
-                        description=f"{item_a['name']} overlaps with {item_b['name']}",
-                        items_involved=[item_a["id"], item_b["id"]],
-                        suggestion=f"Shift {item_a['name']} or {item_b['name']} apart",
-                    ))
+                    conflicts.append(
+                        Conflict(
+                            conflict_type=ConflictType.OVERLAP,
+                            severity=ConflictSeverity.CRITICAL,
+                            description=f"{item_a['name']} overlaps with {item_b['name']}",
+                            items_involved=[item_a["id"], item_b["id"]],
+                            suggestion=f"Shift {item_a['name']} or {item_b['name']} apart",
+                        )
+                    )
                 else:
                     gap = box_a.distance_to(box_b)
                     if 0 < gap < MIN_CLEARANCE:
-                        conflicts.append(Conflict(
-                            conflict_type=ConflictType.CLEARANCE_VIOLATION,
-                            severity=ConflictSeverity.WARNING,
-                            description=(
-                                f"{item_a['name']} and {item_b['name']} "
-                                f"too close ({gap:.2f}m < {MIN_CLEARANCE}m)"
-                            ),
-                            items_involved=[item_a["id"], item_b["id"]],
-                            suggestion="Increase spacing between items",
-                        ))
+                        conflicts.append(
+                            Conflict(
+                                conflict_type=ConflictType.CLEARANCE_VIOLATION,
+                                severity=ConflictSeverity.WARNING,
+                                description=(
+                                    f"{item_a['name']} and {item_b['name']} "
+                                    f"too close ({gap:.2f}m < {MIN_CLEARANCE}m)"
+                                ),
+                                items_involved=[item_a["id"], item_b["id"]],
+                                suggestion="Increase spacing between items",
+                            )
+                        )
 
         # Check out of bounds
         for item, box in zip(items, boxes):
@@ -211,30 +210,36 @@ class RuleCheckerStep(BaseStep):
                 or box.max_x > room.width + 0.01
                 or box.max_z > room.depth + 0.01
             ):
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.OUT_OF_BOUNDS,
-                    severity=ConflictSeverity.CRITICAL,
-                    description=f"{item['name']} extends outside room boundaries",
-                    items_involved=[item["id"]],
-                    suggestion="Move item within room bounds",
-                ))
+                conflicts.append(
+                    Conflict(
+                        conflict_type=ConflictType.OUT_OF_BOUNDS,
+                        severity=ConflictSeverity.CRITICAL,
+                        description=f"{item['name']} extends outside room boundaries",
+                        items_involved=[item["id"]],
+                        suggestion="Move item within room bounds",
+                    )
+                )
 
         # Check door blocking
         for door in spec.get("doors", []):
             door_center = self._get_door_center(door, room)
             door_zone = AABB.from_center_and_size(
-                door_center[0], door_center[1],
-                DOOR_CLEARANCE * 2, DOOR_CLEARANCE * 2,
+                door_center[0],
+                door_center[1],
+                DOOR_CLEARANCE * 2,
+                DOOR_CLEARANCE * 2,
             )
             for item, box in zip(items, boxes):
                 if box.intersects(door_zone):
-                    conflicts.append(Conflict(
-                        conflict_type=ConflictType.DOOR_BLOCKED,
-                        severity=ConflictSeverity.CRITICAL,
-                        description=f"{item['name']} blocks door on {door.get('wall', 'wall')} wall",
-                        items_involved=[item["id"]],
-                        suggestion=f"Move {item['name']} away from door",
-                    ))
+                    conflicts.append(
+                        Conflict(
+                            conflict_type=ConflictType.DOOR_BLOCKED,
+                            severity=ConflictSeverity.CRITICAL,
+                            description=f"{item['name']} blocks door on {door.get('wall', 'wall')} wall",
+                            items_involved=[item["id"]],
+                            suggestion=f"Move {item['name']} away from door",
+                        )
+                    )
 
         return conflicts
 
@@ -265,23 +270,27 @@ class RuleCheckerStep(BaseStep):
             # Check back to door
             rotation = item.get("rotation", 0)
             if self._has_back_to_door(center_x, center_z, rotation, door_x, door_z):
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.BACK_TO_DOOR,
-                    severity=ConflictSeverity.WARNING,
-                    description=f"{item['name']} has its back facing the door",
-                    items_involved=[item["id"]],
-                    suggestion=f"Rotate {item['name']} to face the door",
-                ))
+                conflicts.append(
+                    Conflict(
+                        conflict_type=ConflictType.BACK_TO_DOOR,
+                        severity=ConflictSeverity.WARNING,
+                        description=f"{item['name']} has its back facing the door",
+                        items_involved=[item["id"]],
+                        suggestion=f"Rotate {item['name']} to face the door",
+                    )
+                )
 
             # Check sha chi alignment (direct line with door)
             if self._is_aligned_with_door(center_x, center_z, w, d, door_x, door_z):
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
-                    severity=ConflictSeverity.INFO,
-                    description=f"{item['name']} is in direct line with the door (sha chi)",
-                    items_involved=[item["id"]],
-                    suggestion=f"Shift {item['name']} off the door axis",
-                ))
+                conflicts.append(
+                    Conflict(
+                        conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                        severity=ConflictSeverity.INFO,
+                        description=f"{item['name']} is in direct line with the door (sha chi)",
+                        items_involved=[item["id"]],
+                        suggestion=f"Shift {item['name']} off the door axis",
+                    )
+                )
 
         return conflicts
 
@@ -296,11 +305,14 @@ class RuleCheckerStep(BaseStep):
             d = dims.get("depth", 1)
             if rotation in (90, 270):
                 w, d = d, w
-            boxes.append(AABB.from_position_and_size(
-                item.get("pos_x", 0),
-                item.get("pos_z", 0),
-                w, d,
-            ))
+            boxes.append(
+                AABB.from_position_and_size(
+                    item.get("pos_x", 0),
+                    item.get("pos_z", 0),
+                    w,
+                    d,
+                )
+            )
         return boxes
 
     def _get_door_center(self, door: dict, room: Room) -> tuple[float, float]:
@@ -323,9 +335,7 @@ class RuleCheckerStep(BaseStep):
             )
         return room.width / 2, room.depth
 
-    def _has_back_to_door(
-        self, cx: float, cz: float, rotation: int, dx: float, dz: float
-    ) -> bool:
+    def _has_back_to_door(self, cx: float, cz: float, rotation: int, dx: float, dz: float) -> bool:
         door_angle = math.degrees(math.atan2(dz - cz, dx - cx))
         door_angle = (door_angle + 360) % 360
         back_dir = (rotation + 180) % 360
@@ -342,17 +352,19 @@ class RuleCheckerStep(BaseStep):
         result = []
         for item in items:
             dims = item.get("dimensions", {})
-            result.append(PlacedFurniture(
-                id=item.get("id", ""),
-                furniture_id=item.get("furniture_id", item.get("id", "")),
-                name=item.get("name", ""),
-                category=item.get("category", ""),
-                pos_x=item.get("pos_x", 0),
-                pos_z=item.get("pos_z", 0),
-                width=dims.get("width", 1),
-                depth=dims.get("depth", 1),
-                height=dims.get("height", 1),
-                rotation=item.get("rotation", 0),
-                is_essential=item.get("is_essential", False),
-            ))
+            result.append(
+                PlacedFurniture(
+                    id=item.get("id", ""),
+                    furniture_id=item.get("furniture_id", item.get("id", "")),
+                    name=item.get("name", ""),
+                    category=item.get("category", ""),
+                    pos_x=item.get("pos_x", 0),
+                    pos_z=item.get("pos_z", 0),
+                    width=dims.get("width", 1),
+                    depth=dims.get("depth", 1),
+                    height=dims.get("height", 1),
+                    rotation=item.get("rotation", 0),
+                    is_essential=item.get("is_essential", False),
+                )
+            )
         return result

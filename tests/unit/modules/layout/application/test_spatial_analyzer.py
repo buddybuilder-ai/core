@@ -98,34 +98,26 @@ class TestAnalyze:
             ],
         )
 
-    def test_analyze_returns_result(
-        self, analyzer: SpatialAnalyzer, bedroom: Room
-    ) -> None:
+    def test_analyze_returns_result(self, analyzer: SpatialAnalyzer, bedroom: Room) -> None:
         """Test that analyze returns a result."""
         result = analyzer.analyze(bedroom)
         assert result is not None
         assert result.room_area > 0
         assert result.usable_area > 0
 
-    def test_analyze_calculates_room_area(
-        self, analyzer: SpatialAnalyzer, bedroom: Room
-    ) -> None:
+    def test_analyze_calculates_room_area(self, analyzer: SpatialAnalyzer, bedroom: Room) -> None:
         """Test room area calculation."""
         result = analyzer.analyze(bedroom)
         assert result.room_area == pytest.approx(20.0)  # 5 * 4
 
-    def test_analyze_calculates_usable_area(
-        self, analyzer: SpatialAnalyzer, bedroom: Room
-    ) -> None:
+    def test_analyze_calculates_usable_area(self, analyzer: SpatialAnalyzer, bedroom: Room) -> None:
         """Test usable area calculation."""
         result = analyzer.analyze(bedroom)
         # Usable area should be less than room area (door swing subtracted)
         assert result.usable_area < result.room_area
         assert result.usable_area > result.room_area * 0.5
 
-    def test_analyze_usable_ratio(
-        self, analyzer: SpatialAnalyzer, bedroom: Room
-    ) -> None:
+    def test_analyze_usable_ratio(self, analyzer: SpatialAnalyzer, bedroom: Room) -> None:
         """Test usable ratio property."""
         result = analyzer.analyze(bedroom)
         assert 0.5 < result.usable_ratio < 1.0
@@ -141,9 +133,7 @@ class TestAnalyze:
         assert best is not None
         assert best.score > 0
 
-    def test_analyze_identifies_zones(
-        self, analyzer: SpatialAnalyzer, bedroom: Room
-    ) -> None:
+    def test_analyze_identifies_zones(self, analyzer: SpatialAnalyzer, bedroom: Room) -> None:
         """Test that zones are identified."""
         result = analyzer.analyze(bedroom)
         assert len(result.zones) > 0
@@ -151,9 +141,7 @@ class TestAnalyze:
         traffic_zones = [z for z in result.zones if z.zone_type == "traffic"]
         assert len(traffic_zones) > 0
 
-    def test_analyze_traffic_flow(
-        self, analyzer: SpatialAnalyzer, bedroom: Room
-    ) -> None:
+    def test_analyze_traffic_flow(self, analyzer: SpatialAnalyzer, bedroom: Room) -> None:
         """Test traffic flow analysis."""
         result = analyzer.analyze(bedroom)
         assert result.traffic_flow is not None
@@ -185,9 +173,7 @@ class TestCommandPositions:
         assert best is not None
         assert best.score > 0
 
-    def test_command_position_has_solid_backing(
-        self, analyzer: SpatialAnalyzer
-    ) -> None:
+    def test_command_position_has_solid_backing(self, analyzer: SpatialAnalyzer) -> None:
         """Test command position has solid backing."""
         room = Room(
             width=5.0,
@@ -200,9 +186,7 @@ class TestCommandPositions:
         for pos in result.command_positions:
             assert pos.has_solid_backing
 
-    def test_command_positions_sorted_by_score(
-        self, analyzer: SpatialAnalyzer
-    ) -> None:
+    def test_command_positions_sorted_by_score(self, analyzer: SpatialAnalyzer) -> None:
         """Test command positions are sorted by score."""
         room = Room(
             width=5.0,
@@ -213,14 +197,9 @@ class TestCommandPositions:
         result = analyzer.analyze(room)
         if len(result.command_positions) > 1:
             for i in range(len(result.command_positions) - 1):
-                assert (
-                    result.command_positions[i].score
-                    >= result.command_positions[i + 1].score
-                )
+                assert result.command_positions[i].score >= result.command_positions[i + 1].score
 
-    def test_command_position_facing_direction(
-        self, analyzer: SpatialAnalyzer
-    ) -> None:
+    def test_command_position_facing_direction(self, analyzer: SpatialAnalyzer) -> None:
         """Test command position has correct facing direction."""
         room = Room(
             width=5.0,
@@ -445,9 +424,7 @@ class TestUpdateContext:
         )
         return AgentContext(room=room, room_type="bedroom")
 
-    def test_update_context(
-        self, analyzer: SpatialAnalyzer, context: AgentContext
-    ) -> None:
+    def test_update_context(self, analyzer: SpatialAnalyzer, context: AgentContext) -> None:
         """Test context is updated with analysis results."""
         result = analyzer.analyze(context.room)
         analyzer.update_context(context, result)

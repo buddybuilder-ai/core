@@ -208,10 +208,7 @@ class PipelineState:
 
     @property
     def critical_conflicts(self) -> list[Conflict]:
-        return [
-            c for c in self.unresolved_conflicts
-            if c.severity == ConflictSeverity.CRITICAL
-        ]
+        return [c for c in self.unresolved_conflicts if c.severity == ConflictSeverity.CRITICAL]
 
     @property
     def elapsed_ms(self) -> float:
@@ -272,5 +269,6 @@ class SSEEvent:
     def to_sse(self) -> str:
         """Format as SSE string."""
         import json
+
         payload = json.dumps({"type": self.event_type.value, **self.data})
         return f"event: {self.event_type.value}\ndata: {payload}\n\n"

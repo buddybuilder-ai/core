@@ -43,9 +43,7 @@ class StructuredDataBuilderStep(BaseStep):
         self._input_analyzer = InputAnalyzer()
         self._spatial_analyzer = SpatialAnalyzer()
 
-    async def execute(
-        self, state: PipelineState
-    ) -> AsyncGenerator[SSEEvent, None]:
+    async def execute(self, state: PipelineState) -> AsyncGenerator[SSEEvent, None]:
         yield self._emit_started()
         yield self._emit_progress("Parsing room configuration...", 0.2)
 
@@ -56,7 +54,9 @@ class StructuredDataBuilderStep(BaseStep):
         logger.info("📋 STEP 1: Parsing and validating room specification")
         logger.info(f"   Room type: {raw.get('room_type', 'bedroom')}")
         logger.info(f"   Dimensions: {raw.get('width', 0)}m × {raw.get('depth', 0)}m")
-        logger.info(f"   Doors: {len(raw.get('doors', []))}, Windows: {len(raw.get('windows', []))}")
+        logger.info(
+            f"   Doors: {len(raw.get('doors', []))}, Windows: {len(raw.get('windows', []))}"
+        )
 
         # Validate input
         input_data = self._build_input_data(raw)
@@ -117,12 +117,14 @@ class StructuredDataBuilderStep(BaseStep):
         }
 
         yield self._emit_progress("Room specification complete", 1.0)
-        yield self._emit_completed({
-            "room_type": room_type_str,
-            "dimensions": f"{room.width}m × {room.depth}m",
-            "usable_area": f"{spatial.usable_area:.1f} sqm",
-            "warnings": analysis.warning_messages,
-        })
+        yield self._emit_completed(
+            {
+                "room_type": room_type_str,
+                "dimensions": f"{room.width}m × {room.depth}m",
+                "usable_area": f"{spatial.usable_area:.1f} sqm",
+                "warnings": analysis.warning_messages,
+            }
+        )
 
     def _build_input_data(self, raw: dict[str, Any]) -> dict[str, Any]:
         dims = raw.get("dimensions", {})
@@ -143,21 +145,25 @@ class StructuredDataBuilderStep(BaseStep):
     def _parse_doors(self, doors_raw: list[dict]) -> list[DoorPosition]:
         result = []
         for d in doors_raw:
-            result.append(DoorPosition(
-                wall=d.get("wall", "south"),
-                offset=d.get("offset", 1.0),
-                width=d.get("width", 0.9),
-            ))
+            result.append(
+                DoorPosition(
+                    wall=d.get("wall", "south"),
+                    offset=d.get("offset", 1.0),
+                    width=d.get("width", 0.9),
+                )
+            )
         return result
 
     def _parse_windows(self, windows_raw: list[dict]) -> list[WindowPosition]:
         result = []
         for w in windows_raw:
-            result.append(WindowPosition(
-                wall=w.get("wall", "north"),
-                offset=w.get("offset", 1.0),
-                width=w.get("width", 1.5),
-            ))
+            result.append(
+                WindowPosition(
+                    wall=w.get("wall", "north"),
+                    offset=w.get("offset", 1.0),
+                    width=w.get("width", 1.5),
+                )
+            )
         return result
 
     def _door_to_dict(self, door: DoorPosition) -> dict[str, Any]:

@@ -99,8 +99,12 @@ class TestBoundingBox:
     def test_create_bounding_box(self) -> None:
         """Test creating a bounding box."""
         bbox = BoundingBox(
-            min_x=0, min_y=0, min_z=0,
-            max_x=2, max_y=3, max_z=4,
+            min_x=0,
+            min_y=0,
+            min_z=0,
+            max_x=2,
+            max_y=3,
+            max_z=4,
         )
         assert bbox.width == 2
         assert bbox.height == 3
@@ -114,8 +118,12 @@ class TestBoundingBox:
     def test_center(self) -> None:
         """Test center calculation."""
         bbox = BoundingBox(
-            min_x=0, min_y=0, min_z=0,
-            max_x=4, max_y=6, max_z=8,
+            min_x=0,
+            min_y=0,
+            min_z=0,
+            max_x=4,
+            max_y=6,
+            max_z=8,
         )
         center = bbox.center
         assert center.x == 2
@@ -125,16 +133,24 @@ class TestBoundingBox:
     def test_floor_area(self) -> None:
         """Test floor area calculation."""
         bbox = BoundingBox(
-            min_x=0, min_y=0, min_z=0,
-            max_x=3, max_y=2, max_z=4,
+            min_x=0,
+            min_y=0,
+            min_z=0,
+            max_x=3,
+            max_y=2,
+            max_z=4,
         )
         assert bbox.floor_area == 12  # 3 * 4
 
     def test_volume(self) -> None:
         """Test volume calculation."""
         bbox = BoundingBox(
-            min_x=0, min_y=0, min_z=0,
-            max_x=2, max_y=3, max_z=4,
+            min_x=0,
+            min_y=0,
+            min_z=0,
+            max_x=2,
+            max_y=3,
+            max_z=4,
         )
         assert bbox.volume == 24  # 2 * 3 * 4
 

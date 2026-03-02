@@ -46,9 +46,7 @@ class LayoutGeneratorStep(BaseStep):
         self._llm_agent = FengShuiLLMAgent(LLMConfig())
         self._resolver = LayoutResolver()
 
-    async def execute(
-        self, state: PipelineState
-    ) -> AsyncGenerator[SSEEvent, None]:
+    async def execute(self, state: PipelineState) -> AsyncGenerator[SSEEvent, None]:
         yield self._emit_started()
 
         spec = state.room_spec
@@ -82,9 +80,7 @@ class LayoutGeneratorStep(BaseStep):
 
         logger.info(f"   ✓ Selected {len(selections)} items")
 
-        yield self._emit_progress(
-            f"Selected {len(selections)} items, planning layout...", 0.3
-        )
+        yield self._emit_progress(f"Selected {len(selections)} items, planning layout...", 0.3)
 
         # --- 2. Build furniture list for LLM ---
         furniture_list = [
@@ -99,13 +95,9 @@ class LayoutGeneratorStep(BaseStep):
             for sel in selections
         ]
 
-        doors = [
-            {"wall": d.wall.value, "offset": d.offset, "width": d.width}
-            for d in room.doors
-        ]
+        doors = [{"wall": d.wall.value, "offset": d.offset, "width": d.width} for d in room.doors]
         windows = [
-            {"wall": w.wall.value, "offset": w.offset, "width": w.width}
-            for w in room.windows
+            {"wall": w.wall.value, "offset": w.offset, "width": w.width} for w in room.windows
         ]
 
         command_pos = spec.get("command_positions", [])
@@ -142,24 +134,22 @@ class LayoutGeneratorStep(BaseStep):
                 event_type=SSEEventType.LAYOUT_UPDATED,
                 data={"items": layout_items, "step": self.step.value},
             )
-            yield self._emit_completed({
-                "placed_count": len(layout_items),
-                "source": "heuristic_fallback",
-            })
+            yield self._emit_completed(
+                {
+                    "placed_count": len(layout_items),
+                    "source": "heuristic_fallback",
+                }
+            )
             return
 
         semantic_placements = llm_response.content.get("placements", [])
-        logger.info(
-            f"   ✓ LLM returned {len(semantic_placements)} semantic placements"
-        )
+        logger.info(f"   ✓ LLM returned {len(semantic_placements)} semantic placements")
 
         if not semantic_placements:
             raise ValueError("LLM returned no valid semantic placements")
 
         # Merge LLM furniture_type/size with known catalog dimensions
-        semantic_placements = self._enrich_placements(
-            semantic_placements, furniture_list
-        )
+        semantic_placements = self._enrich_placements(semantic_placements, furniture_list)
 
         yield self._emit_progress("Resolving positions and checking layout...", 0.75)
 
@@ -193,13 +183,15 @@ class LayoutGeneratorStep(BaseStep):
             data={"items": layout_items, "step": self.step.value},
         )
 
-        yield self._emit_completed({
-            "placed_count": len(layout_items),
-            "collisions": len(resolution.collisions),
-            "feng_shui_violations": len(resolution.feng_shui_violations),
-            "deterministic_score": resolution.deterministic_score,
-            "source": "llm_semantic",
-        })
+        yield self._emit_completed(
+            {
+                "placed_count": len(layout_items),
+                "collisions": len(resolution.collisions),
+                "feng_shui_violations": len(resolution.feng_shui_violations),
+                "deterministic_score": resolution.deterministic_score,
+                "source": "llm_semantic",
+            }
+        )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -238,36 +230,30 @@ class LayoutGeneratorStep(BaseStep):
     ) -> list[dict[str, Any]]:
         """Add name/category/is_essential from catalog to physical placement dicts."""
         catalog_map = {f["id"]: f for f in furniture_list}
-        sel_map = {
-            sel.item.id: sel
-            for sel in selections
-            if hasattr(sel, "item")
-        }
+        sel_map = {sel.item.id: sel for sel in selections if hasattr(sel, "item")}
         result = []
         for item in physical:
             fid = item.get("furniture_id", item.get("id", ""))
             cat = catalog_map.get(fid, {})
             sel = sel_map.get(fid)
             dims = item.get("dimensions", {})
-            result.append({
-                **item,
-                "name": cat.get("name", fid),
-                "category": cat.get("category", fid.split("_")[0]),
-                "is_essential": getattr(
-                    getattr(sel, "item", None), "is_essential", True
-                ),
-                "dimensions": {
-                    "width": dims.get("width", cat.get("width", 1.0)),
-                    "depth": dims.get("depth", cat.get("depth", 1.0)),
-                    "height": dims.get("height", cat.get("height", 1.0)),
-                },
-                "feng_shui_notes": "",
-            })
+            result.append(
+                {
+                    **item,
+                    "name": cat.get("name", fid),
+                    "category": cat.get("category", fid.split("_")[0]),
+                    "is_essential": getattr(getattr(sel, "item", None), "is_essential", True),
+                    "dimensions": {
+                        "width": dims.get("width", cat.get("width", 1.0)),
+                        "depth": dims.get("depth", cat.get("depth", 1.0)),
+                        "height": dims.get("height", cat.get("height", 1.0)),
+                    },
+                    "feng_shui_notes": "",
+                }
+            )
         return result
 
-    def _heuristic_fallback(
-        self, selections: list[Any], room: Room
-    ) -> list[dict[str, Any]]:
+    def _heuristic_fallback(self, selections: list[Any], room: Room) -> list[dict[str, Any]]:
         """Simple fallback: stack items along the south wall."""
         items = []
         x = 0.05
@@ -278,18 +264,20 @@ class LayoutGeneratorStep(BaseStep):
             h = getattr(item, "height", 1.0)
             if x + w > room.width:
                 break
-            items.append({
-                "id": item.id,
-                "furniture_id": item.id,
-                "name": item.name,
-                "category": getattr(item.category, "value", str(item.category)),
-                "pos_x": round(x, 3),
-                "pos_y": 0,
-                "pos_z": 0.05,
-                "rotation": 0,
-                "dimensions": {"width": w, "depth": d, "height": h},
-                "is_essential": getattr(item, "is_essential", False),
-                "feng_shui_notes": "",
-            })
+            items.append(
+                {
+                    "id": item.id,
+                    "furniture_id": item.id,
+                    "name": item.name,
+                    "category": getattr(item.category, "value", str(item.category)),
+                    "pos_x": round(x, 3),
+                    "pos_y": 0,
+                    "pos_z": 0.05,
+                    "rotation": 0,
+                    "dimensions": {"width": w, "depth": d, "height": h},
+                    "is_essential": getattr(item, "is_essential", False),
+                    "feng_shui_notes": "",
+                }
+            )
             x += w + 0.1
         return items

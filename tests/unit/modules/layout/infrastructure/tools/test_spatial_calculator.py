@@ -242,7 +242,9 @@ class TestSpatialCalculatorTool:
         with pytest.raises(ValueError, match="width must be > 0"):
             Room(width=-1.0, depth=4.0, room_type=RoomType.BEDROOM)
 
-    def test_validate_input_negative_clearance(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    def test_validate_input_negative_clearance(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test validation with negative clearance."""
         input_data = SpatialAnalysisInput(room=simple_room, clearance=-0.5)
         errors = tool.validate_input(input_data)
@@ -250,7 +252,9 @@ class TestSpatialCalculatorTool:
         assert any("clearance" in e.lower() for e in errors)
 
     @pytest.mark.asyncio
-    async def test_execute_simple_room(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_simple_room(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test execution with a simple room."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -262,7 +266,9 @@ class TestSpatialCalculatorTool:
         assert result.data.usable_area <= result.data.total_area
 
     @pytest.mark.asyncio
-    async def test_execute_identifies_zones(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_identifies_zones(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test that execution identifies multiple zones."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -278,7 +284,9 @@ class TestSpatialCalculatorTool:
         assert ZoneType.CENTER in zone_types
 
     @pytest.mark.asyncio
-    async def test_execute_identifies_command_positions(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_identifies_command_positions(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test that execution identifies command positions."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -293,7 +301,9 @@ class TestSpatialCalculatorTool:
             assert 0 <= pos.z <= simple_room.depth
 
     @pytest.mark.asyncio
-    async def test_execute_identifies_traffic_paths(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_identifies_traffic_paths(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test that execution identifies traffic paths."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -307,7 +317,9 @@ class TestSpatialCalculatorTool:
             assert path.zone_type == ZoneType.TRAFFIC
 
     @pytest.mark.asyncio
-    async def test_execute_identifies_blocked_areas(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_identifies_blocked_areas(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test that execution identifies blocked areas."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -321,7 +333,9 @@ class TestSpatialCalculatorTool:
         assert ZoneType.DOOR_SWING in blocked_types
 
     @pytest.mark.asyncio
-    async def test_execute_complex_room(self, tool: SpatialCalculatorTool, complex_room: Room) -> None:
+    async def test_execute_complex_room(
+        self, tool: SpatialCalculatorTool, complex_room: Room
+    ) -> None:
         """Test execution with complex room."""
         input_data = SpatialAnalysisInput(room=complex_room)
         result = await tool.execute(input_data)
@@ -338,7 +352,9 @@ class TestSpatialCalculatorTool:
         assert len(window_zones) == 2  # Two windows
 
     @pytest.mark.asyncio
-    async def test_execute_with_custom_clearance(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_with_custom_clearance(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test execution with custom clearance."""
         input_data = SpatialAnalysisInput(room=simple_room, clearance=0.8)
         result = await tool.execute(input_data)
@@ -347,7 +363,9 @@ class TestSpatialCalculatorTool:
         assert result.data is not None
 
     @pytest.mark.asyncio
-    async def test_execute_with_custom_door_swing_depth(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_with_custom_door_swing_depth(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test execution with custom door swing depth."""
         input_data = SpatialAnalysisInput(room=simple_room, door_swing_depth=1.2)
         result = await tool.execute(input_data)
@@ -360,7 +378,9 @@ class TestSpatialCalculatorTool:
         assert len(door_swing_zones) > 0
 
     @pytest.mark.asyncio
-    async def test_execute_returns_metadata(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_returns_metadata(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test that execution returns metadata."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -373,7 +393,9 @@ class TestSpatialCalculatorTool:
         assert "num_zones" in result.metadata
 
     @pytest.mark.asyncio
-    async def test_execute_measures_time(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_execute_measures_time(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test that execution time is measured."""
         input_data = SpatialAnalysisInput(room=simple_room)
         result = await tool.execute(input_data)
@@ -382,7 +404,9 @@ class TestSpatialCalculatorTool:
         assert result.execution_time_ms >= 0
 
     @pytest.mark.asyncio
-    async def test_safe_execute_with_invalid_clearance(self, tool: SpatialCalculatorTool, simple_room: Room) -> None:
+    async def test_safe_execute_with_invalid_clearance(
+        self, tool: SpatialCalculatorTool, simple_room: Room
+    ) -> None:
         """Test safe_execute handles validation errors for negative clearance."""
         input_data = SpatialAnalysisInput(room=simple_room, clearance=-0.5)
         result = await tool.safe_execute(input_data)

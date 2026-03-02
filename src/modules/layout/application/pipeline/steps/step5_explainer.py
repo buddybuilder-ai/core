@@ -42,9 +42,7 @@ class ExplainerStep(BaseStep):
         super().__init__(config)
         self._llm_agent = FengShuiLLMAgent()
 
-    async def execute(
-        self, state: PipelineState
-    ) -> AsyncGenerator[SSEEvent, None]:
+    async def execute(self, state: PipelineState) -> AsyncGenerator[SSEEvent, None]:
         yield self._emit_started()
         yield self._emit_progress("Generating explanation...", 0.3)
 
@@ -78,11 +76,13 @@ class ExplainerStep(BaseStep):
         )
 
         yield self._emit_progress("Explanation complete", 1.0)
-        yield self._emit_completed({
-            "explanation_length": len(state.explanation),
-            "total_score": total_score,
-            "personality_mode": state.personality_mode,
-        })
+        yield self._emit_completed(
+            {
+                "explanation_length": len(state.explanation),
+                "total_score": total_score,
+                "personality_mode": state.personality_mode,
+            }
+        )
 
     # ------------------------------------------------------------------
     # Summary builder
@@ -144,9 +144,7 @@ class ExplainerStep(BaseStep):
     # Template fallback (original behaviour, English)
     # ------------------------------------------------------------------
 
-    def _template_explanation(
-        self, summary: dict[str, Any], state: PipelineState
-    ) -> str:
+    def _template_explanation(self, summary: dict[str, Any], state: PipelineState) -> str:
         """Produce a structured markdown explanation without an LLM call."""
         parts: list[str] = []
 
@@ -166,10 +164,7 @@ class ExplainerStep(BaseStep):
             cat = item.get("category", "other")
             categories.setdefault(cat, []).append(item.get("name", ""))
         if categories:
-            cat_lines = [
-                f"- **{cat}**: {', '.join(names)}"
-                for cat, names in categories.items()
-            ]
+            cat_lines = [f"- **{cat}**: {', '.join(names)}" for cat, names in categories.items()]
             parts.append("### Items Placed\n" + "\n".join(cat_lines))
 
         all_conflicts = state.conflicts

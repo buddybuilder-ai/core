@@ -188,14 +188,14 @@ class RouterAgent:
             # Keyword-based set_mode override — catches cases the LLM misses
             if intent != "set_mode":
                 from src.modules.layout.application.agent.personality import detect_mode_switch
+
                 switched = detect_mode_switch(message)
                 if switched:
                     intent = "set_mode"
                     extracted = {"mode": switched}
 
             logger.info(
-                f"RouterAgent: intent={intent!r} confidence={confidence:.2f} "
-                f"params={extracted}"
+                f"RouterAgent: intent={intent!r} confidence={confidence:.2f} params={extracted}"
             )
             return RouterResult(
                 intent=intent,

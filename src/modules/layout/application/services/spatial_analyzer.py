@@ -658,9 +658,7 @@ class SpatialAnalyzer:
 
         return min_width if min_width != float("inf") else min(room.width, room.depth)
 
-    def _get_door_room_entry_point(
-        self, door: Any, room: Room
-    ) -> tuple[float, float]:
+    def _get_door_room_entry_point(self, door: Any, room: Room) -> tuple[float, float]:
         """Get the point where you enter the room from a door.
 
         Args:

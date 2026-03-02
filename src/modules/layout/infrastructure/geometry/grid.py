@@ -85,9 +85,7 @@ class GridRect:
 
     def contains(self, pos: GridPosition) -> bool:
         """Check if a position is within this rectangle."""
-        return (
-            self.row <= pos.row < self.end_row and self.col <= pos.col < self.end_col
-        )
+        return self.row <= pos.row < self.end_row and self.col <= pos.col < self.end_col
 
     def overlaps(self, other: "GridRect") -> bool:
         """Check if this rectangle overlaps with another."""
@@ -192,9 +190,7 @@ class PlacementGrid:
         self.rows = int(round(self.depth / self.cell_size))
 
         # Initialize all cells as empty
-        self.cells = [
-            [CellState.EMPTY for _ in range(self.cols)] for _ in range(self.rows)
-        ]
+        self.cells = [[CellState.EMPTY for _ in range(self.cols)] for _ in range(self.rows)]
 
     def get_cell(self, pos: GridPosition) -> CellState | None:
         """Get the state of a cell.
@@ -417,9 +413,7 @@ class PlacementGrid:
 
         # Score all candidates
         for candidate in candidates:
-            candidate.score = score_func(
-                candidate.world_x, candidate.world_z, width, depth
-            )
+            candidate.score = score_func(candidate.world_x, candidate.world_z, width, depth)
 
         # Sort by score (highest first) and return best
         candidates.sort()
@@ -446,9 +440,7 @@ class PlacementGrid:
         Returns:
             Available area in square meters.
         """
-        empty_cells = sum(
-            1 for row in self.cells for cell in row if cell == CellState.EMPTY
-        )
+        empty_cells = sum(1 for row in self.cells for cell in row if cell == CellState.EMPTY)
         return empty_cells * self.cell_size * self.cell_size
 
     def clear(self) -> None:

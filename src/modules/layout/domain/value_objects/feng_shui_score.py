@@ -61,12 +61,7 @@ class FengShuiScore:
     @property
     def total(self) -> int:
         """Calculate total feng shui score (0-100)."""
-        return (
-            self.command_position
-            + self.five_elements
-            + self.chi_flow
-            + self.sha_chi_avoidance
-        )
+        return self.command_position + self.five_elements + self.chi_flow + self.sha_chi_avoidance
 
     @property
     def percentage(self) -> float:
@@ -131,20 +126,16 @@ class FengShuiScore:
 
         if self.command_position < 15:
             suggestions.append(
-                "Move key furniture (bed/desk) to command position "
-                "(back against wall, facing door)"
+                "Move key furniture (bed/desk) to command position (back against wall, facing door)"
             )
 
         if self.five_elements < 10:
             suggestions.append(
-                "Add elements to balance the five elements "
-                "(wood, fire, earth, metal, water)"
+                "Add elements to balance the five elements (wood, fire, earth, metal, water)"
             )
 
         if self.chi_flow < 12:
-            suggestions.append(
-                "Clear pathways and remove obstacles to improve energy flow"
-            )
+            suggestions.append("Clear pathways and remove obstacles to improve energy flow")
 
         if self.sha_chi_avoidance < 12:
             suggestions.append(

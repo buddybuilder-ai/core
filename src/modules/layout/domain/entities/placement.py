@@ -181,9 +181,7 @@ class Placement:
 
         return diff <= tolerance
 
-    def is_against_wall(
-        self, room_width: float, room_depth: float, tolerance: float = 0.1
-    ) -> bool:
+    def is_against_wall(self, room_width: float, room_depth: float, tolerance: float = 0.1) -> bool:
         """Check if furniture is placed against a wall.
 
         Args:

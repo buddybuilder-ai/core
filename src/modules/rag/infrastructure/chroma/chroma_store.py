@@ -69,9 +69,7 @@ class ChromaStore:
             logger.debug(f"ChromaStore: connection failed ({exc}) — skipping")
             return False
 
-    async def query(
-        self, texts: list[str], n_results: int = 5
-    ) -> list[dict[str, Any]]:
+    async def query(self, texts: list[str], n_results: int = 5) -> list[dict[str, Any]]:
         """Query the collection with text queries.
 
         Args:
@@ -153,10 +151,12 @@ class ChromaStore:
 
         for ids, docs, metas, dists in zip(ids_batch, docs_batch, metas_batch, dists_batch):
             for doc_id, doc, meta, dist in zip(ids, docs, metas, dists):
-                results.append({
-                    "id": doc_id,
-                    "document": doc,
-                    "metadata": meta or {},
-                    "distance": dist,
-                })
+                results.append(
+                    {
+                        "id": doc_id,
+                        "document": doc,
+                        "metadata": meta or {},
+                        "distance": dist,
+                    }
+                )
         return results

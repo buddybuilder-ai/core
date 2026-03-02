@@ -20,7 +20,9 @@ from src.modules.layout.infrastructure.geometry.collision import AABB
 def _make_placement(fid: str, x: float, z: float, w: float, depth: float) -> PhysicalPlacement:
     return PhysicalPlacement(
         furniture_id=fid,
-        x=x, y=0.0, z=z,
+        x=x,
+        y=0.0,
+        z=z,
         rotation=0,
         bbox=AABB.from_position_and_size(x=x, z=z, width=w, depth=depth),
     )
@@ -46,7 +48,7 @@ class TestNoCollisions:
     def test_no_collisions_clean_layout(self, room: RoomSpec) -> None:
         """Two well-spaced items should produce zero collisions."""
         placements = [
-            _make_placement("bed_01",  0.1, 2.5, 2.0, 1.9),
+            _make_placement("bed_01", 0.1, 2.5, 2.0, 1.9),
             _make_placement("desk_01", 0.1, 0.9, 1.2, 0.6),
         ]
         results = check_collisions(placements, room)
@@ -87,7 +89,7 @@ class TestOverlap:
     def test_overlap_detected(self, room: RoomSpec) -> None:
         """Two overlapping items → critical overlap collision."""
         placements = [
-            _make_placement("bed_01",  0.5, 2.0, 2.0, 1.9),
+            _make_placement("bed_01", 0.5, 2.0, 2.0, 1.9),
             _make_placement("desk_01", 1.0, 2.5, 1.2, 0.6),
         ]
         results = check_collisions(placements, room)
@@ -153,7 +155,7 @@ class TestWalkwayClearance:
     def test_walkway_violation(self, room: RoomSpec) -> None:
         """Gap of 0.4 m (< 60 cm) → major insufficient_clearance."""
         placements = [
-            _make_placement("bed_01",  0.1, 1.5, 2.0, 1.9),
+            _make_placement("bed_01", 0.1, 1.5, 2.0, 1.9),
             _make_placement("desk_01", 0.1, 3.8, 1.2, 0.6),  # 3.8 - (1.5+1.9) = 0.4m gap
         ]
         results = check_collisions(placements, room)
@@ -190,8 +192,12 @@ class TestWalkwayClearance:
 
 class TestCollisionDataClass:
     def test_collision_fields(self) -> None:
-        c = Collision(type="overlap", severity="critical",
-                      furniture_ids=["a", "b"], description="test overlap")
+        c = Collision(
+            type="overlap",
+            severity="critical",
+            furniture_ids=["a", "b"],
+            description="test overlap",
+        )
         assert c.type == "overlap"
         assert c.severity == "critical"
         assert "a" in c.furniture_ids

@@ -18,12 +18,12 @@ class FurnitureSize:
 
     Attributes:
         w: Width along x-axis in meters.
-        length: Length along z-axis in meters.
+        l: Length along z-axis in meters.
         h: Height along y-axis in meters.
     """
 
     w: float
-    length: float
+    l: float
     h: float
 
 
@@ -93,9 +93,9 @@ class RoomSpec:
 # Rotation assigned to furniture placed against each wall so it faces inward.
 _WALL_ROTATION: dict[str, int] = {
     "south": 180,  # south wall → faces north
-    "north": 0,    # north wall → faces south
-    "west": 90,    # west wall → faces east
-    "east": 270,   # east wall → faces west
+    "north": 0,  # north wall → faces south
+    "west": 90,  # west wall → faces east
+    "east": 270,  # east wall → faces west
 }
 
 
@@ -156,12 +156,10 @@ class SpatialResolver:
     def _footprint(self, size: FurnitureSize, rotation: int) -> tuple[float, float]:
         """Return (width_x, depth_z) after applying rotation."""
         if rotation in (90, 270):
-            return size.length, size.w
-        return size.w, size.length
+            return size.l, size.w
+        return size.w, size.l
 
-    def _center_position(
-        self, p: SemanticPlacement, room: RoomSpec
-    ) -> tuple[float, float, int]:
+    def _center_position(self, p: SemanticPlacement, room: RoomSpec) -> tuple[float, float, int]:
         w, length = self._footprint(p.size, 0)
         x = (room.width - w) / 2.0
         z = (room.depth - length) / 2.0

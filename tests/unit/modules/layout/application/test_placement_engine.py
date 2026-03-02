@@ -115,9 +115,7 @@ class TestPlacementEngine:
         )
 
     @pytest.fixture
-    def nightstand_selection(
-        self, nightstand_item: FurnitureSearchResult
-    ) -> FurnitureSelection:
+    def nightstand_selection(self, nightstand_item: FurnitureSearchResult) -> FurnitureSelection:
         """Create test nightstand selection."""
         return FurnitureSelection(
             item=nightstand_item,
@@ -374,9 +372,7 @@ class TestPlacementEngineStrategies:
             placement_notes="",
             total_footprint=0.6,
         )
-        selection = FurnitureSelection(
-            item=coffee_table, priority=1, is_essential=False
-        )
+        selection = FurnitureSelection(item=coffee_table, priority=1, is_essential=False)
 
         result = engine.place_item(selection)
         assert result.is_success

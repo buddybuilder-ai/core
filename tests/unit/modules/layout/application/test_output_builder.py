@@ -88,9 +88,7 @@ class TestOutputBuilder:
             depth=4.0,
             height=2.8,
             room_type=RoomType.BEDROOM,
-            doors=[
-                DoorPosition(wall="south", offset=2.0, width=0.9)
-            ],
+            doors=[DoorPosition(wall="south", offset=2.0, width=0.9)],
         )
 
     @pytest.fixture

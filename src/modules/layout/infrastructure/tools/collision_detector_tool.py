@@ -191,7 +191,9 @@ class CollisionDetectorTool(BaseTool[CollisionDetectorInput, CollisionDetectorOu
             errors.append("Minimum clearance must be non-negative")
         return errors
 
-    async def execute(self, input_data: CollisionDetectorInput) -> ToolResult[CollisionDetectorOutput]:
+    async def execute(
+        self, input_data: CollisionDetectorInput
+    ) -> ToolResult[CollisionDetectorOutput]:
         """Execute collision detection on placed items."""
         import time
 
