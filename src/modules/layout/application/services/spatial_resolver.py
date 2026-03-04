@@ -163,23 +163,25 @@ class SpatialResolver:
             # Estimate door x/z position from offset (DoorPosition uses .offset field)
             offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
+            # Clearance starts slightly inward from the wall (MIN_GAP) so that
+            # furniture hugging the same wall is not considered to block the door.
+            _MIN_GAP = 0.15
             if wall == "south":
-                # Door is on south wall (z=0), offset measured from west corner along x
                 x0 = max(0.0, offset - 0.1)
                 x1 = min(room.width, offset + door_w + 0.1)
-                zones.append(AABB(min_x=x0, max_x=x1, min_z=0.0, max_z=c))
+                zones.append(AABB(min_x=x0, max_x=x1, min_z=_MIN_GAP, max_z=c))
             elif wall == "north":
                 x0 = max(0.0, offset - 0.1)
                 x1 = min(room.width, offset + door_w + 0.1)
-                zones.append(AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth))
+                zones.append(AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _MIN_GAP))
             elif wall == "west":
                 z0 = max(0.0, offset - 0.1)
                 z1 = min(room.depth, offset + door_w + 0.1)
-                zones.append(AABB(min_x=0.0, max_x=c, min_z=z0, max_z=z1))
+                zones.append(AABB(min_x=_MIN_GAP, max_x=c, min_z=z0, max_z=z1))
             elif wall == "east":
                 z0 = max(0.0, offset - 0.1)
                 z1 = min(room.depth, offset + door_w + 0.1)
-                zones.append(AABB(min_x=room.width - c, max_x=room.width, min_z=z0, max_z=z1))
+                zones.append(AABB(min_x=room.width - c, max_x=room.width - _MIN_GAP, min_z=z0, max_z=z1))
         return zones
 
     def resolve(
