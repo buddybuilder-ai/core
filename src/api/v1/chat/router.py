@@ -169,7 +169,9 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             "west": ("south", "north"),
         }
 
-        def _apply_clarification_answers(room_spec: dict[str, Any], answers: dict[str, str]) -> dict[str, Any]:
+        def _apply_clarification_answers(
+            room_spec: dict[str, Any], answers: dict[str, str]
+        ) -> dict[str, Any]:
             """Inject clarification answers into room_spec.
 
             Converts answers to explicit placement_hint strings that the LLM
