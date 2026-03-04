@@ -348,7 +348,8 @@ class UserClarifierTool(BaseTool[ClarifierInput, ClarifierOutput]):
             QuestionPriority.OPTIONAL: 2,
         }
         questions = [
-            q for q in self.PREDEFINED_QUESTIONS.values()
+            q
+            for q in self.PREDEFINED_QUESTIONS.values()
             if q.category == room_type or q.category == "general"
         ]
         return sorted(questions, key=lambda q: _PRIORITY_ORDER[q.priority])

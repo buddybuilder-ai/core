@@ -205,7 +205,7 @@ class FengShuiLLMAgent:
             lines.append("User Preferences (MUST follow these):")
             msg = user_preferences.get("user_message") or user_preferences.get("message")
             if msg:
-                lines.append(f"- User said: \"{msg}\"")
+                lines.append(f'- User said: "{msg}"')
             hint = user_preferences.get("placement_hint")
             if hint:
                 lines.append(f"- Placement hint: {hint}")
@@ -221,8 +221,11 @@ class FengShuiLLMAgent:
                     lines.append(f"- {qid}: {ans}")
             for k, v in user_preferences.items():
                 if k not in {
-                    "user_message", "message", "placement_hint",
-                    "owned_furniture", "clarification_answers",
+                    "user_message",
+                    "message",
+                    "placement_hint",
+                    "owned_furniture",
+                    "clarification_answers",
                     "placement_constraints",
                 }:
                     lines.append(f"- {k}: {v}")
@@ -604,7 +607,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
             clearance = item.get("clearance_front", 0.0)
             clearance_str = f", needs {clearance}m clear in front" if clearance > 0 else ""
             lines.append(
-                f"- furniture_id=\"{fid}\" ({name}): "
+                f'- furniture_id="{fid}" ({name}): '
                 f"{item.get('width')}x{item.get('depth')}m, "
                 f"essential: {item.get('is_essential', False)}"
                 f"{clearance_str}"
@@ -665,7 +668,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         return (
             f"The primary door is on the {door_wall.upper()} wall. "
             f"Therefore the command position wall for the {main_piece} is the {command_wall.upper()} wall. "
-            f"Place the {main_piece} against the {command_wall.upper()} wall (target_wall=\"{command_wall}\") "
+            f'Place the {main_piece} against the {command_wall.upper()} wall (target_wall="{command_wall}") '
             f"so the occupant faces the {door_wall} door. "
             f"Do NOT place the {main_piece} on the {door_wall} wall (same wall as the door).\n"
             f"PATHWAY RULE: Leave the {door_wall.upper()} wall area clear — "
@@ -673,7 +676,6 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
             f"A person entering through the door must have at least 90 cm of clear walking space. "
             f"Small items like shoe_cabinet or coat_rack may be placed near the door corner ONLY if they do not block the door swing."
         )
-
 
     @staticmethod
     def _build_wall_capacity_section(
@@ -715,9 +717,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         for wall, length in wall_lengths.items():
             note = " ← DOOR WALL: keep entry area clear" if wall in door_walls else ""
             lines.append(f"- {wall.upper()} wall: {length:.1f} m usable{note}")
-        lines.append(
-            f"- Total furniture width to distribute: {total_fw:.1f} m across all walls"
-        )
+        lines.append(f"- Total furniture width to distribute: {total_fw:.1f} m across all walls")
         lines.append(
             "- Rule: do NOT assign items to a wall whose combined widths would exceed that wall's usable length."
         )

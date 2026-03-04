@@ -157,17 +157,19 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
 
         # --- 2. Merge clarification answers into room_spec ---
         _OPPOSITE_WALL: dict[str, str] = {
-            "south": "north", "north": "south",
-            "east": "west",   "west": "east",
+            "south": "north",
+            "north": "south",
+            "east": "west",
+            "west": "east",
         }
         _SIDE_WALLS: dict[str, tuple[str, str]] = {
-            "south": ("west", "east"), "north": ("west", "east"),
-            "east": ("south", "north"), "west": ("south", "north"),
+            "south": ("west", "east"),
+            "north": ("west", "east"),
+            "east": ("south", "north"),
+            "west": ("south", "north"),
         }
 
-        def _apply_clarification_answers(
-            room_spec: dict, answers: dict[str, str]
-        ) -> dict:
+        def _apply_clarification_answers(room_spec: dict, answers: dict[str, str]) -> dict:
             """Inject clarification answers into room_spec.
 
             Converts answers to explicit placement_hint strings that the LLM
@@ -289,9 +291,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 prefs["user_message"] = request.message
                 params = result.extracted_params
                 if params.get("target_furniture") and params.get("details"):
-                    prefs["placement_hint"] = (
-                        f"{params['target_furniture']}: {params['details']}"
-                    )
+                    prefs["placement_hint"] = f"{params['target_furniture']}: {params['details']}"
                 room_spec["user_preferences"] = prefs
                 orchestrator = PipelineOrchestrator(PipelineConfig())
                 async for event in orchestrator.run(room_spec, mode=request.mode):

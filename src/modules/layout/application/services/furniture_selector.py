@@ -243,9 +243,7 @@ class FurnitureSelector:
             # different room type (e.g. a "desk" in a "bedroom"), so we search
             # the full catalog by category instead of filtering by room_type.
             if owned_categories:
-                raw_items = [
-                    f for f in FURNITURE_CATALOG if f.category.value == category_str
-                ]
+                raw_items = [f for f in FURNITURE_CATALOG if f.category.value == category_str]
                 items = [FurnitureSearchResult.from_catalog(f) for f in raw_items]
                 if not items:
                     result.warnings.append(f"No {category_str} found in catalog")

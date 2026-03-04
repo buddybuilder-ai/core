@@ -131,7 +131,9 @@ class LayoutResolver:
             try:
                 logger.info(f"LayoutResolver: validating raw={raw!r}")
                 schema = SemanticPlacementSchema.model_validate(raw)
-                logger.info(f"LayoutResolver: validated → wall={schema.target_wall!r} align={schema.alignment!r} facing={schema.facing!r}")
+                logger.info(
+                    f"LayoutResolver: validated → wall={schema.target_wall!r} align={schema.alignment!r} facing={schema.facing!r}"
+                )
                 semantics.append(self._schema_to_semantic(schema))
             except Exception as exc:
                 fid = raw.get("furniture_id", "<unknown>")
@@ -261,8 +263,8 @@ class LayoutResolver:
             frontend_centre_x = backend_left_x + footprint_w/2 - room_width/2
             frontend_centre_z = backend_top_z  + footprint_d/2 - room_depth/2
         """
-        fw = round(p.bbox.width, 3)   # x-size of footprint in room (post-rotation)
-        fd = round(p.bbox.depth, 3)   # z-size of footprint in room (post-rotation)
+        fw = round(p.bbox.width, 3)  # x-size of footprint in room (post-rotation)
+        fd = round(p.bbox.depth, 3)  # z-size of footprint in room (post-rotation)
         centre_x = round(p.x + fw / 2 - room.width / 2, 3)
         centre_z = round(p.z + fd / 2 - room.depth / 2, 3)
 
@@ -275,8 +277,8 @@ class LayoutResolver:
         rot = p.rotation % 360
         if rot in (90, 270):
             # Swap back so Three.js BoxGeometry(w, h, d) + rotation gives right shape
-            dim_w = fd   # original depth becomes box width
-            dim_d = fw   # original width becomes box depth
+            dim_w = fd  # original depth becomes box width
+            dim_d = fw  # original width becomes box depth
         else:
             dim_w = fw
             dim_d = fd

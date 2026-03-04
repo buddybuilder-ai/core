@@ -76,7 +76,9 @@ class LayoutGeneratorStep(BaseStep):
         user_message = user_prefs.get("user_message", "")
         owned_categories = self._parse_owned_furniture(user_message)
         if owned_categories:
-            logger.info(f"   🔒 User owns specific furniture: {owned_categories} — restricting catalog")
+            logger.info(
+                f"   🔒 User owns specific furniture: {owned_categories} — restricting catalog"
+            )
 
         selection_result = await self._furniture_selector.select_furniture(
             room_type=room_type,

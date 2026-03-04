@@ -98,27 +98,36 @@ class RoomSpec:
 # Rotation assigned to furniture placed against each wall so it faces inward.
 # Three.js Y=0° → faces -Z (north); Y=180° → faces +Z (south).
 _WALL_ROTATION: dict[str, int] = {
-    "south": 0,    # south wall → faces north (Y=0° → -Z)
+    "south": 0,  # south wall → faces north (Y=0° → -Z)
     "north": 180,  # north wall → faces south (Y=180° → +Z)
-    "west": 90,    # west wall → faces east  (Y=90° → +X)
-    "east": 270,   # east wall → faces west  (Y=270° → -X)
+    "west": 90,  # west wall → faces east  (Y=90° → +X)
+    "east": 270,  # east wall → faces west  (Y=270° → -X)
 }
 
 # Opposite of each wall — used for auto-facing "must face inward"
 _OPPOSITE_WALL: dict[str, str] = {
-    "south": "north", "north": "south",
-    "east": "west",   "west": "east",
+    "south": "north",
+    "north": "south",
+    "east": "west",
+    "west": "east",
 }
 
 # Furniture types that MUST face inward (away from their wall) regardless of LLM output.
 # These are items where "facing the wall" is physically nonsensical.
 # Value = "inward" means: use opposite of target_wall as facing.
-_FORCE_INWARD_TYPES: frozenset[str] = frozenset({
-    "chair", "office_chair", "armchair", "dining_chair",
-    "desk", "folding_desk",
-    "sofa", "sofa_bed",
-    "tv_stand",  # screen must face into room
-})
+_FORCE_INWARD_TYPES: frozenset[str] = frozenset(
+    {
+        "chair",
+        "office_chair",
+        "armchair",
+        "dining_chair",
+        "desk",
+        "folding_desk",
+        "sofa",
+        "sofa_bed",
+        "tv_stand",  # screen must face into room
+    }
+)
 
 # Rotation to apply when the LLM specifies which direction the front/seat faces.
 # Three.js Y-rotation is CCW from above (right-hand rule).
@@ -129,9 +138,9 @@ _FORCE_INWARD_TYPES: frozenset[str] = frozenset({
 #   Y=270° → model front faces -X = west
 _FACING_ROTATION: dict[str, int] = {
     "south": 180,  # front faces +Z (toward south wall)  Y=180° → +Z
-    "north": 0,    # front faces -Z (toward north wall)  Y=0°   → -Z
-    "east": 90,    # front faces +X (toward east wall)   Y=90°  → +X
-    "west": 270,   # front faces -X (toward west wall)   Y=270° → -X
+    "north": 0,  # front faces -Z (toward north wall)  Y=0°   → -Z
+    "east": 90,  # front faces +X (toward east wall)   Y=90°  → +X
+    "west": 270,  # front faces -X (toward west wall)   Y=270° → -X
 }
 
 
@@ -235,8 +244,8 @@ class SpatialResolver:
         _WALL_TOL = 0.1
         on_south = item.z <= _WALL_TOL
         on_north = item.z >= room.depth - d - _WALL_TOL
-        on_west  = item.x <= _WALL_TOL
-        on_east  = item.x >= room.width - w - _WALL_TOL
+        on_west = item.x <= _WALL_TOL
+        on_east = item.x >= room.width - w - _WALL_TOL
 
         # For wall-hugging items: slide ALONG the wall first, then push inward.
         # For floating/center items: try all directions toward room centre.
@@ -248,18 +257,20 @@ class SpatialResolver:
         if on_south or on_north:
             # On a z-wall → slide along x first, then push in z
             dirs = [
-                (1, 0), (-1, 0),          # slide right / left along wall
-                (dx_center, 0),            # slide toward x-centre
-                (0, dz_center),            # push away from wall (last resort)
+                (1, 0),
+                (-1, 0),  # slide right / left along wall
+                (dx_center, 0),  # slide toward x-centre
+                (0, dz_center),  # push away from wall (last resort)
                 (dx_center, dz_center),
                 (-dx_center, dz_center),
             ]
         elif on_west or on_east:
             # On an x-wall → slide along z first, then push in x
             dirs = [
-                (0, 1), (0, -1),           # slide up / down along wall
-                (0, dz_center),            # slide toward z-centre
-                (dx_center, 0),            # push away from wall (last resort)
+                (0, 1),
+                (0, -1),  # slide up / down along wall
+                (0, dz_center),  # slide toward z-centre
+                (dx_center, 0),  # push away from wall (last resort)
                 (dx_center, dz_center),
                 (dx_center, -dz_center),
             ]

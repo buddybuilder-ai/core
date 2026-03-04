@@ -59,18 +59,18 @@ def get_pending_questions(
 
     # REQUIRED unanswered questions must be resolved before RECOMMENDED ones
     required_pending = [
-        q for q in all_questions
-        if q.priority == QuestionPriority.REQUIRED
-        and q.id not in clarification_answers
+        q
+        for q in all_questions
+        if q.priority == QuestionPriority.REQUIRED and q.id not in clarification_answers
     ]
     if required_pending:
         return [q.to_dict() for q in required_pending[:3]]
 
     # All REQUIRED answered — surface RECOMMENDED ones next
     recommended_pending = [
-        q for q in all_questions
-        if q.priority == QuestionPriority.RECOMMENDED
-        and q.id not in clarification_answers
+        q
+        for q in all_questions
+        if q.priority == QuestionPriority.RECOMMENDED and q.id not in clarification_answers
     ]
     if recommended_pending:
         return [q.to_dict() for q in recommended_pending[:3]]

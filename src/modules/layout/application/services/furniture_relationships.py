@@ -47,7 +47,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "tv_stand",
         "b_type": "bed",
     },
-
     # ── Nightstand / bedside table ────────────────────────────────────────────
     {
         "requires": ["nightstand", "bed"],
@@ -61,7 +60,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "bedside_table",
         "b_type": "bed",
     },
-
     # ── Coffee table ──────────────────────────────────────────────────────────
     {
         "requires": ["coffee_table", "sofa"],
@@ -69,7 +67,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "coffee_table",
         "b_type": "sofa",
     },
-
     # ── Dining set ────────────────────────────────────────────────────────────
     {
         "requires": ["dining_chair", "dining_table"],
@@ -77,7 +74,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "dining_chair",
         "b_type": "dining_table",
     },
-
     # ── Desk + chair ─────────────────────────────────────────────────────────
     {
         "requires": ["chair", "desk"],
@@ -85,7 +81,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "chair",
         "b_type": "desk",
     },
-
     # ── Sofa + armchair grouping ─────────────────────────────────────────────
     {
         "requires": ["armchair", "sofa"],
@@ -93,7 +88,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "armchair",
         "b_type": "sofa",
     },
-
     # ── Wardrobe near bed ─────────────────────────────────────────────────────
     {
         "requires": ["wardrobe", "bed"],
@@ -101,7 +95,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "wardrobe",
         "b_type": "bed",
     },
-
     # ── Mirror placement ──────────────────────────────────────────────────────
     {
         "requires": ["mirror", "bed"],
@@ -115,7 +108,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "mirror",
         "b_type": "wardrobe",
     },
-
     # ── Plant near window ─────────────────────────────────────────────────────
     {
         "requires": ["plant"],
@@ -123,7 +115,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "plant",
         "b_type": None,
     },
-
     # ── Bookcase / bookshelf against wall ────────────────────────────────────
     {
         "requires": ["bookshelf"],
@@ -137,7 +128,6 @@ _RULES: list[dict[str, Any]] = [
         "a_type": "bookcase",
         "b_type": None,
     },
-
     # ── Studio Apartment: sofa_bed as sleep+seating zone ─────────────────────
     {
         "requires": ["sofa_bed", "compact_wardrobe"],
@@ -185,22 +175,22 @@ _RULES: list[dict[str, Any]] = [
 
 # Category token aliases — maps partial furniture_id tokens to canonical type
 _TYPE_ALIASES: dict[str, str] = {
-    "tv":         "tv_stand",
+    "tv": "tv_stand",
     "television": "tv_stand",
-    "screen":     "tv_stand",
-    "night":      "nightstand",
-    "bedside":    "bedside_table",
-    "coffee":     "coffee_table",
-    "dining":     "dining_table",  # will be overridden if 'chair' also in token
-    "arm":        "armchair",
-    "book":       "bookshelf",
+    "screen": "tv_stand",
+    "night": "nightstand",
+    "bedside": "bedside_table",
+    "coffee": "coffee_table",
+    "dining": "dining_table",  # will be overridden if 'chair' also in token
+    "arm": "armchair",
+    "book": "bookshelf",
     # Studio apartment
-    "sofa_bed":   "sofa_bed",
+    "sofa_bed": "sofa_bed",
     "compact_wardrobe": "compact_wardrobe",
     "folding_desk": "folding_desk",
     "room_divider": "room_divider",
     "shoe_cabinet": "shoe_cabinet",
-    "coat_rack":  "coat_rack",
+    "coat_rack": "coat_rack",
 }
 
 

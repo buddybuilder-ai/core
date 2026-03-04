@@ -36,23 +36,33 @@ from src.modules.layout.infrastructure.llm.prompts import FENG_SHUI_SYSTEM_PROMP
 logger = logging.getLogger(__name__)
 
 _OPPOSITE: dict[str, str] = {
-    "north": "south", "south": "north",
-    "east": "west",  "west": "east",
+    "north": "south",
+    "south": "north",
+    "east": "west",
+    "west": "east",
 }
 
 # Direction keywords for parsing wall constraints from user messages
 _DIR_KEYWORDS: dict[str, str] = {
-    "ทิศเหนือ": "north", "ทิศใต้": "south",
-    "ทิศตะวันออก": "east", "ทิศตะวันตก": "west",
-    "ตะวันออก": "east", "ตะวันตก": "west",
-    "เหนือ": "north", "ใต้": "south",
-    "north": "north", "south": "south",
-    "east": "east", "west": "west",
+    "ทิศเหนือ": "north",
+    "ทิศใต้": "south",
+    "ทิศตะวันออก": "east",
+    "ทิศตะวันตก": "west",
+    "ตะวันออก": "east",
+    "ตะวันตก": "west",
+    "เหนือ": "north",
+    "ใต้": "south",
+    "north": "north",
+    "south": "south",
+    "east": "east",
+    "west": "west",
 }
 
 _DIR_TH: dict[str, str] = {
-    "north": "เหนือ", "south": "ใต้",
-    "east": "ตะวันออก", "west": "ตะวันตก",
+    "north": "เหนือ",
+    "south": "ใต้",
+    "east": "ตะวันออก",
+    "west": "ตะวันตก",
 }
 
 
@@ -136,11 +146,19 @@ class RearrangeAgent:
         raw_doors = room_spec.get("doors") or []
         raw_windows = room_spec.get("windows") or []
         doors = [
-            {"wall": str(d.get("wall", "")).lower(), "offset": float(d.get("offset", 0)), "width": float(d.get("width", 0.9))}
+            {
+                "wall": str(d.get("wall", "")).lower(),
+                "offset": float(d.get("offset", 0)),
+                "width": float(d.get("width", 0.9)),
+            }
             for d in raw_doors
         ]
         windows = [
-            {"wall": str(w.get("wall", "")).lower(), "offset": float(w.get("offset", 0)), "width": float(w.get("width", 1.0))}
+            {
+                "wall": str(w.get("wall", "")).lower(),
+                "offset": float(w.get("offset", 0)),
+                "width": float(w.get("width", 1.0)),
+            }
             for w in raw_windows
         ]
         command_positions = self._build_command_positions(doors)
@@ -168,7 +186,7 @@ class RearrangeAgent:
             dir_th = _DIR_TH.get(wall_dir, wall_dir)
             wall_constraint = (
                 f"CRITICAL USER INSTRUCTION: Place ALL furniture against the {wall_dir.upper()} wall. "
-                f"Every item must have target_wall=\"{wall_dir}\" and offset_from_wall=0.05. "
+                f'Every item must have target_wall="{wall_dir}" and offset_from_wall=0.05. '
                 f"(User said: place everything toward the {dir_th} side.)"
             )
             logger.info(f"RearrangeAgent: injecting wall_constraint={wall_constraint!r}")
@@ -221,7 +239,11 @@ class RearrangeAgent:
         )
 
         # --- 4. Resolve semantic → physical ---
-        placements = llm_response.content.get("placements", []) if isinstance(llm_response.content, dict) else []
+        placements = (
+            llm_response.content.get("placements", [])
+            if isinstance(llm_response.content, dict)
+            else []
+        )
         # Override LLM-reported sizes with actual furniture dimensions from current_layout
         # to prevent furniture from using wrong/hallucinated sizes.
         dims_by_id = {
@@ -294,7 +316,9 @@ class RearrangeAgent:
         for original in current_layout:
             fid = original.get("furniture_id", original.get("id", ""))
             if fid and fid not in placed_ids:
-                logger.warning(f"RearrangeAgent: LLM dropped {fid!r} — restoring to original position")
+                logger.warning(
+                    f"RearrangeAgent: LLM dropped {fid!r} — restoring to original position"
+                )
                 enriched.append(original)
 
         yield SSEEvent(
@@ -338,14 +362,16 @@ class RearrangeAgent:
             fid = item.get("furniture_id") or item.get("id") or ""
             if not fid:
                 continue
-            result.append({
-                "id": fid,
-                "name": item.get("name", fid),
-                "width": float(dims.get("width", 1.0)),
-                "depth": float(dims.get("depth", 1.0)),
-                "height": float(dims.get("height", 1.0)),
-                "is_essential": item.get("is_essential", True),
-            })
+            result.append(
+                {
+                    "id": fid,
+                    "name": item.get("name", fid),
+                    "width": float(dims.get("width", 1.0)),
+                    "depth": float(dims.get("depth", 1.0)),
+                    "height": float(dims.get("height", 1.0)),
+                    "is_essential": item.get("is_essential", True),
+                }
+            )
         return result
 
     @staticmethod
@@ -356,10 +382,12 @@ class RearrangeAgent:
             door_wall = str(door.get("wall", "")).lower()
             command_wall = _OPPOSITE.get(door_wall)
             if command_wall:
-                command_positions.append({
-                    "wall": command_wall,
-                    "reason": f"diagonal from {door_wall} door — command position",
-                })
+                command_positions.append(
+                    {
+                        "wall": command_wall,
+                        "reason": f"diagonal from {door_wall} door — command position",
+                    }
+                )
         return command_positions
 
     @staticmethod
@@ -379,7 +407,11 @@ class RearrangeAgent:
             # dims so that BoxGeometry(w, h, d) + group.rotation gives correct shape.
             # The resolved item's dimensions are post-rotation footprint sizes which
             # would cause wrong rendering when rotation != 0.
-            original_dims = src.get("dimensions") or item.get("dimensions") or {"width": 1.0, "depth": 1.0, "height": 1.0}
+            original_dims = (
+                src.get("dimensions")
+                or item.get("dimensions")
+                or {"width": 1.0, "depth": 1.0, "height": 1.0}
+            )
             enriched: dict[str, Any] = {
                 **item,
                 "name": src.get("name", item.get("name", fid)),
@@ -411,14 +443,33 @@ class RearrangeAgent:
         except ValueError:
             room_type = RoomType.BEDROOM
         doors = []
-        for d in (room_spec.get("doors") or []):
+        for d in room_spec.get("doors") or []:
             with contextlib.suppress(KeyError, ValueError):
-                doors.append(DoorPosition(wall=WallSide(d["wall"]), offset=float(d.get("offset", 0)), width=float(d.get("width", 0.9))))
+                doors.append(
+                    DoorPosition(
+                        wall=WallSide(d["wall"]),
+                        offset=float(d.get("offset", 0)),
+                        width=float(d.get("width", 0.9)),
+                    )
+                )
         windows = []
-        for w in (room_spec.get("windows") or []):
+        for w in room_spec.get("windows") or []:
             with contextlib.suppress(KeyError, ValueError):
-                windows.append(WindowPosition(wall=WallSide(w["wall"]), offset=float(w.get("offset", 0)), width=float(w.get("width", 1.0))))
-        return Room(width=width, depth=depth, height=height, room_type=room_type, doors=doors, windows=windows)
+                windows.append(
+                    WindowPosition(
+                        wall=WallSide(w["wall"]),
+                        offset=float(w.get("offset", 0)),
+                        width=float(w.get("width", 1.0)),
+                    )
+                )
+        return Room(
+            width=width,
+            depth=depth,
+            height=height,
+            room_type=room_type,
+            doors=doors,
+            windows=windows,
+        )
 
     @staticmethod
     def _recheck_collisions(physical: list[dict[str, Any]], room: Room) -> list[dict[str, Any]]:
@@ -439,7 +490,7 @@ class RearrangeAgent:
 
         collisions = []
         for i, a in enumerate(physical):
-            for b in physical[i + 1:]:
+            for b in physical[i + 1 :]:
                 fw_a, fd_a = footprint(a)
                 fw_b, fd_b = footprint(b)
                 box_a = AABB.from_center_and_size(a.get("pos_x", 0), a.get("pos_z", 0), fw_a, fd_a)
@@ -447,7 +498,9 @@ class RearrangeAgent:
                 if box_a.intersects(box_b):
                     id_a = a.get("furniture_id", a.get("id", ""))
                     id_b = b.get("furniture_id", b.get("id", ""))
-                    collisions.append({"furniture_ids": [id_a, id_b], "description": f"{id_a} overlaps {id_b}"})
+                    collisions.append(
+                        {"furniture_ids": [id_a, id_b], "description": f"{id_a} overlaps {id_b}"}
+                    )
         return collisions
 
     async def _generate_explanation(
@@ -466,7 +519,7 @@ class RearrangeAgent:
         prompt = (
             f"You just rearranged ALL {item_count} furniture pieces in a {room_type} "
             f"({width}m × {depth}m) for feng shui.\n"
-            f"User request: \"{modification_request}\"\n"
+            f'User request: "{modification_request}"\n'
             f"Feng shui score: {feng_shui_score}/70\n"
             f"Remaining collisions: {collisions_remaining}\n\n"
             "Write a short confirmation in Thai (60–100 words) that:\n"
@@ -477,14 +530,18 @@ class RearrangeAgent:
             "Write in plain, warm Thai prose only. No JSON, no bullet lists."
         )
         try:
-            response = await self._llm_agent._llm.ainvoke([
-                SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT),
-                HumanMessage(content=prompt),
-            ])
+            response = await self._llm_agent._llm.ainvoke(
+                [
+                    SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
+            )
             return str(response.content).strip()
         except Exception as exc:
             logger.warning(f"RearrangeAgent: explanation LLM call failed: {exc}")
-            score_label = "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
+            score_label = (
+                "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
+            )
             return (
                 f"จัดวางเฟอร์นิเจอร์ทั้งหมดใหม่ตามหลักฮวงจุ้ยเรียบร้อยแล้วค่ะ "
                 f"คะแนนฮวงจุ้ย {feng_shui_score}/70 ({score_label})"

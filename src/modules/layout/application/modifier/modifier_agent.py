@@ -108,8 +108,10 @@ class ModifierAgent:
             f"{len(semantic_placements)} placements total"
         )
         for sp in semantic_placements:
-            logger.debug(f"  semantic: {sp.get('furniture_id')} wall={sp.get('target_wall')} "
-                         f"align={sp.get('alignment')} offset={sp.get('offset_from_wall')}")
+            logger.debug(
+                f"  semantic: {sp.get('furniture_id')} wall={sp.get('target_wall')} "
+                f"align={sp.get('alignment')} offset={sp.get('offset_from_wall')}"
+            )
 
         # --- 2. Re-plan with LLM ---
         # Skip LLM re-plan: resolve the back-converted semantics directly.
@@ -157,9 +159,12 @@ class ModifierAgent:
             return set(re.split(r"[-_\s]+", s.lower()))
 
         target_semantic = next(
-            (s for s in new_semantics
-             if target_type in _tokens(s.get("furniture_id", ""))
-             or target_type in _tokens(s.get("furniture_type", ""))),
+            (
+                s
+                for s in new_semantics
+                if target_type in _tokens(s.get("furniture_id", ""))
+                or target_type in _tokens(s.get("furniture_type", ""))
+            ),
             new_semantics[0] if new_semantics else {},
         )
         dims = room_spec.get("dimensions") or {}
@@ -233,76 +238,119 @@ class ModifierAgent:
             collisions_remaining=collisions_remaining,
         )
         try:
-            response = await self._llm_agent._llm.ainvoke([
-                SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT),
-                HumanMessage(content=prompt),
-            ])
+            response = await self._llm_agent._llm.ainvoke(
+                [
+                    SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
+            )
             return str(response.content).strip()
         except Exception as exc:
             logger.warning(f"ModifierAgent: explanation LLM call failed: {exc}")
             wall_th = {
-                "north": "ผนังด้านเหนือ", "south": "ผนังด้านใต้",
-                "east": "ผนังด้านตะวันออก", "west": "ผนังด้านตะวันตก",
+                "north": "ผนังด้านเหนือ",
+                "south": "ผนังด้านใต้",
+                "east": "ผนังด้านตะวันออก",
+                "west": "ผนังด้านตะวันตก",
                 "center": "กลางห้อง",
             }.get(new_wall, new_wall)
             return f"ขยับ{target_furniture}ไปที่{wall_th}แล้วค่ะ ตามหลักฮ้วงจุ้ยตำแหน่งนี้เหมาะสมกับห้องนี้"
 
     _OPPOSITE: dict[str, str] = {
-        "north": "south", "south": "north",
-        "east": "west", "west": "east",
+        "north": "south",
+        "south": "north",
+        "east": "west",
+        "west": "east",
     }
 
     # Direction keywords: keyword → compass direction name
     # Longer keywords must come before shorter ones so find() matches the right position.
     _DIR_KEYWORDS: dict[str, str] = {
         # Thai — long forms first
-        "ทิศเหนือ": "north", "ทิศใต้": "south",
-        "ทิศตะวันออก": "east", "ทิศตะวันตก": "west",
-        "ตะวันออก": "east", "ตะวันตก": "west",
+        "ทิศเหนือ": "north",
+        "ทิศใต้": "south",
+        "ทิศตะวันออก": "east",
+        "ทิศตะวันตก": "west",
+        "ตะวันออก": "east",
+        "ตะวันตก": "west",
         # Thai short-form colloquial (กำแพงออก = east wall, กำแพงตก = west wall)
-        "เหนือ": "north", "ใต้": "south",
-        "ทิศออก": "east", "ทิศตก": "west",
+        "เหนือ": "north",
+        "ใต้": "south",
+        "ทิศออก": "east",
+        "ทิศตก": "west",
         # "ออก"/"ตก" alone — must NOT shadow Thai words ending in these syllables,
         # so we use the prefix " ออก"/" ตก" (with space) to avoid false matches.
         # These are added AFTER longer keywords to serve as fallback only.
-        "กำแพงออก": "east", "กำแพงตก": "west",
-        "ผนังออก": "east", "ผนังตก": "west",
-        "กลางห้อง": "center", "กลาง": "center",
+        "กำแพงออก": "east",
+        "กำแพงตก": "west",
+        "ผนังออก": "east",
+        "ผนังตก": "west",
+        "กลางห้อง": "center",
+        "กลาง": "center",
         # English
-        "north": "north", "south": "south",
-        "east": "east", "west": "west",
-        "center": "center", "centre": "center", "middle": "center",
+        "north": "north",
+        "south": "south",
+        "east": "east",
+        "west": "west",
+        "center": "center",
+        "centre": "center",
+        "middle": "center",
     }
 
     # Explicit alignment keywords in hint → override alignment directly
     _ALIGNMENT_KEYWORDS: dict[str, str] = {
         # Thai
-        "มุมขวา": "right", "ด้านขวา": "right", "ขวา": "right",
-        "มุมซ้าย": "left",  "ด้านซ้าย": "left",  "ซ้าย": "left",
-        "ตรงกลาง": "center", "กึ่งกลาง": "center",
+        "มุมขวา": "right",
+        "ด้านขวา": "right",
+        "ขวา": "right",
+        "มุมซ้าย": "left",
+        "ด้านซ้าย": "left",
+        "ซ้าย": "left",
+        "ตรงกลาง": "center",
+        "กึ่งกลาง": "center",
         # English
-        "right corner": "right", "left corner": "left",
-        "right side": "right",   "left side": "left",
-        "right end": "right",    "left end": "left",
+        "right corner": "right",
+        "left corner": "left",
+        "right side": "right",
+        "left side": "left",
+        "right end": "right",
+        "left end": "left",
     }
 
     # "head/headboard points/faces toward X" patterns — direction is a facing, not a wall
     _HEAD_TOWARD_PATTERNS = (
         # Thai
-        "หันหัว", "หันหน้า", "หัวเตียง", "หัวหมอน", "หัวนอน",
-        "นอนหัน", "วางหัว",
+        "หันหัว",
+        "หันหน้า",
+        "หัวเตียง",
+        "หัวหมอน",
+        "หัวนอน",
+        "นอนหัน",
+        "วางหัว",
         # English
-        "head toward", "head facing", "headboard toward", "headboard facing",
-        "sleep facing", "facing",
+        "head toward",
+        "head facing",
+        "headboard toward",
+        "headboard facing",
+        "sleep facing",
+        "facing",
     )
 
     # "place/move against X wall" patterns — direction is a wall position
     _AGAINST_WALL_PATTERNS = (
         # Thai
-        "ชิดกำแพง", "ติดกำแพง", "ชิดผนัง", "ติดผนัง",
-        "ย้ายไปที่", "ย้ายไปทาง", "ไปที่กำแพง",
+        "ชิดกำแพง",
+        "ติดกำแพง",
+        "ชิดผนัง",
+        "ติดผนัง",
+        "ย้ายไปที่",
+        "ย้ายไปทาง",
+        "ไปที่กำแพง",
         # English
-        "against", "move to", "push to", "place at",
+        "against",
+        "move to",
+        "push to",
+        "place at",
     )
 
     # Corner alignment: primary wall + secondary wall → alignment along primary wall.
@@ -314,35 +362,50 @@ class ModifierAgent:
     #   "left"  = x=0          = WEST end
     #   "right" = x=width-size = EAST end
     _CORNER_ALIGNMENT: dict[tuple[str, str], str] = {
-        ("north", "west"): "left",   ("north", "east"): "right",
-        ("south", "west"): "left",   ("south", "east"): "right",
-        ("east",  "north"): "right", ("east",  "south"): "left",
-        ("west",  "north"): "right", ("west",  "south"): "left",
+        ("north", "west"): "left",
+        ("north", "east"): "right",
+        ("south", "west"): "left",
+        ("south", "east"): "right",
+        ("east", "north"): "right",
+        ("east", "south"): "left",
+        ("west", "north"): "right",
+        ("west", "south"): "left",
     }
 
     # Keywords that reference a door or window → derive wall from room_spec
     _DOOR_KEYWORDS = (
-        "ประตู", "ทางเข้า", "ทางออก", "ประตูห้อง",
-        "door", "entrance", "entry",
+        "ประตู",
+        "ทางเข้า",
+        "ทางออก",
+        "ประตูห้อง",
+        "door",
+        "entrance",
+        "entry",
     )
     # "Block the doorway" keywords → place on OPPOSITE wall, aligned with door centre
     # These must be checked BEFORE _DOOR_KEYWORDS to take priority.
     # Any of these substrings in the hint triggers "place across from door" logic.
     _BLOCK_DOOR_KEYWORDS = (
-        "ขวางประตู", "ขวางทางประตู", "ขวางทางเข้า", "ขวางหน้าประตู",
+        "ขวางประตู",
+        "ขวางทางประตู",
+        "ขวางทางเข้า",
+        "ขวางหน้าประตู",
         "ขวางทาง",
-        "block door", "block the door", "block doorway", "block entrance",
-        "across from door", "opposite the door",
+        "block door",
+        "block the door",
+        "block doorway",
+        "block entrance",
+        "across from door",
+        "opposite the door",
     )
     _WINDOW_KEYWORDS = (
-        "หน้าต่าง", "ช่องแสง",
+        "หน้าต่าง",
+        "ช่องแสง",
         "window",
     )
 
     @classmethod
-    def _parse_wall_and_facing(
-        cls, hint: str
-    ) -> tuple[str | None, str | None, str | None]:
+    def _parse_wall_and_facing(cls, hint: str) -> tuple[str | None, str | None, str | None]:
         """Parse (target_wall, facing, alignment_override) from a modification hint.
 
         Cases:
@@ -379,7 +442,7 @@ class ModifierAgent:
             return None, None, alignment_override
 
         has_against = any(pat in lower for pat in cls._AGAINST_WALL_PATTERNS)
-        has_head    = any(pat in lower for pat in cls._HEAD_TOWARD_PATTERNS)
+        has_head = any(pat in lower for pat in cls._HEAD_TOWARD_PATTERNS)
 
         if len(dirs) >= 2:
             if dirs[0] == "center":
@@ -400,7 +463,7 @@ class ModifierAgent:
             else:
                 # Two directions, no head pattern → corner placement
                 wall_dir = dirs[0]
-                sec_dir  = dirs[1]
+                sec_dir = dirs[1]
                 # If explicit alignment keyword (ขวา/ซ้าย) was found, use it;
                 # otherwise derive from the two wall directions.
                 if alignment_override is None:
@@ -424,9 +487,17 @@ class ModifierAgent:
 
     # Feng shui / abstract move keywords (no specific wall implied)
     _FENG_SHUI_KEYWORDS = (
-        "ฮ้วงจุ้ย", "feng shui", "fengshui", "หลักฮ้วงจุ้ย",
-        "command position", "ตำแหน่งผู้บัญชาการ", "ตำแหน่งบัญชาการ",
-        "ถูกหลัก", "ตามหลัก", "ที่เหมาะสม", "optimal",
+        "ฮ้วงจุ้ย",
+        "feng shui",
+        "fengshui",
+        "หลักฮ้วงจุ้ย",
+        "command position",
+        "ตำแหน่งผู้บัญชาการ",
+        "ตำแหน่งบัญชาการ",
+        "ถูกหลัก",
+        "ตามหลัก",
+        "ที่เหมาะสม",
+        "optimal",
     )
 
     @classmethod
@@ -468,7 +539,9 @@ class ModifierAgent:
     @classmethod
     def _get_window_wall(cls, room_spec: dict[str, Any]) -> str | None:
         """Return the wall that has the primary window."""
-        windows = room_spec.get("windows") or (room_spec.get("dimensions") or {}).get("windows") or []
+        windows = (
+            room_spec.get("windows") or (room_spec.get("dimensions") or {}).get("windows") or []
+        )
         if not windows:
             return None
         return str(windows[0].get("wall", "")).lower() or None
@@ -487,8 +560,8 @@ class ModifierAgent:
         For the target item, override target_wall and/or facing based on the
         modification hint so LayoutResolver repositions and reorients it correctly.
         """
-        target_wall_override, facing_override, alignment_override = (
-            self._parse_wall_and_facing(modification_hint)
+        target_wall_override, facing_override, alignment_override = self._parse_wall_and_facing(
+            modification_hint
         )
 
         lower_hint = modification_hint.lower()
@@ -509,9 +582,7 @@ class ModifierAgent:
                 if door_wall:
                     target_wall_override = self._OPPOSITE.get(door_wall, door_wall)
                     if alignment_override is None:
-                        alignment_override = self._get_door_alignment(
-                            room_spec, room_w, room_d
-                        )
+                        alignment_override = self._get_door_alignment(room_spec, room_w, room_d)
                     logger.info(
                         f"ModifierAgent: block-door — opposite wall={target_wall_override!r} "
                         f"alignment={alignment_override!r}"
@@ -521,9 +592,7 @@ class ModifierAgent:
                 if door_wall:
                     target_wall_override = door_wall
                     if alignment_override is None:
-                        alignment_override = self._get_door_alignment(
-                            room_spec, room_w, room_d
-                        )
+                        alignment_override = self._get_door_alignment(room_spec, room_w, room_d)
                     logger.info(
                         f"ModifierAgent: door reference — wall={target_wall_override!r} "
                         f"alignment={alignment_override!r}"
@@ -532,9 +601,7 @@ class ModifierAgent:
                 win_wall = self._get_window_wall(room_spec)
                 if win_wall:
                     target_wall_override = win_wall
-                    logger.info(
-                        f"ModifierAgent: window reference — wall={target_wall_override!r}"
-                    )
+                    logger.info(f"ModifierAgent: window reference — wall={target_wall_override!r}")
 
         # Fallback: abstract feng shui request → infer command wall from doors
         if target_wall_override is None and room_spec:
@@ -660,11 +727,14 @@ class ModifierAgent:
                 item["pos_x"] = round(new_x, 3)
                 # Also clamp Z within room
                 cur_z = item.get("pos_z", 0.0)
-                item["pos_z"] = round(max(-half_d + d / 2 + 0.05, min(cur_z, half_d - d / 2 - 0.05)), 3)
+                item["pos_z"] = round(
+                    max(-half_d + d / 2 + 0.05, min(cur_z, half_d - d / 2 - 0.05)), 3
+                )
             updated.append(item)
 
         # Re-check collisions (centre-based AABB overlap)
         from src.modules.layout.infrastructure.geometry.collision import AABB  # noqa: PLC0415
+
         remaining: list[dict[str, Any]] = []
         for c in collisions:
             ids = c.get("furniture_ids", [])
