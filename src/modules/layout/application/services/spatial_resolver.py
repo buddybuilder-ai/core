@@ -158,14 +158,14 @@ class SpatialResolver:
         zones: list[AABB] = []
         c = self._DOOR_CLEARANCE
         # Door width assumed ~0.9 m; clearance rectangle extends inward from the door wall
+        # Clearance starts slightly inward from the wall so that furniture
+        # hugging the same wall is not considered to block the door.
+        _MIN_GAP = 0.15
         for door in room.doors:
             wall = str(getattr(door, "wall", "")).lower()
             # Estimate door x/z position from offset (DoorPosition uses .offset field)
             offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
-            # Clearance starts slightly inward from the wall (MIN_GAP) so that
-            # furniture hugging the same wall is not considered to block the door.
-            _MIN_GAP = 0.15
             if wall == "south":
                 x0 = max(0.0, offset - 0.1)
                 x1 = min(room.width, offset + door_w + 0.1)
