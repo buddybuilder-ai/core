@@ -129,7 +129,7 @@ class LayoutGeneratorStep(BaseStep):
         if rel_hints:
             logger.info(f"   {len(rel_hints)} furniture relationship hints generated")
             rel_hints_str = "\n".join(f"- {h}" for h in rel_hints)
-            merged_prefs: dict[str, Any] | None = dict(user_prefs) if user_prefs else {}
+            merged_prefs: dict[str, Any] = dict(user_prefs) if user_prefs else {}
             merged_prefs["furniture_relationships"] = (
                 "IMPORTANT — spatial relationships between items (MUST follow these):\n"
                 + rel_hints_str
