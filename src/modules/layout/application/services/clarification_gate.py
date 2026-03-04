@@ -11,6 +11,8 @@ Intents that bypass the gate (layout context already known):
 
 from __future__ import annotations
 
+from typing import Any
+
 from src.modules.layout.infrastructure.tools.user_clarifier_tool import (
     QuestionPriority,
     UserClarifierTool,
@@ -29,7 +31,7 @@ def get_pending_questions(
     intent: str,
     clarification_answers: dict[str, str],
     has_existing_layout: bool = False,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return serialised pending ClarificationQuestion dicts, or [] if none needed.
 
     Asks REQUIRED questions first; only after all REQUIRED are answered will

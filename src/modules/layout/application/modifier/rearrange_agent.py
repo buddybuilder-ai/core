@@ -198,7 +198,7 @@ class RearrangeAgent:
         if wall_constraint:
             hard_constraints += f"\n{wall_constraint}"
 
-        user_prefs: dict = {
+        user_prefs: dict[str, Any] = {
             "user_message": modification_request,
             "owned_furniture": owned_ids_str,
             "placement_constraints": hard_constraints,
