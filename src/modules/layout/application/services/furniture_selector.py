@@ -10,8 +10,8 @@ from src.modules.layout.application.dtos import (
     UserPreferences,
 )
 from src.modules.layout.infrastructure.tools import (
-    BudgetLevel,
     FURNITURE_CATALOG,
+    BudgetLevel,
     FurnitureCategory,
     FurnitureSearchInput,
     FurnitureSearchResult,

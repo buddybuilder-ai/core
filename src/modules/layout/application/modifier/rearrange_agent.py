@@ -9,8 +9,8 @@ No catalog selection — every item that was in current_layout comes back.
 
 from __future__ import annotations
 
+import contextlib
 import logging
-import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -21,15 +21,15 @@ from src.modules.layout.application.pipeline.models import (
     SSEEventType,
 )
 from src.modules.layout.application.pipeline.steps.step4_repair import RepairStep
+from src.modules.layout.application.services.furniture_relationships import (
+    build_relationship_hints,
+)
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
 from src.modules.layout.infrastructure.llm.langchain_agent import (
     FengShuiLLMAgent,
     LLMConfig,
-)
-from src.modules.layout.application.services.furniture_relationships import (
-    build_relationship_hints,
 )
 from src.modules.layout.infrastructure.llm.prompts import FENG_SHUI_SYSTEM_PROMPT
 
@@ -412,16 +412,12 @@ class RearrangeAgent:
             room_type = RoomType.BEDROOM
         doors = []
         for d in (room_spec.get("doors") or []):
-            try:
+            with contextlib.suppress(KeyError, ValueError):
                 doors.append(DoorPosition(wall=WallSide(d["wall"]), offset=float(d.get("offset", 0)), width=float(d.get("width", 0.9))))
-            except (KeyError, ValueError):
-                pass
         windows = []
         for w in (room_spec.get("windows") or []):
-            try:
+            with contextlib.suppress(KeyError, ValueError):
                 windows.append(WindowPosition(wall=WallSide(w["wall"]), offset=float(w.get("offset", 0)), width=float(w.get("width", 1.0))))
-            except (KeyError, ValueError):
-                pass
         return Room(width=width, depth=depth, height=height, room_type=room_type, doors=doors, windows=windows)
 
     @staticmethod
