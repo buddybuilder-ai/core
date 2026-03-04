@@ -236,22 +236,25 @@ class SpatialResolver:
         d = item.bbox.max_z - item.bbox.min_z
         _door_zones = door_zones or []
 
-        def overlaps_any(x: float, z: float) -> bool:
-            box = AABB.from_position_and_size(x, z, w, d)
-            if any(box.intersects(p.bbox) for p in placed):
-                return True
-            # Don't block door clearance zones
-            return any(box.intersects(dz) for dz in _door_zones)
-
-        if not overlaps_any(item.x, item.z):
-            return item  # already clear
-
         # Detect which wall(s) the item is hugging (within 0.1 m tolerance)
         _WALL_TOL = 0.1
         on_south = item.z <= _WALL_TOL
         on_north = item.z >= room.depth - d - _WALL_TOL
         on_west = item.x <= _WALL_TOL
         on_east = item.x >= room.width - w - _WALL_TOL
+
+        def overlaps_any(x: float, z: float) -> bool:
+            box = AABB.from_position_and_size(x, z, w, d)
+            if any(box.intersects(p.bbox) for p in placed):
+                return True
+            # Furniture hugging a wall is allowed to sit in front of a door on
+            # that same wall — only floating/inward items must clear door zones.
+            if on_south or on_north or on_west or on_east:
+                return False
+            return any(box.intersects(dz) for dz in _door_zones)
+
+        if not overlaps_any(item.x, item.z):
+            return item  # already clear
 
         # For wall-hugging items: slide ALONG the wall first, then push inward.
         # For floating/center items: try all directions toward room centre.
