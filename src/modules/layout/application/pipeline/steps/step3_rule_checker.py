@@ -297,7 +297,12 @@ class RuleCheckerStep(BaseStep):
 
     @staticmethod
     def _footprint(dims: dict[str, Any], rotation: int) -> tuple[float, float]:
-        """Return (fw, fd) footprint after rotation. dims are pre-rotation."""
+        """Return (fw, fd) footprint extents along X and Z in room space.
+
+        _physical_to_dict stores pre-rotation dimensions (for Three.js BoxGeometry)
+        and swaps width/depth back for 90/270° so rendering is correct. We swap
+        again here to recover the actual room footprint extents.
+        """
         w = dims.get("width", 1.0)
         d = dims.get("depth", 1.0)
         if rotation % 360 in (90, 270):

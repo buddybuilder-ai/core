@@ -555,10 +555,11 @@ class ModifierAgent:
         for i, item in enumerate(layout):
             fw = item.get("dimensions", {}).get("width", 1.0)
             fd = item.get("dimensions", {}).get("depth", 1.0)
-            # current_layout pos_x/pos_z are centre-based (frontend coordinate system).
-            # _convert_xyz_to_semantic expects corner-based (SW origin).
-            corner_x = item.get("pos_x", 0.0) + room_w / 2 - fw / 2
-            corner_z = item.get("pos_z", 0.0) + room_d / 2 - fd / 2
+            # current_layout pos_x/pos_z are centre-based (room-centre origin).
+            # _convert_xyz_to_semantic expects corner-based (SW origin, x=0 = west wall).
+            # Conversion: corner = centre + room_half  (furniture left/bottom edge)
+            corner_x = item.get("pos_x", 0.0) + room_w / 2
+            corner_z = item.get("pos_z", 0.0) + room_d / 2
             semantic = self._llm_agent._convert_xyz_to_semantic(
                 {
                     "furniture_id": item.get("furniture_id", item.get("id", f"item_{i}")),
@@ -603,6 +604,8 @@ class ModifierAgent:
                     semantic["facing"] = facing_override
                 if alignment_override:
                     semantic["alignment"] = alignment_override
+                # Place the target first so other items bump around it.
+                semantic["priority"] = 0
                 logger.info(
                     f"ModifierAgent: overriding target → wall={semantic.get('target_wall')!r} "
                     f"facing={semantic.get('facing')!r} align={semantic.get('alignment')!r}"
@@ -617,29 +620,51 @@ class ModifierAgent:
         room_w: float,
         room_d: float,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Nudge items involved in collisions by _NUDGE_DISTANCE along x-axis.
+        """Nudge non-target items away from the target (priority=0) to resolve collisions.
 
-        This is a best-effort single-axis shift — the full SpatialResolver
-        handles proper placement; this is only a fallback repair.
+        The target item (priority=0) holds its position; colliding neighbours
+        are shifted along X then Z until they no longer overlap.
         """
-        colliding_ids: set[str] = set()
+        # The moved target has priority=0; never nudge it — nudge bystanders instead.
+        target_ids: set[str] = {
+            item.get("furniture_id", item.get("id", ""))
+            for item in physical
+            if item.get("priority", 99) == 0
+        }
+
+        # Build set of non-target ids involved in any collision
+        to_nudge: set[str] = set()
         for c in collisions:
             for fid in c.get("furniture_ids", []):
-                colliding_ids.add(fid)
+                if fid not in target_ids:
+                    to_nudge.add(fid)
+        # Fallback: if all colliding ids are target, nudge all
+        if not to_nudge:
+            for c in collisions:
+                for fid in c.get("furniture_ids", []):
+                    to_nudge.add(fid)
+
+        half_w = room_w / 2
+        half_d = room_d / 2
 
         updated = []
         for item in physical:
             fid = item.get("furniture_id", item.get("id", ""))
-            if fid in colliding_ids:
+            if fid in to_nudge:
                 item = dict(item)
                 w = item.get("dimensions", {}).get("width", 1.0)
-                # pos_x is centre-based: valid range is [-room_w/2 + w/2, room_w/2 - w/2]
-                half_room = room_w / 2
-                new_x = min(item.get("pos_x", 0.0) + _NUDGE_DISTANCE, half_room - w / 2 - 0.05)
-                item["pos_x"] = round(max(-half_room + w / 2 + 0.05, new_x), 3)
+                d = item.get("dimensions", {}).get("depth", 1.0)
+                # Try nudging along X first, then Z
+                new_x = min(item.get("pos_x", 0.0) + _NUDGE_DISTANCE, half_w - w / 2 - 0.05)
+                new_x = max(-half_w + w / 2 + 0.05, new_x)
+                item["pos_x"] = round(new_x, 3)
+                # Also clamp Z within room
+                cur_z = item.get("pos_z", 0.0)
+                item["pos_z"] = round(max(-half_d + d / 2 + 0.05, min(cur_z, half_d - d / 2 - 0.05)), 3)
             updated.append(item)
 
-        # Re-check collisions naively (overlap on x-axis only)
+        # Re-check collisions (centre-based AABB overlap)
+        from src.modules.layout.infrastructure.geometry.collision import AABB  # noqa: PLC0415
         remaining: list[dict[str, Any]] = []
         for c in collisions:
             ids = c.get("furniture_ids", [])
@@ -648,8 +673,12 @@ class ModifierAgent:
                 b = next((i for i in updated if i.get("furniture_id") == ids[1]), None)
                 if a and b:
                     aw = a.get("dimensions", {}).get("width", 1.0)
+                    ad = a.get("dimensions", {}).get("depth", 1.0)
                     bw = b.get("dimensions", {}).get("width", 1.0)
-                    if abs(a["pos_x"] - b["pos_x"]) < (aw + bw) / 2:
+                    bd = b.get("dimensions", {}).get("depth", 1.0)
+                    box_a = AABB.from_center_and_size(a.get("pos_x", 0), a.get("pos_z", 0), aw, ad)
+                    box_b = AABB.from_center_and_size(b.get("pos_x", 0), b.get("pos_z", 0), bw, bd)
+                    if box_a.intersects(box_b):
                         remaining.append(c)
 
         return updated, remaining

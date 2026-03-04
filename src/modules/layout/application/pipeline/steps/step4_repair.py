@@ -152,11 +152,11 @@ class RepairStep(BaseStep):
 
     @staticmethod
     def _footprint_wh(dims: dict[str, Any], rotation: int) -> tuple[float, float]:
-        """Return (footprint_x, footprint_z) for a furniture item after rotation.
+        """Return (footprint_x, footprint_z) in room space for a furniture item.
 
-        dims.width / dims.depth are pre-rotation (original) dimensions.
-        For rotations 0°/180° footprint = (width, depth).
-        For rotations 90°/270° footprint = (depth, width).
+        _physical_to_dict stores pre-rotation dimensions (for Three.js BoxGeometry)
+        and swaps width/depth back for 90/270° so rendering is correct. We swap
+        again here to recover the actual room footprint extents.
         """
         w = dims.get("width", 1.0)
         d = dims.get("depth", 1.0)
@@ -260,11 +260,15 @@ class RepairStep(BaseStep):
         half_w = room.width / 2
         half_d = room.depth / 2
 
+        dims = target.get("dimensions", {})
+
         for new_rotation in [90, 180, 270, 0]:
             if new_rotation == original_rotation:
                 continue
 
-            fw, fd = self._footprint_wh(target.get("dimensions", {}), new_rotation)
+            # _footprint_wh treats stored dims as pre-rotation (Three.js) and
+            # swaps for 90/270° to get room-space extents.
+            fw, fd = self._footprint_wh(dims, new_rotation)
 
             # Bounds check (centre-based)
             if pos_x - fw / 2 < -half_w or pos_x + fw / 2 > half_w:
@@ -289,6 +293,7 @@ class RepairStep(BaseStep):
 
             if not has_collision:
                 target["rotation"] = new_rotation
+                # dimensions stay as pre-rotation (Three.js) — only rotation changes
                 return RepairAction(
                     action_type=RepairActionType.ROTATE,
                     conflict_id=conflict.id,

@@ -10,6 +10,7 @@ No catalog selection — every item that was in current_layout comes back.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -38,6 +39,35 @@ _OPPOSITE: dict[str, str] = {
     "north": "south", "south": "north",
     "east": "west",  "west": "east",
 }
+
+# Direction keywords for parsing wall constraints from user messages
+_DIR_KEYWORDS: dict[str, str] = {
+    "ทิศเหนือ": "north", "ทิศใต้": "south",
+    "ทิศตะวันออก": "east", "ทิศตะวันตก": "west",
+    "ตะวันออก": "east", "ตะวันตก": "west",
+    "เหนือ": "north", "ใต้": "south",
+    "north": "north", "south": "south",
+    "east": "east", "west": "west",
+}
+
+_DIR_TH: dict[str, str] = {
+    "north": "เหนือ", "south": "ใต้",
+    "east": "ตะวันออก", "west": "ตะวันตก",
+}
+
+
+def _parse_wall_direction(text: str) -> str | None:
+    """Extract a compass wall direction from free text. Returns None if not found."""
+    lower = text.lower()
+    found: list[tuple[int, str]] = []
+    for kw, direction in _DIR_KEYWORDS.items():
+        idx = lower.find(kw)
+        if idx != -1:
+            found.append((idx, direction))
+    if not found:
+        return None
+    found.sort()
+    return found[0][1]
 
 
 class RearrangeAgent:
@@ -129,13 +159,31 @@ class RearrangeAgent:
         rel_hints_str = "\n".join(f"- {h}" for h in rel_hints) if rel_hints else ""
         logger.info(f"RearrangeAgent: {len(rel_hints)} relationship hints generated")
 
+        # Detect explicit wall direction in user message (e.g. "ไปฝั่งเหนือทั้งหมด")
+        wall_dir = _parse_wall_direction(modification_request)
+        logger.info(f"RearrangeAgent: parsed wall_dir={wall_dir!r} from {modification_request!r}")
+
+        wall_constraint = ""
+        if wall_dir:
+            dir_th = _DIR_TH.get(wall_dir, wall_dir)
+            wall_constraint = (
+                f"CRITICAL USER INSTRUCTION: Place ALL furniture against the {wall_dir.upper()} wall. "
+                f"Every item must have target_wall=\"{wall_dir}\" and offset_from_wall=0.05. "
+                f"(User said: place everything toward the {dir_th} side.)"
+            )
+            logger.info(f"RearrangeAgent: injecting wall_constraint={wall_constraint!r}")
+
+        hard_constraints = (
+            f"Place ONLY these exact furniture IDs: [{owned_ids_str}]. "
+            "Do NOT add, rename, or invent any furniture not in this list."
+        )
+        if wall_constraint:
+            hard_constraints += f"\n{wall_constraint}"
+
         user_prefs: dict = {
             "user_message": modification_request,
             "owned_furniture": owned_ids_str,
-            "constraint": (
-                f"Place ONLY these exact furniture IDs: [{owned_ids_str}]. "
-                "Do NOT add, rename, or invent any furniture not in this list."
-            ),
+            "placement_constraints": hard_constraints,
         }
         if rel_hints_str:
             user_prefs["furniture_relationships"] = (
@@ -181,7 +229,9 @@ class RearrangeAgent:
             for item in current_layout
         }
         corrected_placements = []
-        for p in placements:
+        # Alignments to distribute items along the wall when packing everything there
+        _pack_alignments = ["left", "center", "right", "left", "center", "right"]
+        for idx, p in enumerate(placements):
             fid = p.get("furniture_id", "")
             real_dims = dims_by_id.get(fid) or {}
             w = real_dims.get("width") or real_dims.get("w")
@@ -195,6 +245,13 @@ class RearrangeAgent:
                     "l": float(d or w),
                     "h": float(h or 1.0),
                 }
+            # If user explicitly requested a wall direction, force it on every item
+            if wall_dir:
+                p = dict(p)
+                p["target_wall"] = wall_dir
+                p["offset_from_wall"] = 0.05
+                # Distribute alignments to avoid LLM putting everything at "center"
+                p["alignment"] = _pack_alignments[idx % len(_pack_alignments)]
             corrected_placements.append(p)
         resolution = self._resolver.resolve(corrected_placements, room_spec)
 
@@ -373,11 +430,16 @@ class RearrangeAgent:
         from src.modules.layout.infrastructure.geometry import AABB
 
         def footprint(item: dict[str, Any]) -> tuple[float, float]:
-            # dimensions.width/depth are already the post-rotation footprint extents
-            # (_physical_to_dict swaps them for rot 90/270 so Three.js BoxGeometry
-            # renders correctly).  No additional swap needed here.
+            # dimensions store pre-rotation values (for Three.js BoxGeometry).
+            # _physical_to_dict swaps width/depth for 90/270° so rendering is correct.
+            # We swap again here to get actual room-space footprint extents.
             dims = item.get("dimensions", {})
-            return float(dims.get("width", 1.0)), float(dims.get("depth", 1.0))
+            w = float(dims.get("width", 1.0))
+            d = float(dims.get("depth", 1.0))
+            rot = item.get("rotation", 0)
+            if rot % 360 in (90, 270):
+                return d, w
+            return w, d
 
         collisions = []
         for i, a in enumerate(physical):

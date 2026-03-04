@@ -96,11 +96,12 @@ class RoomSpec:
 
 
 # Rotation assigned to furniture placed against each wall so it faces inward.
+# Three.js Y=0° → faces -Z (north); Y=180° → faces +Z (south).
 _WALL_ROTATION: dict[str, int] = {
-    "south": 180,  # south wall → faces north
-    "north": 0,  # north wall → faces south
-    "west": 90,  # west wall → faces east
-    "east": 270,  # east wall → faces west
+    "south": 0,    # south wall → faces north (Y=0° → -Z)
+    "north": 180,  # north wall → faces south (Y=180° → +Z)
+    "west": 90,    # west wall → faces east  (Y=90° → +X)
+    "east": 270,   # east wall → faces west  (Y=270° → -X)
 }
 
 # Opposite of each wall — used for auto-facing "must face inward"
@@ -120,14 +121,17 @@ _FORCE_INWARD_TYPES: frozenset[str] = frozenset({
 })
 
 # Rotation to apply when the LLM specifies which direction the front/seat faces.
-# Three.js Y-rotation: 0° → front faces +Z (south in scene).
-# facing="south" means front points toward south (+Z) → rotation=0.
-# facing="north" means front points toward north (-Z) → rotation=180.
+# Three.js Y-rotation is CCW from above (right-hand rule).
+# Frontend coordinate: south wall = +Z, north wall = -Z, east = +X, west = -X.
+#   Y=0°   → model front faces -Z = north
+#   Y=180° → model front faces +Z = south
+#   Y=90°  → model front faces +X = east
+#   Y=270° → model front faces -X = west
 _FACING_ROTATION: dict[str, int] = {
-    "south": 0,    # front faces +Z (toward south wall)
-    "north": 180,  # front faces -Z (toward north wall)
-    "west": 90,    # front faces -X (toward west wall)
-    "east": 270,   # front faces +X (toward east wall)
+    "south": 180,  # front faces +Z (toward south wall)  Y=180° → +Z
+    "north": 0,    # front faces -Z (toward north wall)  Y=0°   → -Z
+    "east": 90,    # front faces +X (toward east wall)   Y=90°  → +X
+    "west": 270,   # front faces -X (toward west wall)   Y=270° → -X
 }
 
 
