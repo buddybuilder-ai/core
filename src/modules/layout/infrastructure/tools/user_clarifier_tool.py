@@ -177,123 +177,59 @@ class UserClarifierTool(BaseTool[ClarifierInput, ClarifierOutput]):
     - Tracks which questions still need answers
     """
 
-    # Predefined questions for common scenarios
+    # Predefined questions for studio apartment layout
+    # All questions are category="studio_apartment" so they fire for this room type.
+    # Questions are shown in priority order: REQUIRED first, then RECOMMENDED.
     PREDEFINED_QUESTIONS: dict[str, ClarificationQuestion] = {
-        "bed_position_preference": ClarificationQuestion(
-            id="bed_position_preference",
-            question="Where would you prefer the bed to be placed?",
+        # --- REQUIRED -------------------------------------------------------
+        "sleep_zone_preference": ClarificationQuestion(
+            id="sleep_zone_preference",
+            question="โซนนอนควรอยู่ส่วนไหนของห้อง?",
             question_type=QuestionType.MULTIPLE_CHOICE,
-            priority=QuestionPriority.RECOMMENDED,
+            priority=QuestionPriority.REQUIRED,
             options=(
-                "Command position (diagonal from door)",
-                "Against the wall",
-                "Near the window",
-                "No preference",
+                "ผนังด้านตรงข้ามประตู (ตำแหน่งผู้บัญชาการ)",
+                "ผนังด้านซ้ายของประตู",
+                "ผนังด้านขวาของประตู",
+                "ไม่มีความชอบพิเศษ",
             ),
-            default_value="Command position (diagonal from door)",
-            context="The command position is optimal for feng shui",
-            category="bedroom",
+            default_value="ผนังด้านตรงข้ามประตู (ตำแหน่งผู้บัญชาการ)",
+            context="ตำแหน่งผู้บัญชาการคือมองเห็นประตูโดยไม่ตรงแนวประตู เหมาะกับฮ้วงจุ้ยที่สุด",
+            category="studio_apartment",
         ),
-        "desk_facing_preference": ClarificationQuestion(
-            id="desk_facing_preference",
-            question="Which direction should the desk face?",
+        # --- RECOMMENDED ----------------------------------------------------
+        "work_area_needed": ClarificationQuestion(
+            id="work_area_needed",
+            question="ต้องการโซนทำงาน (โต๊ะ/เก้าอี้) ในห้องด้วยไหม?",
+            question_type=QuestionType.YES_NO,
+            priority=QuestionPriority.RECOMMENDED,
+            default_value="yes",
+            context="ถ้าต้องการจะจัดวางโต๊ะพับหรือโต๊ะขนาดกะทัดรัดเข้าไปด้วย",
+            category="studio_apartment",
+        ),
+        "sofa_bed_or_separate": ClarificationQuestion(
+            id="sofa_bed_or_separate",
+            question="ต้องการเตียงแยกหรือโซฟาเตียง (sofa bed)?",
             question_type=QuestionType.MULTIPLE_CHOICE,
             priority=QuestionPriority.RECOMMENDED,
             options=(
-                "Facing the door",
-                "Facing the window",
-                "Facing a wall",
-                "No preference",
+                "โซฟาเตียง (ประหยัดพื้นที่)",
+                "เตียงแยก + โซฟาแยก",
+                "เตียงเดี่ยว (ไม่ต้องการโซฟา)",
             ),
-            default_value="Facing the door",
-            context="Facing the door allows you to see who enters",
-            category="office",
+            default_value="โซฟาเตียง (ประหยัดพื้นที่)",
+            context="ส่งผลต่อการจัดวางโซนนอนและโซนนั่งเล่น",
+            category="studio_apartment",
         ),
         "budget_level": ClarificationQuestion(
             id="budget_level",
-            question="What is your budget level for furniture?",
-            question_type=QuestionType.MULTIPLE_CHOICE,
-            priority=QuestionPriority.OPTIONAL,
-            options=("Low", "Medium", "High"),
-            default_value="Medium",
-            context="This affects furniture recommendations",
-            category="general",
-        ),
-        "natural_light_priority": ClarificationQuestion(
-            id="natural_light_priority",
-            question="How important is maximizing natural light?",
-            question_type=QuestionType.MULTIPLE_CHOICE,
-            priority=QuestionPriority.OPTIONAL,
-            options=("Very important", "Somewhat important", "Not important"),
-            default_value="Somewhat important",
-            context="Affects furniture placement near windows",
-            category="general",
-        ),
-        "has_existing_furniture": ClarificationQuestion(
-            id="has_existing_furniture",
-            question="Do you have existing furniture that must be included?",
-            question_type=QuestionType.YES_NO,
-            priority=QuestionPriority.RECOMMENDED,
-            default_value="no",
-            context="Existing furniture constrains the layout",
-            category="general",
-        ),
-        "allow_mirror_facing_bed": ClarificationQuestion(
-            id="allow_mirror_facing_bed",
-            question="Is it acceptable to have a mirror facing the bed?",
-            question_type=QuestionType.YES_NO,
-            priority=QuestionPriority.OPTIONAL,
-            default_value="no",
-            context="In feng shui, mirrors facing the bed are not recommended",
-            category="bedroom",
-        ),
-        "preferred_walking_path_width": ClarificationQuestion(
-            id="preferred_walking_path_width",
-            question="What is your preferred minimum walking path width (in meters)?",
-            question_type=QuestionType.NUMERIC,
-            priority=QuestionPriority.OPTIONAL,
-            default_value="0.6",
-            context="Standard minimum is 60cm, wider paths improve flow",
-            category="general",
-        ),
-        "sofa_configuration": ClarificationQuestion(
-            id="sofa_configuration",
-            question="What sofa configuration do you prefer?",
+            question="งบประมาณสำหรับเฟอร์นิเจอร์อยู่ในระดับไหน?",
             question_type=QuestionType.MULTIPLE_CHOICE,
             priority=QuestionPriority.RECOMMENDED,
-            options=(
-                "L-shaped sectional",
-                "Straight sofa",
-                "Sofa with chairs",
-                "No preference",
-            ),
-            default_value="Straight sofa",
-            context="Affects living room layout significantly",
-            category="living_room",
-        ),
-        "dining_capacity": ClarificationQuestion(
-            id="dining_capacity",
-            question="How many people should the dining area accommodate?",
-            question_type=QuestionType.NUMERIC,
-            priority=QuestionPriority.REQUIRED,
-            default_value="4",
-            context="Determines table size selection",
-            category="dining_room",
-        ),
-        "work_style": ClarificationQuestion(
-            id="work_style",
-            question="What is your primary work style?",
-            question_type=QuestionType.MULTIPLE_CHOICE,
-            priority=QuestionPriority.RECOMMENDED,
-            options=(
-                "Computer work",
-                "Writing/reading",
-                "Video calls",
-                "Mixed activities",
-            ),
-            default_value="Computer work",
-            context="Affects desk and equipment placement",
-            category="office",
+            options=("ประหยัด", "กลาง", "สูง"),
+            default_value="กลาง",
+            context="ส่งผลต่อการเลือกรายการเฟอร์นิเจอร์จาก catalog",
+            category="studio_apartment",
         ),
     }
 
@@ -405,12 +341,17 @@ class UserClarifierTool(BaseTool[ClarifierInput, ClarifierOutput]):
         return self.PREDEFINED_QUESTIONS.get(question_id)
 
     def get_questions_for_room_type(self, room_type: str) -> list[ClarificationQuestion]:
-        """Get relevant predefined questions for a room type."""
-        questions = []
-        for q in self.PREDEFINED_QUESTIONS.values():
-            if q.category == room_type or q.category == "general":
-                questions.append(q)
-        return questions
+        """Get relevant predefined questions for a room type, sorted by priority."""
+        _PRIORITY_ORDER = {
+            QuestionPriority.REQUIRED: 0,
+            QuestionPriority.RECOMMENDED: 1,
+            QuestionPriority.OPTIONAL: 2,
+        }
+        questions = [
+            q for q in self.PREDEFINED_QUESTIONS.values()
+            if q.category == room_type or q.category == "general"
+        ]
+        return sorted(questions, key=lambda q: _PRIORITY_ORDER[q.priority])
 
     def create_custom_question(
         self,

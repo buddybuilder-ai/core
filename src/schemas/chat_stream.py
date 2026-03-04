@@ -31,3 +31,7 @@ class ChatStreamRequest(BaseModel):
     conversation_history: list[dict[str, str]] = Field(
         default_factory=list, description="Recent conversation history"
     )
+    clarification_answers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Answers to clarification questions keyed by question_id",
+    )

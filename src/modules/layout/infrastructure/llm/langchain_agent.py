@@ -160,6 +160,7 @@ class FengShuiLLMAgent:
         furniture_list: list[dict[str, Any]],
         command_positions: list[dict[str, Any]],
         extra_context: str = "",
+        user_preferences: dict[str, Any] | None = None,
     ) -> LLMResponse:
         """Use LLM to plan furniture layout using semantic placement format.
 
@@ -187,6 +188,51 @@ class FengShuiLLMAgent:
             SemanticPlacementSchema,
         )
 
+        # Build user preferences section if provided
+        user_preferences_section = ""
+        if user_preferences:
+            lines = []
+
+            # Hard placement constraints (derived from clarification answers) — shown first
+            # so the LLM sees them before general preferences.
+            constraints = user_preferences.get("placement_constraints")
+            if constraints:
+                lines.append("## HARD PLACEMENT CONSTRAINTS (override everything else):")
+                for c in constraints.splitlines():
+                    lines.append(f"  {c}")
+                lines.append("")
+
+            lines.append("User Preferences (MUST follow these):")
+            msg = user_preferences.get("user_message") or user_preferences.get("message")
+            if msg:
+                lines.append(f"- User said: \"{msg}\"")
+            hint = user_preferences.get("placement_hint")
+            if hint:
+                lines.append(f"- Placement hint: {hint}")
+            owned = user_preferences.get("owned_furniture")
+            if owned:
+                lines.append(
+                    f"- User owns these specific items (place only these, not the full catalog): {owned}"
+                )
+            # Clarification answers — expand into readable lines
+            clarification = user_preferences.get("clarification_answers")
+            if clarification and isinstance(clarification, dict):
+                for qid, ans in clarification.items():
+                    lines.append(f"- {qid}: {ans}")
+            for k, v in user_preferences.items():
+                if k not in {
+                    "user_message", "message", "placement_hint",
+                    "owned_furniture", "clarification_answers",
+                    "placement_constraints",
+                }:
+                    lines.append(f"- {k}: {v}")
+            user_preferences_section = "\n".join(lines) + "\n"
+
+        command_position_hint = self._build_command_position_hint(doors, room_type)
+        wall_capacity_section = self._build_wall_capacity_section(
+            width, depth, doors, furniture_list
+        )
+
         prompt = LAYOUT_PLANNING_PROMPT.format(
             room_type=room_type,
             width=width,
@@ -198,6 +244,9 @@ class FengShuiLLMAgent:
             furniture_list=self._format_furniture_list(furniture_list),
             command_positions=json.dumps(command_positions, indent=2),
             extra_context=extra_context,
+            user_preferences_section=user_preferences_section,
+            command_position_hint=command_position_hint,
+            wall_capacity_section=wall_capacity_section,
         )
 
         output_schema = {
@@ -211,6 +260,7 @@ class FengShuiLLMAgent:
                     "offset_from_wall": "float (meters)",
                     "priority": "int (1=first)",
                     "orientation": "string - human readable hint",
+                    "facing": "string - north|south|east|west| (direction front/seat faces, empty=auto)",
                 }
             ],
             "chi_flow_notes": "string - notes about energy flow",
@@ -542,13 +592,22 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         return "\n".join(lines)
 
     def _format_furniture_list(self, furniture: list[dict[str, Any]]) -> str:
-        """Format furniture list for prompt."""
+        """Format furniture list for prompt.
+
+        The 'furniture_id=' label is intentionally explicit so the LLM copies
+        the exact ID into its semantic placement output.
+        """
         lines = []
         for item in furniture:
+            fid = item.get("id", "")
+            name = item.get("name", fid)
+            clearance = item.get("clearance_front", 0.0)
+            clearance_str = f", needs {clearance}m clear in front" if clearance > 0 else ""
             lines.append(
-                f"- {item.get('name', item.get('id'))}: "
+                f"- furniture_id=\"{fid}\" ({name}): "
                 f"{item.get('width')}x{item.get('depth')}m, "
                 f"essential: {item.get('is_essential', False)}"
+                f"{clearance_str}"
             )
         return "\n".join(lines)
 
@@ -562,6 +621,107 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                 f"rotation {p.get('rotation')}°, "
                 f"size {p.get('width')}x{p.get('depth')}m"
             )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_command_position_hint(doors: list[dict[str, Any]], room_type: str) -> str:
+        """Build an explicit command position instruction from the actual door data.
+
+        The command position wall is diagonally opposite the primary door wall:
+          south door → command wall = north
+          north door → command wall = south
+          east  door → command wall = west
+          west  door → command wall = east
+
+        The main piece (bed for bedroom, desk for office/study, sofa for living)
+        should have its back against the command wall so it faces the door.
+        """
+        _OPPOSITE: dict[str, str] = {
+            "south": "north",
+            "north": "south",
+            "east": "west",
+            "west": "east",
+        }
+        _MAIN_PIECE: dict[str, str] = {
+            "bedroom": "bed",
+            "studio_apartment": "bed",
+            "office": "desk",
+            "study": "desk",
+            "living_room": "sofa",
+            "dining_room": "dining table",
+        }
+        main_piece = _MAIN_PIECE.get(room_type, "bed")
+
+        if not doors:
+            return (
+                f"No door specified. Place the {main_piece} against the wall farthest from "
+                "any window, ensuring it has a solid wall backing."
+            )
+
+        primary_door = doors[0]
+        door_wall = str(primary_door.get("wall", "south")).lower()
+        command_wall = _OPPOSITE.get(door_wall, "north")
+
+        return (
+            f"The primary door is on the {door_wall.upper()} wall. "
+            f"Therefore the command position wall for the {main_piece} is the {command_wall.upper()} wall. "
+            f"Place the {main_piece} against the {command_wall.upper()} wall (target_wall=\"{command_wall}\") "
+            f"so the occupant faces the {door_wall} door. "
+            f"Do NOT place the {main_piece} on the {door_wall} wall (same wall as the door).\n"
+            f"PATHWAY RULE: Leave the {door_wall.upper()} wall area clear — "
+            f"do NOT place any furniture against the {door_wall} wall (the door wall). "
+            f"A person entering through the door must have at least 90 cm of clear walking space. "
+            f"Small items like shoe_cabinet or coat_rack may be placed near the door corner ONLY if they do not block the door swing."
+        )
+
+
+    @staticmethod
+    def _build_wall_capacity_section(
+        width: float,
+        depth: float,
+        doors: list[dict[str, Any]],
+        furniture_list: list[dict[str, Any]],
+    ) -> str:
+        """Build a wall-capacity summary so LLM knows how much space each wall has.
+
+        Shows usable length per wall (after subtracting door/window openings) and
+        the total furniture width to be distributed. This prevents the LLM from
+        stacking multiple large items on the same short wall.
+        """
+        # Door walls lose ~1.0 m of usable space (door + swing clearance)
+        door_walls: set[str] = set()
+        for d in doors:
+            w = str(d.get("wall", "")).lower()
+            if w:
+                door_walls.add(w)
+
+        wall_lengths = {
+            "north": width,
+            "south": width,
+            "east": depth,
+            "west": depth,
+        }
+        # Subtract door footprint from that wall
+        for d in doors:
+            w = str(d.get("wall", "")).lower()
+            dw = float(d.get("width", 0.9))
+            if w in wall_lengths:
+                wall_lengths[w] = max(0.0, wall_lengths[w] - dw - 0.2)
+
+        # Compute total furniture width (sum of all item widths)
+        total_fw = sum(float(f.get("width", 0)) for f in furniture_list)
+
+        lines = ["## Wall Capacity (usable length after doors/windows):"]
+        for wall, length in wall_lengths.items():
+            note = " ← DOOR WALL: keep entry area clear" if wall in door_walls else ""
+            lines.append(f"- {wall.upper()} wall: {length:.1f} m usable{note}")
+        lines.append(
+            f"- Total furniture width to distribute: {total_fw:.1f} m across all walls"
+        )
+        lines.append(
+            "- Rule: do NOT assign items to a wall whose combined widths would exceed that wall's usable length."
+        )
+        lines.append("")
         return "\n".join(lines)
 
 

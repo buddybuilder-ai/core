@@ -11,6 +11,7 @@ from src.modules.layout.application.dtos import (
 )
 from src.modules.layout.infrastructure.tools import (
     BudgetLevel,
+    FURNITURE_CATALOG,
     FurnitureCategory,
     FurnitureSearchInput,
     FurnitureSearchResult,
@@ -188,6 +189,7 @@ class FurnitureSelector:
         usable_area: float,
         preferences: UserPreferences | None = None,
         max_items: int = 10,
+        owned_categories: list[str] | None = None,
     ) -> FurnitureSelectionResult:
         """Select appropriate furniture for a room.
 
@@ -196,6 +198,8 @@ class FurnitureSelector:
             usable_area: Available floor area in square meters.
             preferences: User preferences for selection.
             max_items: Maximum number of items to select.
+            owned_categories: If provided, restrict selection to only these
+                categories (user explicitly stated what they own).
 
         Returns:
             FurnitureSelectionResult with selected items.
@@ -203,9 +207,14 @@ class FurnitureSelector:
         result = FurnitureSelectionResult()
         preferences = preferences or UserPreferences()
 
-        # Get categories for this room type
-        categories = self.STANDARD_CATEGORIES.get(room_type, [])
-        essential_categories = self.ESSENTIAL_CATEGORIES.get(room_type, [])
+        if owned_categories:
+            # User told us exactly what they have — use only those
+            categories = owned_categories
+            essential_categories = owned_categories  # treat all as essential
+        else:
+            # Get categories for this room type
+            categories = self.STANDARD_CATEGORIES.get(room_type, [])
+            essential_categories = self.ESSENTIAL_CATEGORIES.get(room_type, [])
 
         if not categories:
             result.warnings.append(f"Unknown room type: {room_type}")
@@ -229,23 +238,35 @@ class FurnitureSelector:
                 result.warnings.append(f"Unknown category: {category_str}")
                 continue
 
-            # Query furniture catalog
-            query_result = await self.furniture_tool.execute(
-                FurnitureSearchInput(
-                    room_type=room_type,
-                    categories=[category],
-                    budget_level=budget_level,
+            # Query furniture catalog.
+            # When owned_categories is set the user may own furniture from a
+            # different room type (e.g. a "desk" in a "bedroom"), so we search
+            # the full catalog by category instead of filtering by room_type.
+            if owned_categories:
+                raw_items = [
+                    f for f in FURNITURE_CATALOG if f.category.value == category_str
+                ]
+                items = [FurnitureSearchResult.from_catalog(f) for f in raw_items]
+                if not items:
+                    result.warnings.append(f"No {category_str} found in catalog")
+                    continue
+            else:
+                query_result = await self.furniture_tool.execute(
+                    FurnitureSearchInput(
+                        room_type=room_type,
+                        categories=[category],
+                        budget_level=budget_level,
+                    )
                 )
-            )
 
-            if not query_result.success or not query_result.data:
-                result.warnings.append(f"No {category_str} found for {room_type}")
-                continue
+                if not query_result.success or not query_result.data:
+                    result.warnings.append(f"No {category_str} found for {room_type}")
+                    continue
 
-            items = query_result.data.results
-            if not items:
-                result.warnings.append(f"No {category_str} items available")
-                continue
+                items = query_result.data.results
+                if not items:
+                    result.warnings.append(f"No {category_str} items available")
+                    continue
 
             # Select the best item for this category
             item = self._select_best_item(items, preferences, usable_area - selected_area)

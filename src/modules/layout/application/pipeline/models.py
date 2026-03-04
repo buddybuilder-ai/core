@@ -83,6 +83,8 @@ class SSEEventType(StrEnum):
     MODIFIER_COMPLETED = "modifier_completed"
     # Personality mode
     MODE_CHANGED = "mode_changed"
+    # Clarification
+    CLARIFICATION_NEEDED = "clarification_needed"
 
 
 @dataclass

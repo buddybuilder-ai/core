@@ -40,6 +40,10 @@ class SemanticPlacement:
         offset_from_wall: Gap between furniture and wall in meters.
         priority: Placement order (1 = first, lower wins ties).
         orientation: Informational hint (e.g. "headboard_against_wall").
+        facing: Optional override for headboard/front direction independent of
+                wall placement. E.g. target_wall="west" + facing="east" means
+                place against west wall but rotate so headboard faces east.
+                Values: north|south|east|west|"" (empty = use wall default).
     """
 
     furniture_id: str
@@ -50,6 +54,7 @@ class SemanticPlacement:
     offset_from_wall: float
     priority: int
     orientation: str = ""
+    facing: str = ""
 
 
 @dataclass(frozen=True)
@@ -98,9 +103,71 @@ _WALL_ROTATION: dict[str, int] = {
     "east": 270,  # east wall → faces west
 }
 
+# Opposite of each wall — used for auto-facing "must face inward"
+_OPPOSITE_WALL: dict[str, str] = {
+    "south": "north", "north": "south",
+    "east": "west",   "west": "east",
+}
+
+# Furniture types that MUST face inward (away from their wall) regardless of LLM output.
+# These are items where "facing the wall" is physically nonsensical.
+# Value = "inward" means: use opposite of target_wall as facing.
+_FORCE_INWARD_TYPES: frozenset[str] = frozenset({
+    "chair", "office_chair", "armchair", "dining_chair",
+    "desk", "folding_desk",
+    "sofa", "sofa_bed",
+    "tv_stand",  # screen must face into room
+})
+
+# Rotation to apply when the LLM specifies which direction the front/seat faces.
+# Three.js Y-rotation: 0° → front faces +Z (south in scene).
+# facing="south" means front points toward south (+Z) → rotation=0.
+# facing="north" means front points toward north (-Z) → rotation=180.
+_FACING_ROTATION: dict[str, int] = {
+    "south": 0,    # front faces +Z (toward south wall)
+    "north": 180,  # front faces -Z (toward north wall)
+    "west": 90,    # front faces -X (toward west wall)
+    "east": 270,   # front faces +X (toward east wall)
+}
+
 
 class SpatialResolver:
     """Converts a list of SemanticPlacements to exact PhysicalPlacements."""
+
+    # Step distances tried by the bump-out pass
+    _BUMP_STEPS = [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 1.5]
+
+    # Minimum clearance in front of a door (meters) — kept free for walking
+    _DOOR_CLEARANCE = 0.9
+
+    def _door_zones(self, room: RoomSpec) -> list[AABB]:
+        """Return clearance AABBs in front of each door that must stay empty."""
+        zones: list[AABB] = []
+        c = self._DOOR_CLEARANCE
+        # Door width assumed ~0.9 m; clearance rectangle extends inward from the door wall
+        for door in room.doors:
+            wall = str(getattr(door, "wall", "")).lower()
+            # Estimate door x/z centre from offset (DoorPosition has offset_from_corner)
+            offset = float(getattr(door, "offset_from_corner", 0.0))
+            door_w = float(getattr(door, "width", 0.9))
+            if wall == "south":
+                # Door is on south wall (z=0), offset measured from west corner along x
+                x0 = max(0.0, offset - 0.1)
+                x1 = min(room.width, offset + door_w + 0.1)
+                zones.append(AABB(min_x=x0, max_x=x1, min_z=0.0, max_z=c))
+            elif wall == "north":
+                x0 = max(0.0, offset - 0.1)
+                x1 = min(room.width, offset + door_w + 0.1)
+                zones.append(AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth))
+            elif wall == "west":
+                z0 = max(0.0, offset - 0.1)
+                z1 = min(room.depth, offset + door_w + 0.1)
+                zones.append(AABB(min_x=0.0, max_x=c, min_z=z0, max_z=z1))
+            elif wall == "east":
+                z0 = max(0.0, offset - 0.1)
+                z1 = min(room.depth, offset + door_w + 0.1)
+                zones.append(AABB(min_x=room.width - c, max_x=room.width, min_z=z0, max_z=z1))
+        return zones
 
     def resolve(
         self,
@@ -110,6 +177,8 @@ class SpatialResolver:
         """Resolve semantic placements to physical coordinates.
 
         Items are processed in ascending priority order (priority=1 first).
+        After placing each item a bump-out pass moves it away from already-placed
+        items so the output is collision-free (best-effort).
 
         Args:
             placements: Semantic descriptions from the LLM.
@@ -119,7 +188,106 @@ class SpatialResolver:
             List of PhysicalPlacements sorted by priority.
         """
         sorted_items = sorted(placements, key=lambda p: p.priority)
-        return [self._resolve_one(p, room) for p in sorted_items]
+        placed: list[PhysicalPlacement] = []
+        door_zones = self._door_zones(room)
+        for p in sorted_items:
+            result = self._resolve_one(p, room)
+            result = self._bump_out(result, placed, room, door_zones)
+            placed.append(result)
+        return placed
+
+    def _bump_out(
+        self,
+        item: PhysicalPlacement,
+        placed: list[PhysicalPlacement],
+        room: RoomSpec,
+        door_zones: list[AABB] | None = None,
+    ) -> PhysicalPlacement:
+        """Shift *item* away from already-placed items until no overlap.
+
+        Direction priority keeps wall-hugging items on their wall:
+        1. Lateral (along the wall) — both directions
+        2. Away from wall (into room centre) — last resort
+        This prevents furniture being torn off its wall just because another
+        piece is already there.
+
+        Also avoids blocking door clearance zones (90 cm in front of each door).
+        """
+        w = item.bbox.max_x - item.bbox.min_x
+        d = item.bbox.max_z - item.bbox.min_z
+        _door_zones = door_zones or []
+
+        def overlaps_any(x: float, z: float) -> bool:
+            box = AABB.from_position_and_size(x, z, w, d)
+            if any(box.intersects(p.bbox) for p in placed):
+                return True
+            # Don't block door clearance zones
+            return any(box.intersects(dz) for dz in _door_zones)
+
+        if not overlaps_any(item.x, item.z):
+            return item  # already clear
+
+        # Detect which wall(s) the item is hugging (within 0.1 m tolerance)
+        _WALL_TOL = 0.1
+        on_south = item.z <= _WALL_TOL
+        on_north = item.z >= room.depth - d - _WALL_TOL
+        on_west  = item.x <= _WALL_TOL
+        on_east  = item.x >= room.width - w - _WALL_TOL
+
+        # For wall-hugging items: slide ALONG the wall first, then push inward.
+        # For floating/center items: try all directions toward room centre.
+        cx = (room.width - w) / 2.0
+        cz = (room.depth - d) / 2.0
+        dx_center = 1 if item.x < cx else -1
+        dz_center = 1 if item.z < cz else -1
+
+        if on_south or on_north:
+            # On a z-wall → slide along x first, then push in z
+            dirs = [
+                (1, 0), (-1, 0),          # slide right / left along wall
+                (dx_center, 0),            # slide toward x-centre
+                (0, dz_center),            # push away from wall (last resort)
+                (dx_center, dz_center),
+                (-dx_center, dz_center),
+            ]
+        elif on_west or on_east:
+            # On an x-wall → slide along z first, then push in x
+            dirs = [
+                (0, 1), (0, -1),           # slide up / down along wall
+                (0, dz_center),            # slide toward z-centre
+                (dx_center, 0),            # push away from wall (last resort)
+                (dx_center, dz_center),
+                (dx_center, -dz_center),
+            ]
+        else:
+            # Floating / center placement — original centre-first logic
+            dirs = [
+                (dx_center, 0),
+                (0, dz_center),
+                (dx_center, dz_center),
+                (-dx_center, 0),
+                (0, -dz_center),
+                (dx_center, -dz_center),
+                (-dx_center, dz_center),
+                (-dx_center, -dz_center),
+            ]
+
+        for step in self._BUMP_STEPS:
+            for dx, dz in dirs:
+                nx = max(0.0, min(item.x + dx * step, room.width - w))
+                nz = max(0.0, min(item.z + dz * step, room.depth - d))
+                if not overlaps_any(nx, nz):
+                    new_bbox = AABB.from_position_and_size(nx, nz, w, d)
+                    return PhysicalPlacement(
+                        furniture_id=item.furniture_id,
+                        x=round(nx, 3),
+                        y=item.y,
+                        z=round(nz, 3),
+                        rotation=item.rotation,
+                        bbox=new_bbox,
+                    )
+
+        return item  # could not resolve — return as-is
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -131,6 +299,21 @@ class SpatialResolver:
             x, z, rotation = self._center_position(p, room)
         else:
             x, z, rotation = self._wall_position(p, room, wall)
+
+        # --- Facing resolution (3-tier priority) ---
+        # 1. LLM explicitly set facing → always honour it
+        # 2. furniture_type is in _FORCE_INWARD_TYPES and facing is empty
+        #    → force facing = opposite of target_wall (away from wall = usable)
+        # 3. Otherwise keep wall-default rotation from _WALL_ROTATION
+        ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
+        effective_facing = p.facing
+
+        if not effective_facing and wall != "center":
+            if ftype in _FORCE_INWARD_TYPES:
+                effective_facing = _OPPOSITE_WALL.get(wall, "")
+
+        if effective_facing and effective_facing in _FACING_ROTATION:
+            rotation = _FACING_ROTATION[effective_facing]
 
         # Use actual footprint dimensions after rotation
         w, length = self._footprint(p.size, rotation)
