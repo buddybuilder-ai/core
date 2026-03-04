@@ -91,6 +91,18 @@ class CatalogFurniture:
     is_essential: bool = False
     feng_shui_element: str = ""
     placement_notes: str = ""
+    model_rotation_offset: int = 0
+    """Degrees to ADD to the layout rotation before rendering.
+
+    Use this to correct for the 3D model's "forward" direction not matching the
+    system convention (rotation=0 → front faces +Z / south).
+
+    Examples:
+      model_rotation_offset=0   → model front already faces +Z at rest  (default)
+      model_rotation_offset=180 → model was exported facing -Z (backward); add 180° to flip
+      model_rotation_offset=90  → model was exported facing -X (left);    add 90°  to correct
+      model_rotation_offset=270 → model was exported facing +X (right);   add 270° to correct
+    """
 
     @property
     def floor_area(self) -> float:

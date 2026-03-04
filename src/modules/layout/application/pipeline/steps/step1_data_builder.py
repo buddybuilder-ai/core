@@ -19,6 +19,7 @@ from src.modules.layout.application.pipeline.models import (
 from src.modules.layout.application.pipeline.steps.base import BaseStep
 from src.modules.layout.application.services import InputAnalyzer, SpatialAnalyzer
 from src.modules.layout.domain.entities import DoorPosition, Room, RoomType, WindowPosition
+from src.modules.layout.domain.entities.room import WallSide
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,10 @@ class StructuredDataBuilderStep(BaseStep):
 
         logger.info("📋 STEP 1: Parsing and validating room specification")
         logger.info(f"   Room type: {raw.get('room_type', 'bedroom')}")
-        logger.info(f"   Dimensions: {raw.get('width', 0)}m × {raw.get('depth', 0)}m")
+        dims_raw = raw.get("dimensions", {})
+        w_parsed = dims_raw.get("width", raw.get("width", 0))
+        d_parsed = dims_raw.get("depth", raw.get("depth", 0))
+        logger.info(f"   Dimensions: {w_parsed}m × {d_parsed}m")
         logger.info(
             f"   Doors: {len(raw.get('doors', []))}, Windows: {len(raw.get('windows', []))}"
         )
@@ -147,7 +151,7 @@ class StructuredDataBuilderStep(BaseStep):
         for d in doors_raw:
             result.append(
                 DoorPosition(
-                    wall=d.get("wall", "south"),
+                    wall=WallSide(d.get("wall", "south")),
                     offset=d.get("offset", 1.0),
                     width=d.get("width", 0.9),
                 )
@@ -159,7 +163,7 @@ class StructuredDataBuilderStep(BaseStep):
         for w in windows_raw:
             result.append(
                 WindowPosition(
-                    wall=w.get("wall", "north"),
+                    wall=WallSide(w.get("wall", "north")),
                     offset=w.get("offset", 1.0),
                     width=w.get("width", 1.5),
                 )

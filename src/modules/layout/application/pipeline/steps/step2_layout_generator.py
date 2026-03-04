@@ -10,6 +10,7 @@ Generates the initial furniture layout using the LLM semantic placement flow:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -23,6 +24,9 @@ from src.modules.layout.application.pipeline.models import (
 )
 from src.modules.layout.application.pipeline.steps.base import BaseStep
 from src.modules.layout.application.services import FurnitureSelector
+from src.modules.layout.application.services.furniture_relationships import (
+    build_relationship_hints,
+)
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
 from src.modules.layout.domain.entities import Room
 from src.modules.layout.infrastructure.llm.langchain_agent import (
@@ -67,11 +71,21 @@ class LayoutGeneratorStep(BaseStep):
         logger.info(f"🧠 STEP 2: Selecting furniture for {room_type}")
         logger.info(f"   Room: {room.width}m × {room.depth}m, Usable: {usable_area:.1f} sqm")
 
+        # If user specified owned furniture, restrict catalog to only those items
+        user_prefs = spec.get("user_preferences") or {}
+        user_message = user_prefs.get("user_message", "")
+        owned_categories = self._parse_owned_furniture(user_message)
+        if owned_categories:
+            logger.info(
+                f"   🔒 User owns specific furniture: {owned_categories} — restricting catalog"
+            )
+
         selection_result = await self._furniture_selector.select_furniture(
             room_type=room_type,
             usable_area=usable_area,
             preferences=preferences,
             max_items=12,
+            owned_categories=owned_categories or None,
         )
 
         selections = selection_result.get_by_priority()
@@ -110,6 +124,20 @@ class LayoutGeneratorStep(BaseStep):
         if extra_ctx:
             logger.info(f"   Injecting {len(extra_ctx)} chars of RAG context into LLM prompt")
 
+        # Inject inter-furniture relationship hints (TV faces sofa, nightstand beside bed, etc.)
+        rel_hints = build_relationship_hints(furniture_list)
+        if rel_hints:
+            logger.info(f"   {len(rel_hints)} furniture relationship hints generated")
+            rel_hints_str = "\n".join(f"- {h}" for h in rel_hints)
+            _mp: dict[str, Any] = dict(user_prefs) if user_prefs else {}
+            _mp["furniture_relationships"] = (
+                "IMPORTANT — spatial relationships between items (MUST follow these):\n"
+                + rel_hints_str
+            )
+            merged_prefs: dict[str, Any] | None = _mp
+        else:
+            merged_prefs = user_prefs if user_prefs else None
+
         llm_response = await self._llm_agent.plan_layout(
             room_type=room_type,
             width=room.width,
@@ -120,6 +148,7 @@ class LayoutGeneratorStep(BaseStep):
             furniture_list=furniture_list,
             command_positions=command_pos,
             extra_context=extra_ctx,
+            user_preferences=merged_prefs if merged_prefs else None,
         )
 
         if not llm_response.success:
@@ -210,13 +239,13 @@ class LayoutGeneratorStep(BaseStep):
             catalog_item = catalog_map.get(fid)
             if catalog_item:
                 p = dict(p)
-                size = p.get("size") or {}
-                if not isinstance(size, dict) or size.get("w", 0) <= 0:
-                    p["size"] = {
-                        "w": catalog_item["width"],
-                        "l": catalog_item["depth"],
-                        "h": catalog_item.get("height", 1.0),
-                    }
+                # Always use catalog dims — LLM may have guessed wrong furniture_id
+                # (and therefore wrong size). Catalog is the ground truth.
+                p["size"] = {
+                    "w": catalog_item["width"],
+                    "l": catalog_item["depth"],
+                    "h": catalog_item.get("height", 1.0),
+                }
                 if not p.get("furniture_type"):
                     p["furniture_type"] = fid.split("_")[0]
             enriched.append(p)
@@ -237,21 +266,80 @@ class LayoutGeneratorStep(BaseStep):
             cat = catalog_map.get(fid, {})
             sel = sel_map.get(fid)
             dims = item.get("dimensions", {})
-            result.append(
-                {
-                    **item,
-                    "name": cat.get("name", fid),
-                    "category": cat.get("category", fid.split("_")[0]),
-                    "is_essential": getattr(getattr(sel, "item", None), "is_essential", True),
-                    "dimensions": {
-                        "width": dims.get("width", cat.get("width", 1.0)),
-                        "depth": dims.get("depth", cat.get("depth", 1.0)),
-                        "height": dims.get("height", cat.get("height", 1.0)),
-                    },
-                    "feng_shui_notes": "",
-                }
-            )
+            enriched_item: dict[str, Any] = {
+                **item,
+                "name": cat.get("name", fid),
+                "category": cat.get("category", fid.split("_")[0]),
+                "is_essential": getattr(getattr(sel, "item", None), "is_essential", True),
+                "dimensions": {
+                    "width": dims.get("width", cat.get("width", 1.0)),
+                    "depth": dims.get("depth", cat.get("depth", 1.0)),
+                    "height": dims.get("height", cat.get("height", 1.0)),
+                },
+                "feng_shui_notes": "",
+            }
+            # Carry model_rotation_offset from catalog so the frontend knows how
+            # to correct for the 3D model's exported "forward" direction.
+            mro = cat.get("model_rotation_offset", 0)
+            if mro:
+                enriched_item["model_rotation_offset"] = int(mro)
+            result.append(enriched_item)
         return result
+
+    @staticmethod
+    def _parse_owned_furniture(user_message: str) -> list[str]:
+        """Extract furniture categories the user explicitly says they own.
+
+        Returns a list of catalog category strings (e.g. ["bed", "desk"]).
+        Returns empty list if no ownership cues are found.
+        """
+        if not user_message:
+            return []
+
+        # Keyword → catalog category mapping (Thai + English)
+        OWNED_KEYWORDS: list[tuple[str, str]] = [
+            # Beds
+            (r"เตียง|ที่นอน|bed", "bed"),
+            # Desks / tables (computer desk first so it wins over generic "โต๊ะ")
+            (r"โต๊ะคอม|โต๊ะทำงาน|computer\s*desk|work\s*desk|desk", "desk"),
+            # Wardrobe / closet
+            (r"ตู้เสื้อผ้า|ตู้เก็บของ|wardrobe|closet|compact.wardrobe", "compact_wardrobe"),
+            # Sofa / couch
+            (r"โซฟา|sofa|couch", "sofa"),
+            # Sofa-bed
+            (r"โซฟาเตียง|sofa.bed", "sofa_bed"),
+            # Folding desk
+            (r"โต๊ะพับ|folding.desk", "folding_desk"),
+            # Chair
+            (r"เก้าอี้|chair", "chair"),
+            # Bookshelf
+            (r"ชั้นหนังสือ|ชั้นวาง|bookshelf|shelf", "bookshelf"),
+            # TV stand
+            (r"ตู้ทีวี|tv.stand|television", "tv_stand"),
+            # Nightstand
+            (r"โต๊ะข้างเตียง|nightstand|bedside", "nightstand"),
+            # Dresser / drawer
+            (r"ลิ้นชัก|dresser|drawer", "dresser"),
+            # Compact dining
+            (r"โต๊ะกิน|โต๊ะอาหาร|dining|compact.dining", "compact_dining"),
+        ]
+
+        # Ownership trigger patterns — only extract if user signals ownership
+        OWNERSHIP_CUES = re.compile(
+            r"มีแค่|มีเพียง|มีแต่|ของฉัน|ที่มี|own|only have|have only|just have|i have",
+            re.IGNORECASE,
+        )
+
+        if not OWNERSHIP_CUES.search(user_message):
+            return []
+
+        msg_lower = user_message.lower()
+        found: list[str] = []
+        for pattern, category in OWNED_KEYWORDS:
+            if re.search(pattern, msg_lower, re.IGNORECASE) and category not in found:
+                found.append(category)
+
+        return found
 
     def _heuristic_fallback(self, selections: list[Any], room: Room) -> list[dict[str, Any]]:
         """Simple fallback: stack items along the south wall."""

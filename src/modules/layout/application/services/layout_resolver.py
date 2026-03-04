@@ -57,6 +57,7 @@ class SemanticPlacementSchema(BaseModel):
     offset_from_wall: float
     priority: int
     orientation: str = ""
+    facing: str = ""
 
     @field_validator("target_wall")
     @classmethod
@@ -128,7 +129,11 @@ class LayoutResolver:
         semantics: list[SemanticPlacement] = []
         for raw in semantic_dicts:
             try:
+                logger.info(f"LayoutResolver: validating raw={raw!r}")
                 schema = SemanticPlacementSchema.model_validate(raw)
+                logger.info(
+                    f"LayoutResolver: validated → wall={schema.target_wall!r} align={schema.alignment!r} facing={schema.facing!r}"
+                )
                 semantics.append(self._schema_to_semantic(schema))
             except Exception as exc:
                 fid = raw.get("furniture_id", "<unknown>")
@@ -150,7 +155,7 @@ class LayoutResolver:
         det_score = self._score_collisions(collisions) + self._score_feng_shui(violations)
 
         return LayoutResolutionResult(
-            physical_placements=[self._physical_to_dict(p) for p in physicals],
+            physical_placements=[self._physical_to_dict(p, room) for p in physicals],
             collisions=[self._collision_to_dict(c) for c in collisions],
             feng_shui_violations=[self._violation_to_dict(v) for v in violations],
             deterministic_score=det_score,
@@ -191,6 +196,10 @@ class LayoutResolver:
 
     @staticmethod
     def _build_room_spec(spec: dict[str, Any]) -> RoomSpec:
+        # Support both flat {"width": x, "depth": y} and nested {"dimensions": {"width": x, "depth": y}}
+        dims = spec.get("dimensions") or {}
+        width = float(spec.get("width") or dims.get("width") or 0)
+        depth = float(spec.get("depth") or dims.get("depth") or 0)
         doors = [
             DoorPosition(
                 wall=WallSide(d["wall"]),
@@ -208,8 +217,8 @@ class LayoutResolver:
             for w in spec.get("windows", [])
         ]
         return RoomSpec(
-            width=float(spec["width"]),
-            depth=float(spec["depth"]),
+            width=width,
+            depth=depth,
             doors=doors,
             windows=windows,
         )
@@ -229,24 +238,64 @@ class LayoutResolver:
             offset_from_wall=s.offset_from_wall,
             priority=s.priority,
             orientation=s.orientation,
+            facing=s.facing,
         )
 
     @staticmethod
-    def _physical_to_dict(p: PhysicalPlacement) -> dict[str, Any]:
-        """Convert PhysicalPlacement to the dict format expected by PipelineState."""
+    def _physical_to_dict(p: PhysicalPlacement, room: RoomSpec) -> dict[str, Any]:
+        """Convert PhysicalPlacement to the dict format expected by PipelineState.
+
+        Backend uses SW-corner origin (0,0) with pos_x/pos_z as the left/top
+        edge of the furniture footprint.  The frontend Three.js scene uses the
+        room centre as origin and expects pos_x/pos_z to be the *centre* of the
+        furniture.
+
+        IMPORTANT: The frontend BoxGeometry uses pre-rotation dimensions.
+        Rotation is applied by the Three.js group, so we must send the
+        *post-rotation footprint* dimensions so the box matches the physical
+        footprint after the group rotation is applied.  In practice:
+          - rotation 0°/180°: bbox.width → box width, bbox.depth → box depth
+          - rotation 90°/270°: bbox.width is the Z-dimension of the original,
+            bbox.depth is the X-dimension.  We keep bbox sizes as sent
+            dimensions so the rendered box matches the physical footprint.
+
+        Conversion (corner → centre, room-centre origin):
+            frontend_centre_x = backend_left_x + footprint_w/2 - room_width/2
+            frontend_centre_z = backend_top_z  + footprint_d/2 - room_depth/2
+        """
+        fw = round(p.bbox.width, 3)  # x-size of footprint in room (post-rotation)
+        fd = round(p.bbox.depth, 3)  # z-size of footprint in room (post-rotation)
+        centre_x = round(p.x + fw / 2 - room.width / 2, 3)
+        centre_z = round(p.z + fd / 2 - room.depth / 2, 3)
+
+        # Send dimensions as footprint sizes (post-rotation).
+        # The Three.js group is already rotated, so we must pass the rotated
+        # box sizes.  For rotations 90/270 the width↔depth are swapped
+        # compared to the "natural" furniture orientation, but since the group
+        # rotation accounts for that visually, passing footprint sizes gives
+        # the correct physical extents.
+        rot = p.rotation % 360
+        if rot in (90, 270):
+            # Swap back so Three.js BoxGeometry(w, h, d) + rotation gives right shape
+            dim_w = fd  # original depth becomes box width
+            dim_d = fw  # original width becomes box depth
+        else:
+            dim_w = fw
+            dim_d = fd
+
         return {
             "id": p.furniture_id,
             "furniture_id": p.furniture_id,
             # Derive name / category from furniture_id prefix (e.g. "bed_01" → "bed")
             "name": p.furniture_id,
             "category": p.furniture_id.split("_")[0],
-            "pos_x": round(p.x, 3),
+            "pos_x": centre_x,
             "pos_y": 0,
-            "pos_z": round(p.z, 3),
+            "pos_z": centre_z,
             "rotation": p.rotation,
             "dimensions": {
-                "width": round(p.bbox.width, 3),
-                "depth": round(p.bbox.depth, 3),
+                "width": dim_w,
+                "depth": dim_d,
                 "height": 1.0,  # height not tracked by spatial resolver
             },
             "is_essential": True,

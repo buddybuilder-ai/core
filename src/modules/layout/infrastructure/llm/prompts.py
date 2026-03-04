@@ -75,14 +75,15 @@ spatial resolver will compute exact coordinates from your intent.
 Each item must use this JSON structure:
 ```json
 {{
-  "furniture_id": "<id from furniture list>",
+  "furniture_id": "<COPY EXACTLY from Available Furniture list — do NOT invent new IDs>",
   "furniture_type": "<category: bed|desk|sofa|wardrobe|chair|mirror|plant|...>",
   "size": {{"w": <width_meters>, "l": <depth_meters>, "h": <height_meters>}},
   "target_wall": "<north|south|east|west|center>",
   "alignment": "<left|center|right>",
   "offset_from_wall": <gap_in_meters>,
   "priority": <int_1_is_first>,
-  "orientation": "<human hint e.g. headboard_against_north_wall>"
+  "orientation": "<human hint e.g. headboard_against_north_wall>",
+  "facing": "<north|south|east|west|> (optional: which direction the front/seat faces — omit to use wall default)"
 }}
 ```
 
@@ -90,6 +91,15 @@ Each item must use this JSON structure:
 - target_wall: north | south | east | west | center
 - alignment: left | center | right  (along the wall; for center placement use center/center)
 - offset_from_wall: 0.0 – 0.5 m typical
+- facing: MANDATORY for seating/working furniture — NEVER leave empty for these types:
+  * bed / sofa_bed: facing = opposite of target_wall (person looks away from the wall)
+  * sofa / armchair: facing = opposite of target_wall (seat faces into room)
+  * desk / folding_desk: facing = door wall (person at desk sees the door — command position)
+  * chair / office_chair / dining_chair: facing = SAME as the desk/table it serves
+    (if desk faces south, chair also faces south so person sits at desk)
+  * tv_stand: facing = opposite of target_wall (screen faces into room)
+  * wardrobe / bookshelf / nightstand / lamp / plant / mirror / room_divider: leave facing empty ("")
+  If in doubt: facing = opposite of target_wall ensures the item is usable.
 
 ## Few-shot Example 1 — Bedroom (4 m × 5 m, south door, east window)
 ```json
@@ -103,7 +113,8 @@ Each item must use this JSON structure:
       "alignment": "center",
       "offset_from_wall": 0.05,
       "priority": 1,
-      "orientation": "headboard_against_north_wall"
+      "orientation": "headboard_against_north_wall",
+      "facing": "south"
     }},
     {{
       "furniture_id": "wardrobe_01",
@@ -113,7 +124,8 @@ Each item must use this JSON structure:
       "alignment": "left",
       "offset_from_wall": 0.0,
       "priority": 2,
-      "orientation": "against_west_wall"
+      "orientation": "against_west_wall",
+      "facing": ""
     }},
     {{
       "furniture_id": "desk_01",
@@ -123,7 +135,8 @@ Each item must use this JSON structure:
       "alignment": "right",
       "offset_from_wall": 0.05,
       "priority": 3,
-      "orientation": "facing_door_command_position"
+      "orientation": "facing_door_command_position",
+      "facing": "south"
     }}
   ],
   "chi_flow_notes": "Bed in command position — can see south door. Desk on east wall avoids window energy.",
@@ -131,7 +144,39 @@ Each item must use this JSON structure:
 }}
 ```
 
-## Few-shot Example 2 — Home Office (3 m × 4 m, west door, north window)
+## Few-shot Example 2 — Living Room (4 m × 5 m, south door, east window)
+```json
+{{
+  "placements": [
+    {{
+      "furniture_id": "sofa_01",
+      "furniture_type": "sofa",
+      "size": {{"w": 2.2, "l": 0.9, "h": 0.85}},
+      "target_wall": "north",
+      "alignment": "center",
+      "offset_from_wall": 0.1,
+      "priority": 1,
+      "orientation": "back_against_north_wall_seat_faces_south",
+      "facing": "south"
+    }},
+    {{
+      "furniture_id": "coffee_table_01",
+      "furniture_type": "coffee_table",
+      "size": {{"w": 1.0, "l": 0.6, "h": 0.45}},
+      "target_wall": "center",
+      "alignment": "center",
+      "offset_from_wall": 0.0,
+      "priority": 2,
+      "orientation": "center_of_room",
+      "facing": ""
+    }}
+  ],
+  "chi_flow_notes": "Sofa back against north wall, seats face south (door side) — command position for living room.",
+  "warnings": []
+}}
+```
+
+## Few-shot Example 3 — Home Office (3 m × 4 m, west door, north window)
 ```json
 {{
   "placements": [
@@ -143,7 +188,8 @@ Each item must use this JSON structure:
       "alignment": "center",
       "offset_from_wall": 0.05,
       "priority": 1,
-      "orientation": "faces_west_door_command_position"
+      "orientation": "faces_west_door_command_position",
+      "facing": "west"
     }},
     {{
       "furniture_id": "bookcase_01",
@@ -153,11 +199,67 @@ Each item must use this JSON structure:
       "alignment": "left",
       "offset_from_wall": 0.0,
       "priority": 2,
-      "orientation": "against_east_wall"
+      "orientation": "against_east_wall",
+      "facing": ""
     }}
   ],
   "chi_flow_notes": "Desk on south wall gives commanding view of west door. Bookcase grounds east side.",
   "warnings": ["Avoid placing chair directly under north window to maintain solid backing."]
+}}
+```
+
+## Few-shot Example 4 — Studio Apartment (5 m × 4 m, south door, east window)
+*sofa_bed doubles as sleeping + seating; user said sleep zone on north wall*
+```json
+{{
+  "placements": [
+    {{
+      "furniture_id": "sofa_bed_001",
+      "furniture_type": "sofa_bed",
+      "size": {{"w": 1.9, "l": 0.95, "h": 0.85}},
+      "target_wall": "north",
+      "alignment": "center",
+      "offset_from_wall": 0.05,
+      "priority": 1,
+      "orientation": "back_against_north_wall_sleep_zone_command_position",
+      "facing": "south"
+    }},
+    {{
+      "furniture_id": "compact_wardrobe_001",
+      "furniture_type": "compact_wardrobe",
+      "size": {{"w": 1.0, "l": 0.55, "h": 2.0}},
+      "target_wall": "west",
+      "alignment": "left",
+      "offset_from_wall": 0.0,
+      "priority": 2,
+      "orientation": "against_west_wall_adjacent_to_sleep_zone",
+      "facing": ""
+    }},
+    {{
+      "furniture_id": "folding_desk_001",
+      "furniture_type": "folding_desk",
+      "size": {{"w": 1.0, "l": 0.5, "h": 0.75}},
+      "target_wall": "west",
+      "alignment": "right",
+      "offset_from_wall": 0.05,
+      "priority": 3,
+      "orientation": "work_zone_faces_south_door_command_position",
+      "facing": "south"
+    }},
+    {{
+      "furniture_id": "room_divider_001",
+      "furniture_type": "room_divider",
+      "size": {{"w": 1.5, "l": 0.05, "h": 1.7}},
+      "target_wall": "center",
+      "alignment": "center",
+      "offset_from_wall": 0.0,
+      "priority": 4,
+      "orientation": "divides_sleep_zone_north_from_living_zone_south",
+      "facing": ""
+    }}
+  ],
+  "chi_flow_notes": "sofa_bed on north wall = command position (sees south door). compact_wardrobe adjacent on west. folding_desk on west-right keeps work zone separate. room_divider visually separates zones.",
+  "warnings": []
 }}
 ```
 
@@ -170,18 +272,58 @@ Room Information:
 - Doors: {doors}
 - Windows: {windows}
 
+{wall_capacity_section}
 Available Furniture:
 {furniture_list}
 
 Command Positions Identified:
 {command_positions}
 
+## CRITICAL: Command Position Rule for THIS Room
+{command_position_hint}
+
+{user_preferences_section}
 Please create a layout plan that:
 1. Places essential furniture first (bed for bedroom, desk for office, sofa for living room)
-2. Positions main furniture in command position when possible (diagonally from door, wall backing)
-3. Ensures minimum 60 cm clearance for pathways
-4. Balances the five elements
-5. Avoids sha chi (negative energy lines)
+2. MUST respect the command position rule above — the main piece faces the door from a diagonal wall
+3. MUST follow all "furniture_relationships" constraints listed in User Preferences above (TV faces sofa, nightstand beside bed, coffee table in front of sofa, etc.)
+4. Ensures minimum 60 cm clearance for pathways — the door wall area MUST stay clear
+5. MUST assign each item to a wall that has enough remaining space for its width — do NOT put two large items on the same wall if their combined width exceeds that wall's length
+6. Balances the five elements
+7. Avoids sha chi (negative energy lines)
+
+## Furniture Grouping Rules (always apply)
+- TV stand / media console: always on the wall OPPOSITE the sofa or bed — never in a corner or beside them
+- Nightstand / bedside table: must be on the SAME wall as the bed, directly beside it
+- Coffee table: in the open space IN FRONT of the sofa — never against a wall
+- Dining chairs: clustered AROUND the dining table in the centre of the dining area
+- Armchair: near the sofa in a conversational group — not isolated in a corner
+- Mirror: NEVER directly facing the bed; use a side wall
+- Plant: near a window wall for natural light
+
+## Studio Apartment Rules (apply when room_type = studio_apartment)
+- sofa_bed is BOTH the sleeping zone AND the seating zone — treat it exactly like a bed for command position AND like a sofa for facing direction:
+  * Its back/headboard must lean against the SLEEP ZONE wall (from HARD CONSTRAINTS or user preference)
+  * facing = wall OPPOSITE the sleep zone wall (so occupant faces the door)
+  * alignment = center (centred on its wall) unless user specified otherwise
+- compact_wardrobe: place on the SAME wall as sofa_bed OR the adjacent side wall — do NOT put it on the opposite wall (that's TV/seating zone)
+- folding_desk: place on a SIDE wall (not the sleep zone wall, not directly opposite it) — person should face the door (facing = door wall)
+- room_divider: use target_wall = "center" to divide sleep zone (north/back) from living/work zone (south/front); orient parallel to the short axis of the room
+- compact_dining / drop-leaf table: place near the kitchen zone wall or a side wall; NOT in the sleep zone half
+- shoe_cabinet / coat_rack: near the door wall (same wall or adjacent), aligned to a corner
+- If sofa_bed AND a separate sofa are both present (rare): sofa_bed goes on sleep zone wall, sofa goes on side wall facing the TV
+
+## Alignment Rules (always apply)
+- Sofa and bed: use alignment="center" unless the room has a strong reason for left/right
+- NEVER use alignment="right" for large items (sofa, bed, wardrobe) unless the room is very asymmetric — this causes corner crowding
+- Small items (nightstand, lamp, plant): use left/right to flank larger items
+- If two items share the same wall, stagger their alignment so they don't overlap: one "left", one "right"
+- offset_from_wall for sofa: 0.05–0.15 m (slight gap from wall); for bed: 0.0–0.05 m (touching wall)
+
+## CRITICAL: furniture_id Rules
+- Each "furniture_id" value MUST be copied VERBATIM from the "Available Furniture" list above (the part after "id=")
+- Do NOT shorten, rename, or invent IDs (e.g. use "sofa_3seat_001", NOT "sofa_01" or "sofa")
+- Every item in your placements MUST appear in the Available Furniture list
 
 Output ONLY valid JSON. Use the semantic schema — no raw x/z coordinates.
 
@@ -237,6 +379,33 @@ For each selected item, explain:
 - Why it's needed for this room type
 - Its Feng Shui element contribution
 - Recommended placement zone"""
+
+MODIFIER_EXPLANATION_PROMPT = """\
+You are a friendly interior design assistant confirming a furniture move to the user.
+
+Room: {room_type} ({width}m × {depth}m)
+Primary door: on the {door_wall} wall
+User request: "{modification_request}"
+Furniture moved: {target_furniture}
+New position: {new_wall} wall, {alignment} side, {offset:.2f}m gap from wall
+Remaining collisions: {collisions_remaining}
+
+Write a short confirmation in Thai language (40–80 words) that:
+1. Echoes the user's own words — if they said "ขวางประตู", say "ขวางประตู"; if they said "ชิดกำแพง", say "ชิดกำแพง". Mirror their phrasing so they know you understood.
+2. Then state the resulting wall/side briefly as a detail (e.g. "ที่ผนังด้านเหนือ")
+3. ONLY if the new position has a clear feng shui benefit, mention it in one sentence (skip if none)
+4. If collisions remain, briefly mention it
+
+STRICT RULES:
+- Mirror the user's phrasing — never describe the result only in technical terms they didn't use
+- The user asked for this position intentionally — do NOT suggest moving it elsewhere
+- Do NOT warn about bad energy, sha chi, or feng shui problems
+- Do NOT recommend alternative positions or say the current position is wrong
+- Do NOT end with a suggestion to try a different spot
+- Just confirm the move warmly and be done
+
+Do NOT output JSON, markdown headers, or bullet lists. Write in plain, warm Thai prose only.\
+"""
 
 EXPLANATION_PROMPT = """\
 You are explaining a feng shui furniture layout result to the user.
