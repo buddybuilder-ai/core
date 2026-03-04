@@ -132,6 +132,38 @@ class RepairStep(BaseStep):
 
         return None
 
+    # ------------------------------------------------------------------
+    # Coordinate helpers
+    #
+    # layout_items use CENTRE-based coordinates (room-centre origin), which
+    # is what the frontend expects.  All repair geometry must work in the
+    # same system.
+    #
+    #   half_w = room.width  / 2   (max allowed |pos_x| for a point item)
+    #   half_d = room.depth  / 2
+    #
+    # For a furniture piece of footprint (fw × fd):
+    #   valid centre_x range: [-half_w + fw/2,  half_w - fw/2]
+    #   valid centre_z range: [-half_d + fd/2,  half_d - fd/2]
+    #
+    # AABB (which uses corner coords) is built from centre coords by:
+    #   AABB.from_center_and_size(cx, cz, fw, fd)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _footprint_wh(dims: dict[str, Any], rotation: int) -> tuple[float, float]:
+        """Return (footprint_x, footprint_z) in room space for a furniture item.
+
+        _physical_to_dict stores pre-rotation dimensions (for Three.js BoxGeometry)
+        and swaps width/depth back for 90/270° so rendering is correct. We swap
+        again here to recover the actual room footprint extents.
+        """
+        w = dims.get("width", 1.0)
+        d = dims.get("depth", 1.0)
+        if rotation % 360 in (90, 270):
+            return d, w
+        return w, d
+
     def _try_shift(
         self,
         conflict: Conflict,
@@ -147,40 +179,36 @@ class RepairStep(BaseStep):
         if not target:
             return None
 
-        original_x = target.get("pos_x", 0)
-        original_z = target.get("pos_z", 0)
-        dims = target.get("dimensions", {})
+        original_x = target.get("pos_x", 0.0)
+        original_z = target.get("pos_z", 0.0)
         rotation = target.get("rotation", 0)
-        w = dims.get("width", 1)
-        d = dims.get("depth", 1)
-        if rotation in (90, 270):
-            w, d = d, w
+        fw, fd = self._footprint_wh(target.get("dimensions", {}), rotation)
+
+        half_w = room.width / 2
+        half_d = room.depth / 2
 
         for dist in SHIFT_INCREMENTS:
             for dx, dz in SHIFT_DIRECTIONS:
                 new_x = original_x + dx * dist
                 new_z = original_z + dz * dist
 
-                # Bounds check
-                if new_x < 0 or new_z < 0:
+                # Bounds check (centre-based)
+                if new_x - fw / 2 < -half_w or new_x + fw / 2 > half_w:
                     continue
-                if new_x + w > room.width or new_z + d > room.depth:
+                if new_z - fd / 2 < -half_d or new_z + fd / 2 > half_d:
                     continue
 
-                # Collision check against other items
-                new_box = AABB.from_position_and_size(new_x, new_z, w, d)
+                # Collision check using centre-based AABB
+                new_box = AABB.from_center_and_size(new_x, new_z, fw, fd)
                 has_collision = False
                 for other in items:
                     if other.get("id") == target_id:
                         continue
-                    o_dims = other.get("dimensions", {})
-                    o_rot = other.get("rotation", 0)
-                    ow = o_dims.get("width", 1)
-                    od = o_dims.get("depth", 1)
-                    if o_rot in (90, 270):
-                        ow, od = od, ow
-                    other_box = AABB.from_position_and_size(
-                        other.get("pos_x", 0), other.get("pos_z", 0), ow, od
+                    o_fw, o_fd = self._footprint_wh(
+                        other.get("dimensions", {}), other.get("rotation", 0)
+                    )
+                    other_box = AABB.from_center_and_size(
+                        other.get("pos_x", 0.0), other.get("pos_z", 0.0), o_fw, o_fd
                     )
                     if new_box.intersects(other_box):
                         has_collision = True
@@ -227,36 +255,37 @@ class RepairStep(BaseStep):
             return None
 
         original_rotation = target.get("rotation", 0)
+        pos_x = target.get("pos_x", 0.0)
+        pos_z = target.get("pos_z", 0.0)
+        half_w = room.width / 2
+        half_d = room.depth / 2
+
+        dims = target.get("dimensions", {})
+
         for new_rotation in [90, 180, 270, 0]:
             if new_rotation == original_rotation:
                 continue
 
-            # Check if new rotation fits
-            dims = target.get("dimensions", {})
-            w = dims.get("width", 1)
-            d = dims.get("depth", 1)
-            if new_rotation in (90, 270):
-                w, d = d, w
+            # _footprint_wh treats stored dims as pre-rotation (Three.js) and
+            # swaps for 90/270° to get room-space extents.
+            fw, fd = self._footprint_wh(dims, new_rotation)
 
-            pos_x = target.get("pos_x", 0)
-            pos_z = target.get("pos_z", 0)
-
-            if pos_x + w > room.width or pos_z + d > room.depth:
+            # Bounds check (centre-based)
+            if pos_x - fw / 2 < -half_w or pos_x + fw / 2 > half_w:
+                continue
+            if pos_z - fd / 2 < -half_d or pos_z + fd / 2 > half_d:
                 continue
 
-            new_box = AABB.from_position_and_size(pos_x, pos_z, w, d)
+            new_box = AABB.from_center_and_size(pos_x, pos_z, fw, fd)
             has_collision = False
             for other in items:
                 if other.get("id") == target_id:
                     continue
-                o_dims = other.get("dimensions", {})
-                o_rot = other.get("rotation", 0)
-                ow = o_dims.get("width", 1)
-                od = o_dims.get("depth", 1)
-                if o_rot in (90, 270):
-                    ow, od = od, ow
-                other_box = AABB.from_position_and_size(
-                    other.get("pos_x", 0), other.get("pos_z", 0), ow, od
+                o_fw, o_fd = self._footprint_wh(
+                    other.get("dimensions", {}), other.get("rotation", 0)
+                )
+                other_box = AABB.from_center_and_size(
+                    other.get("pos_x", 0.0), other.get("pos_z", 0.0), o_fw, o_fd
                 )
                 if new_box.intersects(other_box):
                     has_collision = True
@@ -264,6 +293,7 @@ class RepairStep(BaseStep):
 
             if not has_collision:
                 target["rotation"] = new_rotation
+                # dimensions stay as pre-rotation (Three.js) — only rotation changes
                 return RepairAction(
                     action_type=RepairActionType.ROTATE,
                     conflict_id=conflict.id,

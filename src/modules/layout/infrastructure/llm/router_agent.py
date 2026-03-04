@@ -25,7 +25,7 @@ from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-_VALID_INTENTS = {"new_layout", "modify", "question", "explain", "set_mode"}
+_VALID_INTENTS = {"new_layout", "modify", "rearrange_all", "question", "explain", "set_mode"}
 _FALLBACK_INTENT = "question"
 
 _SYSTEM_PROMPT = """\
@@ -33,19 +33,23 @@ You are an intent classifier for a feng shui interior design assistant.
 
 Classify the user message into exactly one of:
 - "new_layout": user wants a brand new furniture layout for a room
-- "modify": user wants to change an existing layout (move/resize/swap/remove/add furniture)
+- "modify": user wants to change a SPECIFIC piece of furniture in an existing layout (move/resize/swap/remove/add ONE item)
+- "rearrange_all": user wants ALL existing furniture repositioned/reorganized (e.g. "จัดห้องใหม่", "จัดวางใหม่ทั้งหมด", "จัดให้ถูกฮ้วงจุ้ย", "ปรับห้องให้ถูกหลัก", "rearrange", "reorganize the room", "redo the layout", "จัดห้องให้ลงตัว")
 - "question": user asks about feng shui or design principles (including greetings)
 - "explain": user wants an explanation of the current layout
 - "set_mode": user wants to change the personality mode of the assistant
   (e.g. "เปลี่ยนเป็นโหมดครู", "switch to fun mode", "use mentor mode", "โหมดสนุก")
 
 Context clues:
-- If has_existing_layout is false, "modify" and "explain" are unlikely.
-- Short greetings ("hi", "hello") → "question".
+- If has_existing_layout is false, use "new_layout" even if the message mentions placing specific furniture (e.g. "วางเตียงทางซ้าย", "put the sofa on the right"). Those are placement preferences for a new layout, not modifications.
+- "modify" is ONLY valid when has_existing_layout is true AND user asks to change a specific item.
+- "rearrange_all" is ONLY valid when has_existing_layout is true AND user wants to reorganize everything.
+- If has_existing_layout is false and user asks to "explain", classify as "question" instead.
+- Short greetings ("hi", "hello", "สวัสดี") → "question".
 
 Respond ONLY with a valid JSON object — no other text:
 {
-  "intent": "<new_layout|modify|question|explain|set_mode>",
+  "intent": "<new_layout|modify|rearrange_all|question|explain|set_mode>",
   "confidence": <float 0.0-1.0>,
   "extracted_params": {}
 }

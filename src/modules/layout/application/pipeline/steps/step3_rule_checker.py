@@ -202,13 +202,15 @@ class RuleCheckerStep(BaseStep):
                             )
                         )
 
-        # Check out of bounds
+        # Check out of bounds (box is centre-based, room limits are ±half)
+        half_w = room.width / 2
+        half_d = room.depth / 2
         for item, box in zip(items, boxes):
             if (
-                box.min_x < -0.01
-                or box.min_z < -0.01
-                or box.max_x > room.width + 0.01
-                or box.max_z > room.depth + 0.01
+                box.min_x < -half_w - 0.01
+                or box.min_z < -half_d - 0.01
+                or box.max_x > half_w + 0.01
+                or box.max_z > half_d + 0.01
             ):
                 conflicts.append(
                     Conflict(
@@ -259,16 +261,13 @@ class RuleCheckerStep(BaseStep):
             if category not in key_categories:
                 continue
 
-            pos_x = item.get("pos_x", 0)
-            pos_z = item.get("pos_z", 0)
-            dims = item.get("dimensions", {})
-            w = dims.get("width", 1)
-            d = dims.get("depth", 1)
-            center_x = pos_x + w / 2
-            center_z = pos_z + d / 2
+            # pos_x/pos_z are already furniture centres (room-centre coords)
+            center_x = item.get("pos_x", 0.0)
+            center_z = item.get("pos_z", 0.0)
+            rotation = item.get("rotation", 0)
+            fw, fd = self._footprint(item.get("dimensions", {}), rotation)
 
             # Check back to door
-            rotation = item.get("rotation", 0)
             if self._has_back_to_door(center_x, center_z, rotation, door_x, door_z):
                 conflicts.append(
                     Conflict(
@@ -281,7 +280,7 @@ class RuleCheckerStep(BaseStep):
                 )
 
             # Check sha chi alignment (direct line with door)
-            if self._is_aligned_with_door(center_x, center_z, w, d, door_x, door_z):
+            if self._is_aligned_with_door(center_x, center_z, fw, fd, door_x, door_z):
                 conflicts.append(
                     Conflict(
                         conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
@@ -296,36 +295,53 @@ class RuleCheckerStep(BaseStep):
 
     # --- Helpers ---
 
+    @staticmethod
+    def _footprint(dims: dict[str, Any], rotation: int) -> tuple[float, float]:
+        """Return (fw, fd) footprint extents along X and Z in room space.
+
+        _physical_to_dict stores pre-rotation dimensions (for Three.js BoxGeometry)
+        and swaps width/depth back for 90/270° so rendering is correct. We swap
+        again here to recover the actual room footprint extents.
+        """
+        w = dims.get("width", 1.0)
+        d = dims.get("depth", 1.0)
+        if rotation % 360 in (90, 270):
+            return d, w
+        return w, d
+
     def _build_boxes(self, items: list[dict[str, Any]]) -> list[AABB]:
+        """Build centre-based AABBs. pos_x/pos_z are furniture centres."""
         boxes = []
         for item in items:
-            dims = item.get("dimensions", {})
-            rotation = item.get("rotation", 0)
-            w = dims.get("width", 1)
-            d = dims.get("depth", 1)
-            if rotation in (90, 270):
-                w, d = d, w
+            fw, fd = self._footprint(item.get("dimensions", {}), item.get("rotation", 0))
             boxes.append(
-                AABB.from_position_and_size(
-                    item.get("pos_x", 0),
-                    item.get("pos_z", 0),
-                    w,
-                    d,
+                AABB.from_center_and_size(
+                    item.get("pos_x", 0.0),
+                    item.get("pos_z", 0.0),
+                    fw,
+                    fd,
                 )
             )
         return boxes
 
     def _get_door_center(self, door: dict[str, Any], room: Room) -> tuple[float, float]:
+        """Return door centre in room-centre coordinate system."""
         wall = door.get("wall", "south")
         offset = door.get("offset", 1.0)
         width = door.get("width", 0.9)
-        center = offset + width / 2
-        _wall_coords = {
-            "north": (center, 0),
-            "south": (center, room.depth),
-            "west": (0, center),
-        }
-        return _wall_coords.get(wall, (room.width, center))
+        # offset is from the SW corner along the wall edge
+        # convert to room-centre coords
+        half_w = room.width / 2
+        half_d = room.depth / 2
+        door_mid = offset + width / 2
+        if wall == "north":
+            return door_mid - half_w, -half_d
+        if wall == "south":
+            return door_mid - half_w, half_d
+        if wall == "west":
+            return -half_w, door_mid - half_d
+        # east
+        return half_w, door_mid - half_d
 
     def _get_primary_door_pos(self, room: Room) -> tuple[float, float]:
         if room.doors:
@@ -333,7 +349,7 @@ class RuleCheckerStep(BaseStep):
             return self._get_door_center(
                 {"wall": d.wall, "offset": d.offset, "width": d.width}, room
             )
-        return room.width / 2, room.depth
+        return 0.0, room.depth / 2
 
     def _has_back_to_door(self, cx: float, cz: float, rotation: int, dx: float, dz: float) -> bool:
         door_angle = math.degrees(math.atan2(dz - cz, dx - cx))
