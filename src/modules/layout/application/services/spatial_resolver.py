@@ -99,9 +99,9 @@ class RoomSpec:
 # Three.js Y=0° → faces -Z (north); Y=180° → faces +Z (south).
 _WALL_ROTATION: dict[str, int] = {
     "south": 180,  # south wall → faces into room (Y=180° → +Z)
-    "north": 0,    # north wall → faces into room (Y=0°   → -Z)
-    "west": 90,    # west wall → faces east  (Y=90°  → +X)
-    "east": 270,   # east wall → faces west  (Y=270° → -X)
+    "north": 0,  # north wall → faces into room (Y=0° → -Z)
+    "west": 90,  # west wall → faces east  (Y=90° → +X)
+    "east": 270,  # east wall → faces west  (Y=270° → -X)
 }
 
 # Opposite of each wall — used for auto-facing "must face inward"
