@@ -173,7 +173,9 @@ class SpatialResolver:
             elif wall == "north":
                 x0 = max(0.0, offset - 0.1)
                 x1 = min(room.width, offset + door_w + 0.1)
-                zones.append(AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _MIN_GAP))
+                zones.append(
+                    AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _MIN_GAP)
+                )
             elif wall == "west":
                 z0 = max(0.0, offset - 0.1)
                 z1 = min(room.depth, offset + door_w + 0.1)
@@ -181,7 +183,9 @@ class SpatialResolver:
             elif wall == "east":
                 z0 = max(0.0, offset - 0.1)
                 z1 = min(room.depth, offset + door_w + 0.1)
-                zones.append(AABB(min_x=room.width - c, max_x=room.width - _MIN_GAP, min_z=z0, max_z=z1))
+                zones.append(
+                    AABB(min_x=room.width - c, max_x=room.width - _MIN_GAP, min_z=z0, max_z=z1)
+                )
         return zones
 
     def resolve(
