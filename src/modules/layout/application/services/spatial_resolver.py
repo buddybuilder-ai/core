@@ -98,10 +98,10 @@ class RoomSpec:
 # Rotation assigned to furniture placed against each wall so it faces inward.
 # Three.js Y=0° → faces -Z (north); Y=180° → faces +Z (south).
 _WALL_ROTATION: dict[str, int] = {
-    "south": 0,  # south wall → faces north (Y=0° → -Z)
-    "north": 180,  # north wall → faces south (Y=180° → +Z)
-    "west": 90,  # west wall → faces east  (Y=90° → +X)
-    "east": 270,  # east wall → faces west  (Y=270° → -X)
+    "south": 180,  # south wall → faces into room (Y=180° → +Z)
+    "north": 0,    # north wall → faces into room (Y=0°   → -Z)
+    "west": 90,    # west wall → faces east  (Y=90°  → +X)
+    "east": 270,   # east wall → faces west  (Y=270° → -X)
 }
 
 # Opposite of each wall — used for auto-facing "must face inward"
@@ -160,8 +160,8 @@ class SpatialResolver:
         # Door width assumed ~0.9 m; clearance rectangle extends inward from the door wall
         for door in room.doors:
             wall = str(getattr(door, "wall", "")).lower()
-            # Estimate door x/z centre from offset (DoorPosition has offset_from_corner)
-            offset = float(getattr(door, "offset_from_corner", 0.0))
+            # Estimate door x/z position from offset (DoorPosition uses .offset field)
+            offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
             if wall == "south":
                 # Door is on south wall (z=0), offset measured from west corner along x

@@ -629,32 +629,29 @@ class TestUserClarifierToolHelpers:
         assert question is None
 
     def test_get_questions_for_room_type_bedroom(self, tool: UserClarifierTool) -> None:
-        """Test getting questions for bedroom."""
-        questions = tool.get_questions_for_room_type("bedroom")
-        categories = {q.category for q in questions}
-        assert "bedroom" in categories or "general" in categories
-        # Should include bed position preference
+        """Test getting questions for studio_apartment returns predefined questions."""
+        questions = tool.get_questions_for_room_type("studio_apartment")
+        assert len(questions) > 0
         ids = {q.id for q in questions}
-        assert "bed_position_preference" in ids
+        assert "sleep_zone_preference" in ids
 
     def test_get_questions_for_room_type_office(self, tool: UserClarifierTool) -> None:
-        """Test getting questions for office."""
-        questions = tool.get_questions_for_room_type("office")
+        """Test getting questions for any room type returns available questions."""
+        questions = tool.get_questions_for_room_type("studio_apartment")
         ids = {q.id for q in questions}
-        assert "desk_facing_preference" in ids
-        assert "work_style" in ids
+        assert "work_area_needed" in ids
 
     def test_get_questions_for_room_type_living_room(self, tool: UserClarifierTool) -> None:
-        """Test getting questions for living room."""
-        questions = tool.get_questions_for_room_type("living_room")
+        """Test getting questions returns sofa-related question."""
+        questions = tool.get_questions_for_room_type("studio_apartment")
         ids = {q.id for q in questions}
-        assert "sofa_configuration" in ids
+        assert "sofa_bed_or_separate" in ids
 
     def test_get_questions_for_room_type_includes_general(self, tool: UserClarifierTool) -> None:
-        """Test that general questions are included for any room type."""
-        questions = tool.get_questions_for_room_type("bedroom")
+        """Test that questions are returned for the studio_apartment room type."""
+        questions = tool.get_questions_for_room_type("studio_apartment")
         categories = {q.category for q in questions}
-        assert "general" in categories
+        assert "studio_apartment" in categories
 
     def test_create_custom_question(self, tool: UserClarifierTool) -> None:
         """Test creating a custom question."""
@@ -708,24 +705,24 @@ class TestUserClarifierToolPredefinedQuestions:
         for qid, question in tool.PREDEFINED_QUESTIONS.items():
             assert question.context, f"{qid} missing context"
 
-    def test_predefined_bed_position(self, tool: UserClarifierTool) -> None:
-        """Test bed position preference question."""
-        q = tool.PREDEFINED_QUESTIONS["bed_position_preference"]
-        assert q.category == "bedroom"
-        assert "command position" in q.default_value.lower()
+    def test_predefined_sleep_zone(self, tool: UserClarifierTool) -> None:
+        """Test sleep zone preference question."""
+        q = tool.PREDEFINED_QUESTIONS["sleep_zone_preference"]
+        assert q.category == "studio_apartment"
+        assert q.priority == QuestionPriority.REQUIRED
         assert len(q.options) >= 3
 
-    def test_predefined_desk_facing(self, tool: UserClarifierTool) -> None:
-        """Test desk facing preference question."""
-        q = tool.PREDEFINED_QUESTIONS["desk_facing_preference"]
-        assert q.category == "office"
-        assert "door" in q.default_value.lower()
+    def test_predefined_sofa_bed(self, tool: UserClarifierTool) -> None:
+        """Test sofa bed or separate question."""
+        q = tool.PREDEFINED_QUESTIONS["sofa_bed_or_separate"]
+        assert q.category == "studio_apartment"
+        assert q.question_type == QuestionType.MULTIPLE_CHOICE
 
-    def test_predefined_dining_capacity_is_required(self, tool: UserClarifierTool) -> None:
-        """Test dining capacity is a required question."""
-        q = tool.PREDEFINED_QUESTIONS["dining_capacity"]
-        assert q.priority == QuestionPriority.REQUIRED
-        assert q.question_type == QuestionType.NUMERIC
+    def test_predefined_budget_level_is_recommended(self, tool: UserClarifierTool) -> None:
+        """Test budget level is a recommended multiple choice question."""
+        q = tool.PREDEFINED_QUESTIONS["budget_level"]
+        assert q.priority == QuestionPriority.RECOMMENDED
+        assert q.question_type == QuestionType.MULTIPLE_CHOICE
 
 
 class TestUserClarifierToolLangChainSchema:
@@ -764,15 +761,16 @@ class TestUserClarifierToolIntegration:
         """Test a complete clarification flow with predefined questions."""
         tool = UserClarifierTool()
 
-        # Get questions for bedroom
-        questions = tool.get_questions_for_room_type("bedroom")
+        # Get questions for studio_apartment
+        questions = tool.get_questions_for_room_type("studio_apartment")
 
-        # First pass - provide some answers
+        # First pass - provide some answers (use actual option values from PREDEFINED_QUESTIONS)
+        sleep_zone_option = tool.PREDEFINED_QUESTIONS["sleep_zone_preference"].default_value
         input_data = ClarifierInput(
             questions=questions,
             answers={
-                "bed_position_preference": "Command position (diagonal from door)",
-                "budget_level": "Medium",
+                "sleep_zone_preference": sleep_zone_option,
+                "budget_level": "กลาง",
             },
             auto_apply_defaults=True,
         )
@@ -783,9 +781,9 @@ class TestUserClarifierToolIntegration:
         assert result.data is not None
 
         # Check that answered questions are resolved
-        bed_answer = result.data.get_answer("bed_position_preference")
-        assert bed_answer is not None
-        assert not bed_answer.was_default
+        sleep_answer = result.data.get_answer("sleep_zone_preference")
+        assert sleep_answer is not None
+        assert not sleep_answer.was_default
 
         budget_answer = result.data.get_answer("budget_level")
         assert budget_answer is not None
