@@ -36,7 +36,7 @@ from src.modules.layout.infrastructure.llm.prompts import (
 logger = logging.getLogger(__name__)
 
 # Maximum nudge attempts when collisions remain after modification
-_MAX_REPAIR_ATTEMPTS = 3
+_MAX_REPAIR_ATTEMPTS = 6
 # Distance to shift item along its wall per repair attempt (meters)
 _NUDGE_DISTANCE = 0.3
 
@@ -113,24 +113,43 @@ class ModifierAgent:
                 f"align={sp.get('alignment')} offset={sp.get('offset_from_wall')}"
             )
 
-        # --- 2. Re-plan with LLM ---
-        # Skip LLM re-plan: resolve the back-converted semantics directly.
-        # The target item already has its orientation overridden in _layout_to_semantics.
-        # Re-running the LLM would cause it to re-plan from scratch, dropping any
-        # user-placed items that are not in the default furniture catalog.
-        new_semantics = semantic_placements
+        # --- 2. Resolve only the target item; keep non-targets at their current positions ---
+        # Split semantics: target (priority=0) vs bystanders
+        target_semantics = [s for s in semantic_placements if s.get("priority") == 0]
+        non_target_ids = {
+            s.get("furniture_id") for s in semantic_placements if s.get("priority") != 0
+        }
 
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,
             data={"step": "modifier", "message": "Resolving positions...", "progress": 0.65},
         )
 
-        # --- 3. Resolve semantic → physical ---
-        resolution = self._resolver.resolve(new_semantics, room_spec)
+        # --- 3. Resolve semantic → physical (target only) ---
+        resolution = self._resolver.resolve(target_semantics, room_spec)
+        physical_target = list(resolution.physical_placements)
 
-        # --- 4. Nudge repair for remaining collisions ---
-        collisions = resolution.collisions
-        physical = resolution.physical_placements
+        # Non-target items: copy directly from current_layout without re-resolving
+        enriched_others = [
+            item for item in current_layout
+            if item.get("furniture_id", item.get("id", "")) in non_target_ids
+        ]
+
+        # Build enriched target item(s)
+        enriched_target = self._enrich_from_current(physical_target, current_layout)
+
+        # Merge: target first, then bystanders in their original order
+        enriched = enriched_target + enriched_others
+
+        # --- 4. Collision check against ALL items (target + bystanders) ---
+        # Recheck collisions between target and bystanders using the full enriched list
+        from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
+        from src.modules.layout.application.pipeline.models import Conflict, ConflictType
+        from src.modules.layout.application.pipeline.steps.step4_repair import RepairStep
+        from src.modules.layout.infrastructure.geometry import AABB
+
+        room_obj = RearrangeAgent._build_room(room_spec)
+        collisions = RearrangeAgent._recheck_collisions(enriched, room_obj)
 
         for attempt in range(_MAX_REPAIR_ATTEMPTS):
             if not collisions:
@@ -138,15 +157,29 @@ class ModifierAgent:
             logger.debug(
                 f"ModifierAgent: repair attempt {attempt + 1}, {len(collisions)} collisions"
             )
-            physical, collisions = self._nudge_repair(physical, collisions, room_w, room_d)
+            repair = RepairStep.__new__(RepairStep)
+            for c in collisions:
+                ids = c.get("furniture_ids", [])
+                # Only shift the target — never move bystanders
+                target_id = next(
+                    (fid for fid in ids if fid not in non_target_ids), None
+                )
+                if not target_id:
+                    continue
+                conflict = Conflict(
+                    conflict_type=ConflictType.OVERLAP,
+                    description=c.get("description", "overlap"),
+                    items_involved=[target_id],
+                )
+                repair._try_shift(conflict, enriched, room_obj)
+            collisions = RearrangeAgent._recheck_collisions(enriched, room_obj)
+
+        physical = physical_target
 
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,
             data={"step": "modifier", "message": "Finalising...", "progress": 0.9},
         )
-
-        # Enrich physical placements with catalog metadata from current_layout
-        enriched = self._enrich_from_current(physical, current_layout)
 
         yield SSEEvent(
             event_type=SSEEventType.MODIFIER_UPDATED,
@@ -161,11 +194,11 @@ class ModifierAgent:
         target_semantic = next(
             (
                 s
-                for s in new_semantics
+                for s in target_semantics
                 if target_type in _tokens(s.get("furniture_id", ""))
                 or target_type in _tokens(s.get("furniture_type", ""))
             ),
-            new_semantics[0] if new_semantics else {},
+            target_semantics[0] if target_semantics else {},
         )
         dims = room_spec.get("dimensions") or {}
         doors = room_spec.get("doors", [])
@@ -287,13 +320,18 @@ class ModifierAgent:
         "ผนังตก": "west",
         "กลางห้อง": "center",
         "กลาง": "center",
-        # English
+        # English full
         "north": "north",
         "south": "south",
         "east": "east",
         "west": "west",
         "center": "center",
         "centre": "center",
+        # Abbreviations after "ทิศ" (e.g. "ทิศ N", "ทิศ n")
+        "ทิศ n": "north",
+        "ทิศ s": "south",
+        "ทิศ e": "east",
+        "ทิศ w": "west",
         "middle": "center",
     }
 

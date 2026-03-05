@@ -402,16 +402,16 @@ class SpatialResolver:
             x, z, rotation = self._wall_position(p, room, wall)
 
         # --- Facing resolution (3-tier priority) ---
-        # 1. LLM explicitly set facing → always honour it
-        # 2. furniture_type is in _FORCE_INWARD_TYPES and facing is empty
-        #    → force facing = opposite of target_wall (away from wall = usable)
+        # 1. furniture_type is in _FORCE_INWARD_TYPES → ALWAYS force inward,
+        #    overriding LLM output (door/drawer must open into room, not wall)
+        # 2. LLM explicitly set facing for other types → honour it
         # 3. Otherwise keep wall-default rotation from _WALL_ROTATION
         ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
         effective_facing = p.facing
 
-        if not effective_facing and wall != "center":
-            if ftype in _FORCE_INWARD_TYPES:
-                effective_facing = _OPPOSITE_WALL.get(wall, "")
+        if wall != "center" and ftype in _FORCE_INWARD_TYPES:
+            # Force inward regardless of what LLM said
+            effective_facing = _OPPOSITE_WALL.get(wall, "")
 
         if effective_facing and effective_facing in _FACING_ROTATION:
             rotation = _FACING_ROTATION[effective_facing]

@@ -33,7 +33,7 @@ from src.modules.layout.infrastructure.geometry import AABB
 logger = logging.getLogger(__name__)
 
 # How far to try shifting (meters)
-SHIFT_INCREMENTS = [0.3, 0.5, 0.8, 1.0]
+SHIFT_INCREMENTS = [0.3, 0.5, 0.8, 1.0, 1.3, 1.6, 2.0]
 # Minimum gap between furniture after shifting (metres)
 MIN_SHIFT_CLEARANCE = 0.15
 SHIFT_DIRECTIONS = [
@@ -317,6 +317,6 @@ class RepairStep(BaseStep):
 
     def _find_item(self, item_id: str, items: list[dict[str, Any]]) -> dict[str, Any] | None:
         for item in items:
-            if item.get("id") == item_id:
+            if item.get("id") == item_id or item.get("furniture_id") == item_id:
                 return item
         return None
