@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 # How far to try shifting (meters)
 SHIFT_INCREMENTS = [0.3, 0.5, 0.8, 1.0]
+# Minimum gap between furniture after shifting (metres)
+MIN_SHIFT_CLEARANCE = 0.15
 SHIFT_DIRECTIONS = [
     (1, 0),
     (-1, 0),
@@ -198,8 +200,11 @@ class RepairStep(BaseStep):
                 if new_z - fd / 2 < -half_d or new_z + fd / 2 > half_d:
                     continue
 
-                # Collision check using centre-based AABB
+                # Collision + clearance check using centre-based AABB
                 new_box = AABB.from_center_and_size(new_x, new_z, fw, fd)
+                # Expand the candidate box by a small clearance margin so
+                # we never place furniture touching/overlapping another item.
+                clearance_box = new_box.expanded(MIN_SHIFT_CLEARANCE)
                 has_collision = False
                 for other in items:
                     if other.get("id") == target_id:
@@ -210,7 +215,7 @@ class RepairStep(BaseStep):
                     other_box = AABB.from_center_and_size(
                         other.get("pos_x", 0.0), other.get("pos_z", 0.0), o_fw, o_fd
                     )
-                    if new_box.intersects(other_box):
+                    if clearance_box.intersects(other_box):
                         has_collision = True
                         break
 
@@ -277,6 +282,7 @@ class RepairStep(BaseStep):
                 continue
 
             new_box = AABB.from_center_and_size(pos_x, pos_z, fw, fd)
+            clearance_box = new_box.expanded(MIN_SHIFT_CLEARANCE)
             has_collision = False
             for other in items:
                 if other.get("id") == target_id:
@@ -287,7 +293,7 @@ class RepairStep(BaseStep):
                 other_box = AABB.from_center_and_size(
                     other.get("pos_x", 0.0), other.get("pos_z", 0.0), o_fw, o_fd
                 )
-                if new_box.intersects(other_box):
+                if clearance_box.intersects(other_box):
                     has_collision = True
                     break
 

@@ -23,6 +23,7 @@ from src.modules.layout.application.pipeline.models import (
     SSEEvent,
 )
 from src.modules.layout.application.pipeline.steps.base import BaseStep
+from src.modules.layout.infrastructure.geometry import AABB
 from src.modules.layout.infrastructure.llm.langchain_agent import FengShuiLLMAgent
 
 logger = logging.getLogger(__name__)
@@ -100,17 +101,37 @@ class ExplainerStep(BaseStep):
         names = [i.get("name", i.get("furniture_type", "item")) for i in items]
         items_summary = f"{len(items)} items: {', '.join(names)}" if names else "no items placed"
 
+        # Final geometric overlap safety-net: regardless of what the
+        # pipeline conflict list says, verify the actual AABB layout right
+        # now so the explanation never claims "no collisions" when furniture
+        # visually overlaps.
+        actual_overlaps = self._count_actual_overlaps(items)
+
         # Conflicts
         all_conflicts = state.conflicts
         resolved = [c for c in all_conflicts if c.resolved]
         unresolved = state.unresolved_conflicts
-        if all_conflicts:
+
+        if actual_overlaps > 0 and not unresolved:
+            # Pipeline thinks everything is resolved, but geometry says
+            # otherwise → override the summary so the LLM does NOT claim
+            # the layout is collision-free.
+            conflicts_summary = (
+                f"{actual_overlaps} furniture overlap(s) still present in final layout"
+            )
+            remaining_issues_override = (
+                f"{actual_overlaps} furniture overlap(s) remain — "
+                "some items are too close or overlapping"
+            )
+        elif all_conflicts:
             conflicts_summary = (
                 f"{len(all_conflicts)} conflicts found, "
                 f"{len(resolved)} resolved, {len(unresolved)} remaining"
             )
+            remaining_issues_override = None
         else:
             conflicts_summary = "no conflicts detected"
+            remaining_issues_override = None
 
         # Repairs
         repair_descs = [a.description for a in state.repair_actions if a.success]
@@ -122,7 +143,9 @@ class ExplainerStep(BaseStep):
         grade = self._get_grade(total_score)
 
         # Remaining issues
-        if unresolved:
+        if remaining_issues_override:
+            remaining_issues = remaining_issues_override
+        elif unresolved:
             issue_descs = [c.description for c in unresolved]
             remaining_issues = "; ".join(issue_descs)
         else:
@@ -226,6 +249,37 @@ class ExplainerStep(BaseStep):
             if c.suggestion:
                 lines.append(f"  → {c.suggestion}")
         return lines
+
+    @staticmethod
+    def _footprint(dims: dict[str, Any], rotation: int) -> tuple[float, float]:
+        """Return (fw, fd) footprint in room space — same logic as RuleCheckerStep."""
+        w = dims.get("width", 1.0)
+        d = dims.get("depth", 1.0)
+        if rotation % 360 in (90, 270):
+            return d, w
+        return w, d
+
+    def _count_actual_overlaps(self, items: list[dict[str, Any]]) -> int:
+        """Quick geometric overlap count on final layout items."""
+        boxes: list[AABB] = []
+        for item in items:
+            fw, fd = self._footprint(
+                item.get("dimensions", {}), item.get("rotation", 0)
+            )
+            boxes.append(
+                AABB.from_center_and_size(
+                    item.get("pos_x", 0.0),
+                    item.get("pos_z", 0.0),
+                    fw,
+                    fd,
+                )
+            )
+        count = 0
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1 :]:
+                if a.intersects(b):
+                    count += 1
+        return count
 
     def _get_grade(self, total: int) -> str:
         if total >= GRADE_EXCELLENT:

@@ -125,7 +125,15 @@ _FORCE_INWARD_TYPES: frozenset[str] = frozenset(
         "folding_desk",
         "sofa",
         "sofa_bed",
-        "tv_stand",  # screen must face into room
+        "tv_stand",         # screen must face into room
+        "wardrobe",         # door must open into room
+        "compact_wardrobe",
+        "bookshelf",        # books must be accessible
+        "nightstand",       # drawers face outward
+        "dresser",
+        "shoe_cabinet",
+        "kitchen_counter",  # work surface faces into room
+        "mini_fridge",      # door must open into room
     }
 )
 
