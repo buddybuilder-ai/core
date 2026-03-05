@@ -518,7 +518,7 @@ class ModifierAgent:
         if has_against:
             return direction, None, alignment_override
         if has_head:
-            return direction, cls._OPPOSITE.get(direction, direction), alignment_override
+            return direction, direction, alignment_override
 
         # Ambiguous single direction → treat as wall position
         return direction, None, alignment_override
