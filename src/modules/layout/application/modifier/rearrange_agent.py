@@ -192,8 +192,10 @@ class RearrangeAgent:
             logger.info(f"RearrangeAgent: injecting wall_constraint={wall_constraint!r}")
 
         hard_constraints = (
-            f"Place ONLY these exact furniture IDs: [{owned_ids_str}]. "
-            "Do NOT add, rename, or invent any furniture not in this list."
+            f"You MUST place ALL {len(furniture_list)} of these furniture IDs — every single one: [{owned_ids_str}]. "
+            "Do NOT skip, drop, or omit any item from the list. "
+            "Do NOT add, rename, or invent any furniture not in this list. "
+            f"Your response MUST contain exactly {len(furniture_list)} placements."
         )
         if wall_constraint:
             hard_constraints += f"\n{wall_constraint}"
@@ -311,15 +313,58 @@ class RearrangeAgent:
         # Filter to only IDs that were in the original layout (LLM may hallucinate extras)
         enriched = [e for e in enriched if e.get("furniture_id", e.get("id", "")) in allowed_ids]
 
-        # Backfill any items the LLM dropped — keep them at their original position
+        # Backfill any items the LLM dropped — try to find a collision-free spot first
         placed_ids = {e.get("furniture_id", e.get("id", "")) for e in enriched}
         for original in current_layout:
             fid = original.get("furniture_id", original.get("id", ""))
             if fid and fid not in placed_ids:
                 logger.warning(
-                    f"RearrangeAgent: LLM dropped {fid!r} — restoring to original position"
+                    f"RearrangeAgent: LLM dropped {fid!r} — attempting to place collision-free"
                 )
-                enriched.append(original)
+                # Try original position first; if it collides, shift until free
+                room_obj = self._build_room(room_spec)
+                candidate = dict(original)
+                conflict = Conflict(
+                    conflict_type=ConflictType.OVERLAP,
+                    description=f"backfill {fid}",
+                    items_involved=[fid],
+                )
+                repair = RepairStep.__new__(RepairStep)
+                # Check if original position already collides with placed items
+                from src.modules.layout.infrastructure.geometry import AABB
+
+                dims = original.get("dimensions", {})
+                rot = original.get("rotation", 0)
+                fw = float(dims.get("width", 1.0))
+                fd = float(dims.get("depth", 1.0))
+                if rot % 360 in (90, 270):
+                    fw, fd = fd, fw
+                orig_box = AABB.from_center_and_size(
+                    original.get("pos_x", 0.0), original.get("pos_z", 0.0), fw, fd
+                )
+                def _other_box(e: dict[str, Any]) -> AABB:
+                    ed = e.get("dimensions", {})
+                    ew = float(ed.get("width", 1.0))
+                    efd = float(ed.get("depth", 1.0))
+                    if e.get("rotation", 0) % 360 in (90, 270):
+                        ew, efd = efd, ew
+                    return AABB.from_center_and_size(e.get("pos_x", 0.0), e.get("pos_z", 0.0), ew, efd)
+
+                has_collision = any(
+                    orig_box.intersects(_other_box(e))
+                    for e in enriched
+                    if e.get("furniture_id", e.get("id", "")) != fid
+                )
+                if has_collision:
+                    # Add as temporary item so _try_shift can shift it away from others
+                    enriched.append(candidate)
+                    action = repair._try_shift(conflict, enriched, room_obj)
+                    if not (action and action.success):
+                        logger.warning(
+                            f"RearrangeAgent: could not find free spot for {fid!r} — using original"
+                        )
+                else:
+                    enriched.append(candidate)
 
         yield SSEEvent(
             event_type=SSEEventType.MODIFIER_UPDATED,

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     LLM_MODEL_LAYOUT: str = "openai/gpt-4-turbo"
     LLM_MODEL_ROUTER: str = "openai/gpt-4o-mini"
     LLM_TEMPERATURE_RAG: float = 0.7
-    LLM_TEMPERATURE_LAYOUT: float = 0.4
+    LLM_TEMPERATURE_LAYOUT: float = 0.7
 
     # ==========================================================================
     # Database Configuration

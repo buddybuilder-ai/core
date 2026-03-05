@@ -319,6 +319,75 @@ class SpatialResolver:
                         bbox=new_bbox,
                     )
 
+        # --- Fallback: try placing against each alternative wall ---
+        # Original wall is full; attempt the other 3 walls in order.
+        alt_walls = ["south", "north", "west", "east"]
+        if on_south:
+            alt_walls = ["north", "west", "east"]
+        elif on_north:
+            alt_walls = ["south", "west", "east"]
+        elif on_west:
+            alt_walls = ["east", "south", "north"]
+        elif on_east:
+            alt_walls = ["west", "south", "north"]
+
+        for alt_wall in alt_walls:
+            alt_rot = _WALL_ROTATION.get(alt_wall, item.rotation)
+            # Recompute footprint for the new rotation (w/d may swap at 90/270)
+            if alt_rot in (90, 270):
+                aw, ad = d, w  # swap
+            else:
+                aw, ad = w, d
+
+            # Clamp to room
+            aw = min(aw, room.width)
+            ad = min(ad, room.depth)
+
+            if alt_wall == "south":
+                nx, nz = (room.width - aw) / 2.0, 0.0
+            elif alt_wall == "north":
+                nx, nz = (room.width - aw) / 2.0, room.depth - ad
+            elif alt_wall == "west":
+                nx, nz = 0.0, (room.depth - ad) / 2.0
+            else:  # east
+                nx, nz = room.width - aw, (room.depth - ad) / 2.0
+
+            # Check with the new dimensions
+            def overlaps_alt(x: float, z: float, fw: float, fd: float) -> bool:
+                box = AABB.from_position_and_size(x, z, fw, fd)
+                return any(box.intersects(p.bbox) for p in placed)
+
+            if not overlaps_alt(nx, nz, aw, ad):
+                new_bbox = AABB.from_position_and_size(nx, nz, aw, ad)
+                return PhysicalPlacement(
+                    furniture_id=item.furniture_id,
+                    x=round(nx, 3),
+                    y=item.y,
+                    z=round(nz, 3),
+                    rotation=alt_rot,
+                    bbox=new_bbox,
+                )
+
+            # Also try sliding along the alt wall
+            for step in self._BUMP_STEPS:
+                for slide in [1, -1]:
+                    if alt_wall in ("south", "north"):
+                        sx, sz = nx + slide * step, nz
+                        sx = max(0.0, min(sx, room.width - aw))
+                    else:
+                        sx, sz = nx, nz + slide * step
+                        sz = max(0.0, min(sz, room.depth - ad))
+                    if not overlaps_alt(sx, sz, aw, ad):
+                        new_bbox = AABB.from_position_and_size(sx, sz, aw, ad)
+                        return PhysicalPlacement(
+                            furniture_id=item.furniture_id,
+                            x=round(sx, 3),
+                            y=item.y,
+                            z=round(sz, 3),
+                            rotation=alt_rot,
+                            bbox=new_bbox,
+                        )
+
         return item  # could not resolve — return as-is
 
     # ------------------------------------------------------------------
