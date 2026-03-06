@@ -97,7 +97,9 @@ class TestNorthWallPlacement:
         p = results[0]
         assert p.x == pytest.approx(0.0)
         assert p.z == pytest.approx(5.0 - 0.6 - 0.05)
-        assert p.rotation == 0
+        # wardrobe is in _FORCE_INWARD_TYPES → forced to face inward.
+        # north wall → opposite = south → _FACING_ROTATION["south"] = 180
+        assert p.rotation == 180
 
     def test_bbox_reaches_north_wall(self, resolver: SpatialResolver, room: RoomSpec) -> None:
         """Item against north wall with no gap: max_z should equal room depth."""

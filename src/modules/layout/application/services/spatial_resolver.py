@@ -6,7 +6,10 @@ Coordinate system: origin at SW corner, x=east, z=north.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from src.modules.layout.domain.entities.room import DoorPosition, WindowPosition
 from src.modules.layout.infrastructure.geometry.collision import AABB
@@ -95,13 +98,18 @@ class RoomSpec:
     windows: list[WindowPosition] = field(default_factory=list)
 
 
-# Rotation assigned to furniture placed against each wall so it faces inward.
-# Three.js Y=0° → faces -Z (north); Y=180° → faces +Z (south).
+# Rotation assigned to furniture placed against each wall so its back is
+# against the wall and its front (+Z at rest) faces into the room.
+# Three.js Y-rotation CCW from above; front = +Z.
+#   south wall → front must face north(-Z) → Y=180°
+#   north wall → front must face south(+Z) → Y=0°
+#   west wall  → front must face east(+X)  → Y=90°
+#   east wall  → front must face west(-X)  → Y=270°
 _WALL_ROTATION: dict[str, int] = {
-    "south": 180,  # south wall → faces into room (Y=180° → +Z)
-    "north": 0,  # north wall → faces into room (Y=0° → -Z)
-    "west": 90,  # west wall → faces east  (Y=90° → +X)
-    "east": 270,  # east wall → faces west  (Y=270° → -X)
+    "south": 180,
+    "north": 0,
+    "west": 90,
+    "east": 270,
 }
 
 # Opposite of each wall — used for auto-facing "must face inward"
@@ -138,17 +146,14 @@ _FORCE_INWARD_TYPES: frozenset[str] = frozenset(
 )
 
 # Rotation to apply when the LLM specifies which direction the front/seat faces.
-# Three.js Y-rotation is CCW from above (right-hand rule).
-# Frontend coordinate: south wall = +Z, north wall = -Z, east = +X, west = -X.
-#   Y=0°   → model front faces -Z = north
-#   Y=180° → model front faces +Z = south
-#   Y=90°  → model front faces +X = east
-#   Y=270° → model front faces -X = west
+# These values are identical to _WALL_ROTATION by design: initial layout
+# generation relies on _FACING_ROTATION[opposite(wall)] == _WALL_ROTATION[wall]
+# for FORCE_INWARD types, keeping their rotation unchanged.
 _FACING_ROTATION: dict[str, int] = {
-    "south": 180,  # front faces +Z (toward south wall)  Y=180° → +Z
-    "north": 0,  # front faces -Z (toward north wall)  Y=0°   → -Z
-    "east": 90,  # front faces +X (toward east wall)   Y=90°  → +X
-    "west": 270,  # front faces -X (toward west wall)   Y=270° → -X
+    "south": 180,
+    "north": 0,
+    "east": 90,
+    "west": 270,
 }
 
 
@@ -396,25 +401,32 @@ class SpatialResolver:
 
     def _resolve_one(self, p: SemanticPlacement, room: RoomSpec) -> PhysicalPlacement:
         wall = p.target_wall.lower()
-        if wall == "center":
-            x, z, rotation = self._center_position(p, room)
-        else:
-            x, z, rotation = self._wall_position(p, room, wall)
 
-        # --- Facing resolution (3-tier priority) ---
-        # 1. furniture_type is in _FORCE_INWARD_TYPES → ALWAYS force inward,
-        #    overriding LLM output (door/drawer must open into room, not wall)
-        # 2. LLM explicitly set facing for other types → honour it
-        # 3. Otherwise keep wall-default rotation from _WALL_ROTATION
+        # --- Determine final rotation BEFORE computing position ---
+        # so _wall_position uses the correct footprint.
         ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
         effective_facing = p.facing
 
         if wall != "center" and ftype in _FORCE_INWARD_TYPES:
-            # Force inward regardless of what LLM said
             effective_facing = _OPPOSITE_WALL.get(wall, "")
 
         if effective_facing and effective_facing in _FACING_ROTATION:
             rotation = _FACING_ROTATION[effective_facing]
+        else:
+            rotation = _WALL_ROTATION.get(wall, 0) if wall != "center" else 0
+
+        # --- Compute position using the final rotation ---
+        if wall == "center":
+            x, z, _ = self._center_position(p, room)
+        else:
+            x, z = self._wall_position_xy(p, room, wall, rotation)
+
+        logger.info(
+            f"_resolve_one: fid={p.furniture_id} wall={wall} facing={p.facing!r} "
+            f"effective_facing={effective_facing!r} ftype={ftype!r} "
+            f"force_inward={ftype in _FORCE_INWARD_TYPES} rotation={rotation} "
+            f"x={x:.3f} z={z:.3f}"
+        )
 
         # Use actual footprint dimensions after rotation
         w, length = self._footprint(p.size, rotation)
@@ -453,6 +465,13 @@ class SpatialResolver:
         self, p: SemanticPlacement, room: RoomSpec, wall: str
     ) -> tuple[float, float, int]:
         rotation = _WALL_ROTATION.get(wall, 0)
+        x, z = self._wall_position_xy(p, room, wall, rotation)
+        return x, z, rotation
+
+    def _wall_position_xy(
+        self, p: SemanticPlacement, room: RoomSpec, wall: str, rotation: int
+    ) -> tuple[float, float]:
+        """Compute x, z for furniture against *wall* using the given rotation for footprint."""
         w, length = self._footprint(p.size, rotation)
         gap = p.offset_from_wall
 
@@ -472,7 +491,7 @@ class SpatialResolver:
             x = gap
             z = gap
 
-        return x, z, rotation
+        return x, z
 
     @staticmethod
     def _align_along_axis(alignment: str, item_size: float, axis_length: float) -> float:

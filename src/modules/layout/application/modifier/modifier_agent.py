@@ -296,6 +296,23 @@ class ModifierAgent:
         "west": "east",
     }
 
+    # Convert "headboard points toward X" → facing value for _FACING_ROTATION.
+    #
+    # Bed model: headboard/pillows at -Z (verified: rotation=0 → pillows face north=-Z).
+    # _FACING_ROTATION values: south=180, north=0, east=90, west=270.
+    # Math (Y-rotation CCW, applying to -Z vector):
+    #   Y=0°   → -Z stays  → north   (headboard → N needs Y=0°   = _FACING_ROTATION["north"])
+    #   Y=180° → -Z → +Z   → south   (headboard → S needs Y=180° = _FACING_ROTATION["south"])
+    #   Y=270° → -Z → +X   → east    (headboard → E needs Y=270° = _FACING_ROTATION["west"])
+    #   Y=90°  → -Z → -X   → west    (headboard → W needs Y=90°  = _FACING_ROTATION["east"])
+    # N/S: identity.  E/W: swapped.
+    _HEADBOARD_TO_FACING: dict[str, str] = {
+        "north": "north",
+        "south": "south",
+        "east": "west",   # headboard→E needs Y=270° which is _FACING_ROTATION["west"]
+        "west": "east",   # headboard→W needs Y=90°  which is _FACING_ROTATION["east"]
+    }
+
     # Direction keywords: keyword → compass direction name
     # Longer keywords must come before shorter ones so find() matches the right position.
     _DIR_KEYWORDS: dict[str, str] = {
@@ -513,15 +530,32 @@ class ModifierAgent:
         if direction == "center":
             return "center", None, None
 
+        logger.info(
+            f"_parse_wall_and_facing: direction={direction!r} has_against={has_against} "
+            f"has_head={has_head} alignment_override={alignment_override!r}"
+        )
+
         if has_against and has_head:
-            return direction, cls._OPPOSITE.get(direction, direction), alignment_override
+            # "ชิดกำแพง X หันหัวไป X" — move to wall X + rotate headboard toward X.
+            facing = cls._HEADBOARD_TO_FACING.get(direction, direction)
+            result = (direction, facing, alignment_override)
+            logger.info(f"_parse_wall_and_facing: has_against+has_head → {result}")
+            return result
         if has_against:
-            return direction, None, alignment_override
+            result = (direction, None, alignment_override)
+            logger.info(f"_parse_wall_and_facing: has_against → {result}")
+            return result
         if has_head:
-            return direction, direction, alignment_override
+            # "หันหัวเตียงไปทิศ X" — only rotate, don't move (wall=None).
+            facing = cls._HEADBOARD_TO_FACING.get(direction, direction)
+            result = (None, facing, alignment_override)
+            logger.info(f"_parse_wall_and_facing: has_head → {result}")
+            return result
 
         # Ambiguous single direction → treat as wall position
-        return direction, None, alignment_override
+        result = (direction, None, alignment_override)
+        logger.info(f"_parse_wall_and_facing: ambiguous → {result}")
+        return result
 
     # Feng shui / abstract move keywords (no specific wall implied)
     _FENG_SHUI_KEYWORDS = (
