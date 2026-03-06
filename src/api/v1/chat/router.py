@@ -1,10 +1,14 @@
 """Chat API endpoints for RAG conversational AI."""
 
+import os
+import uuid
+import json
+import subprocess
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
@@ -25,10 +29,7 @@ settings = get_settings()
 
 
 async def get_chat_service() -> Any:
-    """Dependency injection stub for chat service.
-
-    Will be replaced with actual service injection later.
-    """
+    """Dependency injection stub for chat service."""
     return None
 
 
@@ -37,20 +38,10 @@ async def send_message(
     request: ChatRequest,
     service: Any = Depends(get_chat_service),
 ) -> ChatResponse:
-    """Send a message to the chat AI using LLM.
-
-    Args:
-        request: Chat request with text and mode.
-        service: Injected chat service (stub for now).
-
-    Returns:
-        ChatResponse with AI answer and source documents.
-    """
+    """Send a message to the chat AI using LLM."""
     try:
-        # Use system prompt if provided, otherwise use mode-based default
         system_prompt = request.system_prompt or _get_default_system_prompt(request.mode.value)
 
-        # Call OpenRouter API with extended timeout for free models
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{settings.OPENROUTER_BASE_URL}/chat/completions",
@@ -69,7 +60,7 @@ async def send_message(
                     "temperature": settings.LLM_TEMPERATURE_RAG,
                     "max_tokens": 1000,
                 },
-                timeout=60.0,  # Increased to 60s for free models
+                timeout=60.0,
             )
 
             if response.status_code != 200:
@@ -83,7 +74,7 @@ async def send_message(
 
             return ChatResponse(
                 answer=answer,
-                source_documents=[],  # RAG implementation coming later
+                source_documents=[],
             )
 
     except httpx.TimeoutException:
@@ -94,22 +85,7 @@ async def send_message(
 
 @router.post("/stream")
 async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
-    """Route user message and stream SSE events based on classified intent.
-
-    The router agent classifies the message into one of:
-    - new_layout: triggers the full 5-step pipeline
-    - modify:     triggers ModifierAgent for incremental layout changes
-    - explain:    runs ExplainerStep on the current layout
-    - question:   answers directly via LLM (no layout generation)
-
-    All paths stream SSE events in the same format as /layout/generate/stream.
-
-    Args:
-        request: ChatStreamRequest with message, layout context, and room spec.
-
-    Returns:
-        SSE stream of events.
-    """
+    """Route user message and stream SSE events based on classified intent."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
         from src.modules.layout.application.agent.personality import (
@@ -117,10 +93,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             detect_mood,
         )
 
-        # Detect user mood from the message (keyword-based, no LLM call)
         mood = detect_mood(request.message)
-
-        # --- 1. Classify intent ---
         router_agent = RouterAgent()
         result = await router_agent.classify(
             message=request.message,
@@ -137,13 +110,8 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             },
         ).to_sse()
 
-        # --- 2. Dispatch to handler ---
         if result.intent == "set_mode":
-            new_mode = (
-                result.extracted_params.get("mode")
-                or detect_mode_switch(request.message)
-                or "buddy"
-            )
+            new_mode = result.extracted_params.get("mode") or detect_mode_switch(request.message) or "buddy"
             yield SSEEvent(
                 event_type=SSEEventType.MODE_CHANGED,
                 data={"mode": new_mode},
@@ -186,7 +154,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             async for event in ExplainerStep(PipelineConfig()).execute(state):
                 yield event.to_sse()
 
-        else:  # "question" (also the fallback)
+        else:
             answer = await _answer_question(request.message, request.mode, mood)
             yield SSEEvent(
                 event_type=SSEEventType.PIPELINE_COMPLETED,
@@ -205,21 +173,11 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
 
 
 async def _answer_question(message: str, mode: str, mood: str = "neutral") -> str:
-    """Answer a feng shui / design question directly via LLM with RAG augmentation.
-
-    Retrieves relevant feng shui rules from the knowledge base and prepends them
-    to the user message for context-aware answers.  Falls back to plain LLM if
-    RAG retrieval fails or returns no results.
-
-    Reuses the same OpenRouter call logic as send_message().
-    Returns the answer string, or an error message if the call fails.
-    """
+    """Answer a feng shui / design question directly via LLM with RAG augmentation."""
     from src.modules.layout.application.agent.personality import get_system_prompt
     from src.modules.layout.application.services import ContextInjector
 
     system_prompt = get_system_prompt(mode, mood)
-
-    # RAG augmentation — graceful; never raises
     rag_context = ""
     try:
         injector = ContextInjector()
@@ -262,17 +220,65 @@ def _get_default_system_prompt(mode: str) -> str:
     """Get default system prompt based on chat mode."""
     prompts = {
         "mentor": (
-            "You are a professional feng shui master and interior designer. "
-            "Provide detailed, educational explanations with formal tone in Thai. "
-            "Be knowledgeable and thorough."
+            "You are a professional feng shui master and interior designer. Thai tone."
         ),
         "buddy": (
-            "You are a friendly interior design assistant. "
-            "Use casual, warm tone in Thai. Be conversational and approachable."
+            "You are a friendly interior design assistant. Thai tone."
         ),
         "fun": (
-            "You are an energetic, fun design buddy. "
-            "Use playful, exciting tone in Thai. Be entertaining while informative."
+            "You are an energetic, fun design buddy. Thai tone."
         ),
     }
     return prompts.get(mode, prompts["buddy"])
+
+
+@router.post("/process-single-image")
+async def process_single_image(
+    image: UploadFile = File(...),
+    target_height: str = Form("2.5")
+):
+    """API for processing a single image with AI to detect 3D objects."""
+    # 1. ระบุพาธ Root ของโปรเจกต์
+    base_dir = os.path.abspath(os.getcwd())
+    assets_dir = os.path.join(base_dir, "assets")
+    os.makedirs(assets_dir, exist_ok=True)
+    
+    # 2. บันทึกรูปภาพที่อัปโหลดมาลงใน assets
+    file_id = uuid.uuid4().hex
+    temp_image_path = os.path.join(assets_dir, f"{file_id}.jpg")
+    with open(temp_image_path, "wb") as buffer:
+        buffer.write(await image.read())
+
+    # 3. สั่งรัน AI Script (detect_objects_2.py)
+    try:
+        # พาธของ Script: core/src/detect_objects_2.py
+        script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
+
+        print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
+        
+        # รันผ่าน subprocess
+        # ส่ง Argument 1: ความสูง, Argument 2: พาธรูปภาพ
+        result = subprocess.run(
+            ["python", script_path, target_height, temp_image_path], 
+            capture_output=True, 
+            text=True, 
+            check=True, 
+            cwd=base_dir,
+            encoding='utf-8', # 🚨 เพิ่มบรรทัดนี้เพื่อป้องกัน UnicodeDecodeError
+            errors='ignore'   # ถ้าเจออักขระที่อ่านไม่ออกจริงๆ ให้ข้ามไป ไม่ต้องแครช
+        )
+        
+        # 4. อ่านไฟล์ JSON ที่ AI สร้างขึ้นใน assets
+        json_path = os.path.join(assets_dir, "my_room_2_data.json")
+        if os.path.exists(json_path):
+            with open(json_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        
+        return {"status": "error", "message": "AI completed but JSON output was not found"}
+
+    except subprocess.CalledProcessError as e:
+        print(f"❌ AI Script Error (Stderr): {e.stderr}")
+        return {"status": "error", "message": f"AI Error: {e.stderr}"}
+    except Exception as e:
+        print(f"❌ Server Exception: {str(e)}")
+        return {"status": "error", "message": str(e)}
