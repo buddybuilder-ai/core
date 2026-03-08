@@ -181,12 +181,19 @@ class LayoutResolver:
         for raw in semantic_dicts:
             try:
                 # Fallback: if LLM sends empty furniture_type, derive from furniture_id prefix
+                fid = raw.get("furniture_id", "")
+                fid_lower = fid.lower()
                 if not raw.get("furniture_type"):
-                    fid = raw.get("furniture_id", "")
                     derived = fid.split("-")[0].replace("_", "-") if fid else ""
                     if derived:
                         raw = {**raw, "furniture_type": derived}
                         logger.info(f"LayoutResolver: derived furniture_type={derived!r} from id={fid!r}")
+                # ID-based type correction: sofa-bed IDs must be typed as sofa-bed, not bed
+                if "sofa-bed" in fid_lower or "sofa_bed" in fid_lower:
+                    current_type = raw.get("furniture_type", "")
+                    if current_type.lower().replace("-", "_").replace(" ", "_") not in {"sofa_bed"}:
+                        raw = {**raw, "furniture_type": "sofa-bed"}
+                        logger.info(f"LayoutResolver: corrected furniture_type to 'sofa-bed' for id={fid!r} (was {current_type!r})")
                 logger.info(f"LayoutResolver: validating raw={raw!r}")
                 schema = SemanticPlacementSchema.model_validate(raw)
                 # Hard-enforce feng shui wall constraints
@@ -220,9 +227,11 @@ class LayoutResolver:
                 ft = schema.furniture_type.lower().replace("-", "_").replace(" ", "_")
                 if ft in _LARGE_TYPES and schema.target_wall in bed_walls:
                     non_bed = _ALL_WALLS - bed_walls
-                    available = non_bed - used_large_walls
+                    available = non_bed - used_large_walls - door_walls
                     if not available:
-                        available = non_bed  # fallback: reuse non-bed wall
+                        available = non_bed - door_walls
+                    if not available:
+                        available = non_bed  # last resort: reuse non-bed wall
                     new_wall = next(iter(available))
                     logger.warning(
                         f"LayoutResolver: overriding {schema.furniture_type!r} wall "
