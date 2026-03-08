@@ -256,42 +256,165 @@ class RuleCheckerStep(BaseStep):
         door_x, door_z = self._get_primary_door_pos(room)
         key_categories = {"bed", "desk", "sofa"}
 
+        # Build window centre positions (room-centre coords)
+        window_positions = [
+            self._get_feature_center(w, room)
+            for w in (spec.get("windows") or [])
+        ]
+
+        # Index items by category for relationship checks
+        beds = [i for i in items if i.get("category") == "bed"]
+        mirrors = [i for i in items if i.get("category") in ("mirror",)]
+        tv_stands = [i for i in items if i.get("category") in ("tv_stand", "tv")]
+        large_types = {"wardrobe", "bookshelf", "dresser", "compact_wardrobe"}
+        large_items = [i for i in items if i.get("category") in large_types]
+
         for item in items:
             category = item.get("category", "")
-            if category not in key_categories:
-                continue
-
-            # pos_x/pos_z are already furniture centres (room-centre coords)
             center_x = item.get("pos_x", 0.0)
             center_z = item.get("pos_z", 0.0)
             rotation = item.get("rotation", 0)
             fw, fd = self._footprint(item.get("dimensions", {}), rotation)
 
-            # Check back to door
-            if self._has_back_to_door(center_x, center_z, rotation, door_x, door_z):
-                conflicts.append(
-                    Conflict(
+            if category == "bed":
+                # Rule bed_001 — bed aligned with door
+                if self._is_aligned_with_door(center_x, center_z, fw, fd, door_x, door_z):
+                    conflicts.append(Conflict(
+                        conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                        severity=ConflictSeverity.WARNING,
+                        description=f"{item['name']} is directly aligned with the door (coffin position)",
+                        items_involved=[item["id"]],
+                        suggestion=f"Shift {item['name']} off the door axis to avoid sha chi",
+                    ))
+
+                # Rule bed_002 — bed aligned with window
+                for wx, wz in window_positions:
+                    if self._is_aligned_with_door(center_x, center_z, fw, fd, wx, wz):
+                        conflicts.append(Conflict(
+                            conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                            severity=ConflictSeverity.WARNING,
+                            description=f"{item['name']} is directly aligned with a window",
+                            items_involved=[item["id"]],
+                            suggestion=f"Shift {item['name']} off the window axis",
+                        ))
+                        break
+
+                # Rule bed_005 — bed not against any wall (floating in center)
+                half_w, half_d = room.width / 2, room.depth / 2
+                wall_tol = 0.3
+                near_wall = (
+                    abs(center_x - half_w) < (fw / 2 + wall_tol)
+                    or abs(center_x + half_w) < (fw / 2 + wall_tol)
+                    or abs(center_z - half_d) < (fd / 2 + wall_tol)
+                    or abs(center_z + half_d) < (fd / 2 + wall_tol)
+                )
+                if not near_wall:
+                    conflicts.append(Conflict(
+                        conflict_type=ConflictType.BAD_COMMAND_POSITION,
+                        severity=ConflictSeverity.WARNING,
+                        description=f"{item['name']} is floating in the center of the room with no wall support",
+                        items_involved=[item["id"]],
+                        suggestion=f"Move {item['name']} against a solid wall for support energy",
+                    ))
+
+                # Rule bed_007 — large furniture at head of bed (same wall, adjacent)
+                bed_box = AABB.from_center_and_size(center_x, center_z, fw, fd)
+                for large in large_items:
+                    lx = large.get("pos_x", 0.0)
+                    lz = large.get("pos_z", 0.0)
+                    lrot = large.get("rotation", 0)
+                    lfw, lfd = self._footprint(large.get("dimensions", {}), lrot)
+                    large_box = AABB.from_center_and_size(lx, lz, lfw, lfd)
+                    gap = bed_box.distance_to(large_box)
+                    if gap < 0.15:
+                        # Check if large item is at the head side (back of bed)
+                        # back direction: rotation=0 → back at +z, rotation=180 → back at -z
+                        back_z_offset = math.cos(math.radians(rotation)) * (fd / 2)
+                        head_z = center_z + back_z_offset
+                        if abs(lz - head_z) < (lfd / 2 + fd / 2 + 0.3) and abs(lx - center_x) < (lfw / 2 + fw / 2):
+                            conflicts.append(Conflict(
+                                conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                                severity=ConflictSeverity.INFO,
+                                description=f"{large['name']} is at the head of {item['name']} creating pressure",
+                                items_involved=[item["id"], large["id"]],
+                                suggestion=f"Move {large['name']} to a side wall away from the bed headboard",
+                            ))
+
+                # Rule bed_008 — no clearance on any side
+                has_clearance = True
+                for other in items:
+                    if other["id"] == item["id"]:
+                        continue
+                    ox, oz = other.get("pos_x", 0.0), other.get("pos_z", 0.0)
+                    orot = other.get("rotation", 0)
+                    ofw, ofd = self._footprint(other.get("dimensions", {}), orot)
+                    other_box = AABB.from_center_and_size(ox, oz, ofw, ofd)
+                    if 0 < bed_box.distance_to(other_box) < 0.4:
+                        has_clearance = False
+                        break
+                if not has_clearance:
+                    conflicts.append(Conflict(
+                        conflict_type=ConflictType.CLEARANCE_VIOLATION,
+                        severity=ConflictSeverity.INFO,
+                        description=f"{item['name']} has insufficient clearance on all sides",
+                        items_involved=[item["id"]],
+                        suggestion=f"Leave at least 60 cm clearance on one side of {item['name']}",
+                    ))
+
+            elif category in key_categories:
+                # Check back to door (for desk, sofa)
+                if self._has_back_to_door(center_x, center_z, rotation, door_x, door_z):
+                    conflicts.append(Conflict(
                         conflict_type=ConflictType.BACK_TO_DOOR,
                         severity=ConflictSeverity.WARNING,
                         description=f"{item['name']} has its back facing the door",
                         items_involved=[item["id"]],
                         suggestion=f"Rotate {item['name']} to face the door",
-                    )
-                )
+                    ))
 
-            # Check sha chi alignment (direct line with door)
-            if self._is_aligned_with_door(center_x, center_z, fw, fd, door_x, door_z):
-                conflicts.append(
-                    Conflict(
-                        conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                # Rule bed_009 — desk facing window directly
+                if category == "desk":
+                    for wx, wz in window_positions:
+                        if self._is_aligned_with_door(center_x, center_z, fw, fd, wx, wz):
+                            conflicts.append(Conflict(
+                                conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                                severity=ConflictSeverity.INFO,
+                                description=f"{item['name']} faces directly into a window (glare, scattered chi)",
+                                items_involved=[item["id"]],
+                                suggestion=f"Angle {item['name']} so natural light comes from the side",
+                            ))
+                            break
+
+        # Rule bed_006 — door directly opposite window
+        for door in (spec.get("doors") or []):
+            dx, dz = self._get_door_center(door, room)
+            for wx, wz in window_positions:
+                if abs(dx - wx) < 0.5 and abs(dz - wz) < room.depth * 0.6:
+                    conflicts.append(Conflict(
+                        conflict_type=ConflictType.BLOCKED_CHI_FLOW,
                         severity=ConflictSeverity.INFO,
-                        description=f"{item['name']} is in direct line with the door (sha chi)",
-                        items_involved=[item["id"]],
-                        suggestion=f"Shift {item['name']} off the door axis",
-                    )
-                )
+                        description="Door and window are directly opposite — chi rushes through without circulating",
+                        items_involved=[],
+                        suggestion="Place a plant or furniture between door and window to slow chi flow",
+                    ))
 
         return conflicts
+
+    def _get_feature_center(self, feature: dict[str, Any], room: Room) -> tuple[float, float]:
+        """Return centre of a door or window in room-centre coordinates."""
+        wall = feature.get("wall", "south")
+        offset = feature.get("offset", 1.0)
+        width = feature.get("width", 1.0)
+        half_w = room.width / 2
+        half_d = room.depth / 2
+        mid = offset + width / 2
+        if wall == "north":
+            return mid - half_w, -half_d
+        if wall == "south":
+            return mid - half_w, half_d
+        if wall == "west":
+            return -half_w, mid - half_d
+        return half_w, mid - half_d
 
     # --- Helpers ---
 

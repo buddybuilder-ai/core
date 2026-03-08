@@ -125,6 +125,7 @@ _OPPOSITE_WALL: dict[str, str] = {
 # Value = "inward" means: use opposite of target_wall as facing.
 _FORCE_INWARD_TYPES: frozenset[str] = frozenset(
     {
+        "bed",              # headboard against wall, occupant faces into room
         "chair",
         "office_chair",
         "armchair",
@@ -146,14 +147,15 @@ _FORCE_INWARD_TYPES: frozenset[str] = frozenset(
 )
 
 # Rotation to apply when the LLM specifies which direction the front/seat faces.
-# These values are identical to _WALL_ROTATION by design: initial layout
-# generation relies on _FACING_ROTATION[opposite(wall)] == _WALL_ROTATION[wall]
-# for FORCE_INWARD types, keeping their rotation unchanged.
+# facing="south" means front points toward south (+Z in Three.js) → Y=0°
+# facing="north" means front points toward north (-Z in Three.js) → Y=180°
+# facing="east"  means front points toward east  (+X)             → Y=270°
+# facing="west"  means front points toward west  (-X)             → Y=90°
 _FACING_ROTATION: dict[str, int] = {
-    "south": 180,
-    "north": 0,
-    "east": 90,
-    "west": 270,
+    "south": 0,
+    "north": 180,
+    "east": 270,
+    "west": 90,
 }
 
 

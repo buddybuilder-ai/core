@@ -83,14 +83,17 @@ class FengShuiLLMAgent:
         self.config = config or LLMConfig()
         settings = get_settings()
 
-        # Initialize LangChain ChatOpenAI with OpenRouter
+        # Use Ollama/local base URL if configured, otherwise fall back to OpenRouter
+        api_base = settings.LLM_LAYOUT_BASE_URL or settings.OPENROUTER_BASE_URL
+        api_key = settings.LLM_LAYOUT_API_KEY or settings.OPENROUTER_API_KEY
+
         self._llm = ChatOpenAI(
             model=self.config.model,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             timeout=self.config.timeout,
-            openai_api_key=settings.OPENROUTER_API_KEY,
-            openai_api_base=settings.OPENROUTER_BASE_URL,
+            openai_api_key=api_key,
+            openai_api_base=api_base,
         )
 
         self._system_message = SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT)

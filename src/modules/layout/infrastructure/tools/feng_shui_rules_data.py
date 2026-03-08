@@ -348,6 +348,148 @@ FENG_SHUI_RULES: list[FengShuiRule] = [
         priority=75,
         keywords=("doors", "multiple", "focal", "anchor", "entrance"),
     ),
+    # ── Bedroom-specific rules (from validation table) ──────────────────────
+    FengShuiRule(
+        id="bed_001",
+        category=RuleCategory.SHA_CHI,
+        title="Bed Not Aligned With Door",
+        description=(
+            "Do not place the bed directly in line with the door (feet or head pointing "
+            "straight at the door opening). This is the 'coffin position' — sha chi rushes "
+            "directly at the sleeper. Shift the bed to one side so it is out of the direct door axis."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed",),
+        priority=100,
+        keywords=("bed", "door", "aligned", "coffin", "position", "sha", "chi"),
+    ),
+    FengShuiRule(
+        id="bed_002",
+        category=RuleCategory.SHA_CHI,
+        title="Bed Not Aligned With Window",
+        description=(
+            "Avoid placing the bed directly in line with a window. Wind and chi rushing "
+            "through a window at the sleeper disturbs rest and health. Move the bed "
+            "so it is not on the direct window axis."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed",),
+        priority=90,
+        keywords=("bed", "window", "aligned", "wind", "chi", "health"),
+    ),
+    FengShuiRule(
+        id="bed_003",
+        category=RuleCategory.SHA_CHI,
+        title="Bed Not Facing TV or Mirror",
+        description=(
+            "Do not place a TV or mirror directly facing the bed. Mirrors reflecting the "
+            "sleeper bring a third-party energy into the relationship and disturb sleep. "
+            "TVs emit yang energy that prevents rest. Cover or angle them away."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed", "mirror", "tv_stand"),
+        priority=85,
+        keywords=("bed", "mirror", "tv", "reflect", "yang", "sleep", "relationship"),
+    ),
+    FengShuiRule(
+        id="bed_004",
+        category=RuleCategory.SHA_CHI,
+        title="Bed Not Under Air Conditioner",
+        description=(
+            "Do not place the bed directly under or in the direct airflow line of an "
+            "air conditioner. Cold chi blowing continuously on the sleeper causes health "
+            "issues and disturbs sleep quality."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed",),
+        priority=85,
+        keywords=("bed", "air", "conditioner", "airflow", "cold", "chi", "health"),
+    ),
+    FengShuiRule(
+        id="bed_005",
+        category=RuleCategory.ROOM_LAYOUT,
+        title="Bed Must Not Be in Center of Room",
+        description=(
+            "The bed must have at least one side against a solid wall. A bed floating "
+            "in the center of the room has no support energy behind it, leaving the "
+            "sleeper feeling vulnerable and unsupported."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed",),
+        priority=95,
+        keywords=("bed", "center", "middle", "wall", "support", "floating"),
+    ),
+    FengShuiRule(
+        id="bed_006",
+        category=RuleCategory.DOOR_WINDOW,
+        title="Door Must Not Face Window Directly",
+        description=(
+            "When a door and window are directly opposite each other, chi rushes straight "
+            "through and escapes the room without circulating. Place furniture or a plant "
+            "between them to slow and redirect the energy."
+        ),
+        room_types=("bedroom", "living_room", "office"),
+        furniture_types=(),
+        priority=80,
+        keywords=("door", "window", "opposite", "chi", "rush", "escape"),
+    ),
+    FengShuiRule(
+        id="bed_007",
+        category=RuleCategory.SHA_CHI,
+        title="No Heavy Furniture at Head of Bed",
+        description=(
+            "Do not place tall or heavy furniture (wardrobe, bookshelf) directly at the "
+            "headboard end of the bed. The oppressive overhead mass creates pressure and "
+            "anxiety, reducing sleep quality."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed", "wardrobe", "bookshelf"),
+        priority=80,
+        keywords=("bed", "headboard", "wardrobe", "heavy", "pressure", "oppressive"),
+    ),
+    FengShuiRule(
+        id="bed_008",
+        category=RuleCategory.FURNITURE_PLACEMENT,
+        title="No Large Furniture Directly Against Bed",
+        description=(
+            "Large furniture pieces should not be placed flush against the side of the bed "
+            "with no clearance. A minimum 60 cm walkway should exist on at least one "
+            "side of the bed for good chi flow and practical access."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed",),
+        priority=75,
+        keywords=("bed", "clearance", "walkway", "large", "furniture", "chi", "flow"),
+    ),
+    FengShuiRule(
+        id="bed_009",
+        category=RuleCategory.COMMAND_POSITION,
+        title="Desk Must Face Door and Not Face Window",
+        description=(
+            "The desk should face the door (command position) so the person working can "
+            "see opportunities approaching. The desk should not face directly into a window "
+            "as it creates glare and scattered energy; natural light should come from the side."
+        ),
+        room_types=("bedroom", "office"),
+        furniture_types=("desk",),
+        priority=85,
+        keywords=("desk", "door", "window", "command", "position", "face", "glare"),
+    ),
+    FengShuiRule(
+        id="bed_010",
+        category=RuleCategory.COMMAND_POSITION,
+        title="Bed Headboard in Auspicious Direction by Kua Number",
+        description=(
+            "According to Eight Mansions Feng Shui, the headboard direction should align "
+            "with one of the four auspicious directions calculated from the occupant's "
+            "Kua number. Best directions for sleep are Sheng Chi (prosperity), "
+            "Tien Yi (health), Nien Yen (relationships), or Fu Wei (personal growth)."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed",),
+        priority=70,
+        keywords=("bed", "headboard", "kua", "direction", "auspicious", "eight", "mansions"),
+    ),
 ]
 
 

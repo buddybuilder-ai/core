@@ -261,12 +261,16 @@ class LayoutResolver:
 
         Conversion (corner → centre, room-centre origin):
             frontend_centre_x = backend_left_x + footprint_w/2 - room_width/2
-            frontend_centre_z = backend_top_z  + footprint_d/2 - room_depth/2
+            frontend_centre_z = -(backend_top_z + footprint_d/2 - room_depth/2)
+
+        NOTE: Z must be negated because backend uses z=0 at south wall, z increases
+        north; but Three.js scene uses z=0 at room centre, z=-halfD at north wall,
+        z=+halfD at south wall (i.e. z increases south, opposite of backend).
         """
         fw = round(p.bbox.width, 3)  # x-size of footprint in room (post-rotation)
         fd = round(p.bbox.depth, 3)  # z-size of footprint in room (post-rotation)
         centre_x = round(p.x + fw / 2 - room.width / 2, 3)
-        centre_z = round(p.z + fd / 2 - room.depth / 2, 3)
+        centre_z = round(-(p.z + fd / 2 - room.depth / 2), 3)
 
         # Send dimensions as footprint sizes (post-rotation).
         # The Three.js group is already rotated, so we must pass the rotated
