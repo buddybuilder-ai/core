@@ -410,9 +410,12 @@ class SpatialResolver:
         effective_facing = p.facing
 
         if wall != "center" and ftype in _FORCE_INWARD_TYPES:
+            # Force inward: use _WALL_ROTATION directly (designed for "back against wall,
+            # front into room") instead of going through _FACING_ROTATION which has
+            # an inverted convention that causes the furniture to face the wall.
+            rotation = _WALL_ROTATION.get(wall, 0)
             effective_facing = _OPPOSITE_WALL.get(wall, "")
-
-        if effective_facing and effective_facing in _FACING_ROTATION:
+        elif effective_facing and effective_facing in _FACING_ROTATION:
             rotation = _FACING_ROTATION[effective_facing]
         else:
             rotation = _WALL_ROTATION.get(wall, 0) if wall != "center" else 0

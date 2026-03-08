@@ -125,12 +125,55 @@ class LayoutResolver:
         """
         room = self._build_room_spec(room_spec_dict)
 
+        # Pre-compute invalid walls per furniture type (feng shui hard rules)
+        door_walls = {str(d.wall.value if hasattr(d.wall, "value") else d.wall).lower() for d in room.doors}
+        window_walls = {str(w.wall.value if hasattr(w.wall, "value") else w.wall).lower() for w in room.windows}
+        _ALL_WALLS = {"north", "south", "east", "west"}
+        _OPPOSITE_WALL = {"north": "south", "south": "north", "east": "west", "west": "east"}
+
+        # bed: not on door wall or window wall
+        bed_invalid = door_walls | window_walls
+        bed_valid = _ALL_WALLS - bed_invalid
+        # sofa/desk: not on door wall
+        sofa_desk_invalid = door_walls
+        sofa_desk_valid = _ALL_WALLS - sofa_desk_invalid
+
+        _BED_TYPES = {"bed", "sofa_bed"}
+        _SOFA_TYPES = {"sofa", "armchair", "desk", "folding_desk"}
+
+        def _enforce_valid_wall(ftype: str, wall: str) -> str:
+            """Override wall if it violates feng shui hard constraints."""
+            if wall == "center":
+                return wall
+            ft = ftype.lower().replace("-", "_").replace(" ", "_")
+            if ft in _BED_TYPES and wall in bed_invalid and bed_valid:
+                # Pick command position wall (opposite first door) if available
+                cmd_wall = _OPPOSITE_WALL.get(next(iter(door_walls), "south"), "north")
+                new_wall = cmd_wall if cmd_wall in bed_valid else next(iter(bed_valid))
+                logger.warning(
+                    f"LayoutResolver: overriding {ftype!r} wall {wall!r} → {new_wall!r} "
+                    f"(feng shui: door_walls={door_walls}, window_walls={window_walls})"
+                )
+                return new_wall
+            if ft in _SOFA_TYPES and wall in sofa_desk_invalid and sofa_desk_valid:
+                new_wall = next(iter(sofa_desk_valid))
+                logger.warning(
+                    f"LayoutResolver: overriding {ftype!r} wall {wall!r} → {new_wall!r} "
+                    f"(feng shui: not on door wall)"
+                )
+                return new_wall
+            return wall
+
         # Validate each semantic dict; skip invalid ones with a warning
         semantics: list[SemanticPlacement] = []
         for raw in semantic_dicts:
             try:
                 logger.info(f"LayoutResolver: validating raw={raw!r}")
                 schema = SemanticPlacementSchema.model_validate(raw)
+                # Hard-enforce feng shui wall constraints
+                enforced_wall = _enforce_valid_wall(schema.furniture_type, schema.target_wall)
+                if enforced_wall != schema.target_wall:
+                    schema = schema.model_copy(update={"target_wall": enforced_wall, "facing": ""})
                 logger.info(
                     f"LayoutResolver: validated → wall={schema.target_wall!r} align={schema.alignment!r} facing={schema.facing!r}"
                 )

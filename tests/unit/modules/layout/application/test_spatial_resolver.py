@@ -132,8 +132,8 @@ class TestEastWallPlacement:
         p = results[0]
         assert p.bbox.max_x == pytest.approx(4.0)
         # dresser is in _FORCE_INWARD_TYPES → forced to face inward.
-        # east wall → opposite = west → _FACING_ROTATION["west"] = 90 (front points toward -X = west)
-        assert p.rotation == 90
+        # east wall → _WALL_ROTATION["east"] = 270 (front points toward west = into room)
+        assert p.rotation == 270
 
 
 class TestWestWallPlacement:

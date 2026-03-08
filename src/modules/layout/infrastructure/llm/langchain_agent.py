@@ -236,7 +236,7 @@ class FengShuiLLMAgent:
 
         command_position_hint = self._build_command_position_hint(doors, room_type)
         wall_capacity_section = self._build_wall_capacity_section(
-            width, depth, doors, furniture_list
+            width, depth, doors, furniture_list, windows
         )
 
         prompt = LAYOUT_PLANNING_PROMPT.format(
@@ -686,19 +686,28 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         depth: float,
         doors: list[dict[str, Any]],
         furniture_list: list[dict[str, Any]],
+        windows: list[dict[str, Any]] | None = None,
     ) -> str:
         """Build a wall-capacity summary so LLM knows how much space each wall has.
 
         Shows usable length per wall (after subtracting door/window openings) and
         the total furniture width to be distributed. This prevents the LLM from
         stacking multiple large items on the same short wall.
+        Also shows feng shui pre-filtered valid walls for bed/desk/sofa.
         """
-        # Door walls lose ~1.0 m of usable space (door + swing clearance)
+        windows = windows or []
+
         door_walls: set[str] = set()
         for d in doors:
             w = str(d.get("wall", "")).lower()
             if w:
                 door_walls.add(w)
+
+        window_walls: set[str] = set()
+        for win in windows:
+            w = str(win.get("wall", "")).lower()
+            if w:
+                window_walls.add(w)
 
         wall_lengths = {
             "north": width,
@@ -718,12 +727,58 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         lines = ["## Wall Capacity (usable length after doors/windows):"]
         for wall, length in wall_lengths.items():
-            note = " ← DOOR WALL: keep entry area clear" if wall in door_walls else ""
+            tags = []
+            if wall in door_walls:
+                tags.append("DOOR WALL — keep entry area clear")
+            if wall in window_walls:
+                tags.append("WINDOW WALL")
+            note = f" ← {', '.join(tags)}" if tags else ""
             lines.append(f"- {wall.upper()} wall: {length:.1f} m usable{note}")
         lines.append(f"- Total furniture width to distribute: {total_fw:.1f} m across all walls")
         lines.append(
             "- Rule: do NOT assign items to a wall whose combined widths would exceed that wall's usable length."
         )
+        lines.append("")
+
+        # --- Feng shui pre-filter: valid walls per furniture type ---
+        all_walls = {"north", "south", "east", "west"}
+
+        # Bed: must NOT be on door wall or window wall
+        bed_invalid = door_walls | window_walls
+        bed_valid = sorted(all_walls - bed_invalid)
+
+        # Desk: must NOT be on door wall (back to door = bad command position)
+        # prefer walls where occupant faces door when seated
+        desk_invalid = door_walls
+        desk_valid = sorted(all_walls - desk_invalid)
+
+        # Sofa: must NOT be on door wall
+        sofa_valid = sorted(all_walls - door_walls)
+
+        lines.append("## Feng Shui Pre-filtered Valid Walls (MUST follow these constraints):")
+        lines.append(
+            f"- BED valid walls: {bed_valid} "
+            f"(excluded: door walls={sorted(door_walls)}, window walls={sorted(window_walls)})"
+        )
+        lines.append(
+            f"- DESK valid walls: {desk_valid} "
+            f"(excluded: door walls={sorted(door_walls)} — back-to-door violates command position)"
+        )
+        lines.append(
+            f"- SOFA valid walls: {sofa_valid} "
+            f"(excluded: door walls={sorted(door_walls)})"
+        )
+        lines.append(
+            "- IMPORTANT: You MUST choose target_wall from the valid list above for each furniture type. "
+            "Choosing an invalid wall violates feng shui hard rules."
+        )
+        # Distribute: bed and wardrobe should be on different walls if possible
+        if len(bed_valid) >= 2:
+            lines.append(
+                f"- DISTRIBUTION RULE: bed and wardrobe MUST be on DIFFERENT walls. "
+                f"If bed is on '{bed_valid[0]}', put wardrobe on '{bed_valid[1]}' or another wall. "
+                f"Do NOT stack bed + wardrobe + sofa_bed all on the same wall — spread furniture across walls."
+            )
         lines.append("")
         return "\n".join(lines)
 

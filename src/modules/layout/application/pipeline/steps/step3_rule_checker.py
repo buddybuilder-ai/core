@@ -268,6 +268,8 @@ class RuleCheckerStep(BaseStep):
         tv_stands = [i for i in items if i.get("category") in ("tv_stand", "tv")]
         large_types = {"wardrobe", "bookshelf", "dresser", "compact_wardrobe"}
         large_items = [i for i in items if i.get("category") in large_types]
+        screen_types = {"tv_stand", "tv", "monitor", "mirror"}
+        screen_items = [i for i in items if i.get("category") in screen_types]
 
         for item in items:
             category = item.get("category", "")
@@ -317,8 +319,58 @@ class RuleCheckerStep(BaseStep):
                         suggestion=f"Move {item['name']} against a solid wall for support energy",
                     ))
 
-                # Rule bed_007 — large furniture at head of bed (same wall, adjacent)
+                # Rule bed_003 — TV or mirror directly facing the bed
                 bed_box = AABB.from_center_and_size(center_x, center_z, fw, fd)
+                for screen in screen_items:
+                    sx, sz = screen.get("pos_x", 0.0), screen.get("pos_z", 0.0)
+                    srot = screen.get("rotation", 0)
+                    sfw, sfd = self._footprint(screen.get("dimensions", {}), srot)
+                    # "facing bed" = screen centre is roughly in front of bed (within bed width on x, or depth on z)
+                    if abs(sx - center_x) < (fw / 2 + sfw / 2 + 0.3) and abs(sz - center_z) < (fd / 2 + sfd / 2 + 0.3):
+                        conflicts.append(Conflict(
+                            conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                            severity=ConflictSeverity.WARNING,
+                            description=f"{screen['name']} is directly facing the bed — mirrors/TVs disturb sleep",
+                            items_involved=[item["id"], screen["id"]],
+                            suggestion=f"Move {screen['name']} to a side wall or angle it away from the bed",
+                        ))
+
+                # Rule bed_004 — AC directly above / in airflow line of bed
+                ac_items = [i for i in items if i.get("category") in ("air_conditioner", "ac")]
+                for ac in ac_items:
+                    ax, az = ac.get("pos_x", 0.0), ac.get("pos_z", 0.0)
+                    arot = ac.get("rotation", 0)
+                    afw, afd = self._footprint(ac.get("dimensions", {}), arot)
+                    # AC on same x-strip or z-strip as bed → airflow blows on sleeper
+                    if abs(ax - center_x) < (fw / 2 + afw / 2 + 0.2) or abs(az - center_z) < (fd / 2 + afd / 2 + 0.2):
+                        conflicts.append(Conflict(
+                            conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                            severity=ConflictSeverity.WARNING,
+                            description=f"{ac['name']} blows cold air directly onto the bed — harmful to health",
+                            items_involved=[item["id"], ac["id"]],
+                            suggestion=f"Move bed out of the direct airflow of {ac['name']}",
+                        ))
+
+                # Rule bed_011 — screen/monitor at the headboard end of the bed
+                back_z_offset_head = math.cos(math.radians(rotation)) * (fd / 2)
+                head_z = center_z + back_z_offset_head
+                for screen in screen_items:
+                    sx, sz = screen.get("pos_x", 0.0), screen.get("pos_z", 0.0)
+                    srot = screen.get("rotation", 0)
+                    sfw, sfd = self._footprint(screen.get("dimensions", {}), srot)
+                    if (
+                        abs(sx - center_x) < (fw / 2 + sfw / 2 + 0.1)
+                        and abs(sz - head_z) < (sfd / 2 + fd / 4 + 0.2)
+                    ):
+                        conflicts.append(Conflict(
+                            conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
+                            severity=ConflictSeverity.WARNING,
+                            description=f"{screen['name']} is at the headboard of {item['name']} — EMF disturbs sleep",
+                            items_involved=[item["id"], screen["id"]],
+                            suggestion=f"Move {screen['name']} to a side wall away from the head of the bed",
+                        ))
+
+                # Rule bed_007 — large furniture at head of bed (same wall, adjacent)
                 for large in large_items:
                     lx = large.get("pos_x", 0.0)
                     lz = large.get("pos_z", 0.0)

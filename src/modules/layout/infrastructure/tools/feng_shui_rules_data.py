@@ -476,6 +476,20 @@ FENG_SHUI_RULES: list[FengShuiRule] = [
         keywords=("desk", "door", "window", "command", "position", "face", "glare"),
     ),
     FengShuiRule(
+        id="bed_011",
+        category=RuleCategory.SHA_CHI,
+        title="No Screen or Monitor at Head of Bed",
+        description=(
+            "Do not place a TV, monitor, or any screen at the headboard end of the bed. "
+            "Screens emit electromagnetic fields and yang energy that disrupt sleep. "
+            "Place screens on a side wall or outside the bedroom entirely."
+        ),
+        room_types=("bedroom",),
+        furniture_types=("bed", "tv_stand", "monitor"),
+        priority=80,
+        keywords=("bed", "screen", "monitor", "tv", "headboard", "electromagnetic", "yang", "sleep"),
+    ),
+    FengShuiRule(
         id="bed_010",
         category=RuleCategory.COMMAND_POSITION,
         title="Bed Headboard in Auspicious Direction by Kua Number",
