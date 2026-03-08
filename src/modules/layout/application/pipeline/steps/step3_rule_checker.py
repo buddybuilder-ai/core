@@ -370,24 +370,44 @@ class RuleCheckerStep(BaseStep):
                             suggestion=f"Move {screen['name']} to a side wall away from the head of the bed",
                         ))
 
-                # Rule bed_007 — large furniture at head of bed (same wall, adjacent)
-                for large in large_items:
-                    lx = large.get("pos_x", 0.0)
-                    lz = large.get("pos_z", 0.0)
-                    lrot = large.get("rotation", 0)
-                    lfw, lfd = self._footprint(large.get("dimensions", {}), lrot)
-                    large_box = AABB.from_center_and_size(lx, lz, lfw, lfd)
-                    gap = bed_box.distance_to(large_box)
-                    if gap < 0.15:
-                        # Check if large item is at the head side (back of bed)
-                        # back direction: rotation=0 → back at +z, rotation=180 → back at -z
-                        back_z_offset = math.cos(math.radians(rotation)) * (fd / 2)
-                        head_z = center_z + back_z_offset
-                        if abs(lz - head_z) < (lfd / 2 + fd / 2 + 0.3) and abs(lx - center_x) < (lfw / 2 + fw / 2):
+                # Rule bed_007 — large furniture on same wall as bed headboard
+                # Determine which wall the bed headboard is on (wall the bed is pushed against)
+                half_w, half_d = room.width / 2, room.depth / 2
+                wall_tol = 0.4
+                bed_headboard_wall: str | None = None
+                if abs(center_z + half_d) < (fd / 2 + wall_tol):
+                    bed_headboard_wall = "north"  # bed pushed against north wall (z ≈ -half_d)
+                elif abs(center_z - half_d) < (fd / 2 + wall_tol):
+                    bed_headboard_wall = "south"
+                elif abs(center_x + half_w) < (fw / 2 + wall_tol):
+                    bed_headboard_wall = "west"
+                elif abs(center_x - half_w) < (fw / 2 + wall_tol):
+                    bed_headboard_wall = "east"
+
+                if bed_headboard_wall:
+                    for large in large_items:
+                        lx = large.get("pos_x", 0.0)
+                        lz = large.get("pos_z", 0.0)
+                        lrot = large.get("rotation", 0)
+                        lfw, lfd = self._footprint(large.get("dimensions", {}), lrot)
+                        # Check if large item is on same wall as bed headboard
+                        large_on_same_wall = False
+                        if bed_headboard_wall == "north" and abs(lz + half_d) < (lfd / 2 + wall_tol):
+                            large_on_same_wall = True
+                        elif bed_headboard_wall == "south" and abs(lz - half_d) < (lfd / 2 + wall_tol):
+                            large_on_same_wall = True
+                        elif bed_headboard_wall == "west" and abs(lx + half_w) < (lfw / 2 + wall_tol):
+                            large_on_same_wall = True
+                        elif bed_headboard_wall == "east" and abs(lx - half_w) < (lfw / 2 + wall_tol):
+                            large_on_same_wall = True
+                        if large_on_same_wall:
                             conflicts.append(Conflict(
                                 conflict_type=ConflictType.SHA_CHI_ALIGNMENT,
-                                severity=ConflictSeverity.INFO,
-                                description=f"{large['name']} is at the head of {item['name']} creating pressure",
+                                severity=ConflictSeverity.WARNING,
+                                description=(
+                                    f"{large['name']} is on the same wall as the bed headboard ({bed_headboard_wall}) "
+                                    f"— heavy furniture at the head creates oppressive pressure"
+                                ),
                                 items_involved=[item["id"], large["id"]],
                                 suggestion=f"Move {large['name']} to a side wall away from the bed headboard",
                             ))

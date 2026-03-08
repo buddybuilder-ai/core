@@ -607,10 +607,11 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         for item in furniture:
             fid = item.get("id", "")
             name = item.get("name", fid)
+            category = item.get("category", fid.split("-")[0] if fid else "")
             clearance = item.get("clearance_front", 0.0)
             clearance_str = f", needs {clearance}m clear in front" if clearance > 0 else ""
             lines.append(
-                f'- furniture_id="{fid}" ({name}): '
+                f'- furniture_id="{fid}" type="{category}" ({name}): '
                 f"{item.get('width')}x{item.get('depth')}m, "
                 f"essential: {item.get('is_essential', False)}"
                 f"{clearance_str}"
@@ -772,12 +773,27 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
             "- IMPORTANT: You MUST choose target_wall from the valid list above for each furniture type. "
             "Choosing an invalid wall violates feng shui hard rules."
         )
+        # Predict which wall the bed will actually end up on (command position = opposite door)
+        opp_door = {"north": "south", "south": "north", "east": "west", "west": "east"}
+        primary_door_wall = next(iter(door_walls), "south") if door_walls else "south"
+        bed_target_wall = opp_door.get(primary_door_wall, "north")
+        if bed_target_wall not in all_walls - bed_invalid:
+            # fallback: pick first valid wall
+            bed_target_wall = bed_valid[0] if bed_valid else "north"
+
+        lines.append(
+            f"- BED PLACEMENT HINT: The bed will be placed on the '{bed_target_wall}' wall "
+            f"(command position, opposite the door). "
+            f"Do NOT place desk, sofa, wardrobe, or other large furniture on '{bed_target_wall}' wall "
+            f"— that wall is reserved for the bed."
+        )
         # Distribute: bed and wardrobe should be on different walls if possible
         if len(bed_valid) >= 2:
+            other_walls = [w for w in bed_valid if w != bed_target_wall]
             lines.append(
                 f"- DISTRIBUTION RULE: bed and wardrobe MUST be on DIFFERENT walls. "
-                f"If bed is on '{bed_valid[0]}', put wardrobe on '{bed_valid[1]}' or another wall. "
-                f"Do NOT stack bed + wardrobe + sofa_bed all on the same wall — spread furniture across walls."
+                f"Put wardrobe on '{other_walls[0] if other_walls else bed_valid[-1]}' or another wall. "
+                f"Spread furniture across ALL available walls — do NOT stack multiple large items on the same wall."
             )
         lines.append("")
         return "\n".join(lines)

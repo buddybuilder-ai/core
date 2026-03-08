@@ -138,16 +138,25 @@ class LayoutResolver:
         sofa_desk_invalid = door_walls
         sofa_desk_valid = _ALL_WALLS - sofa_desk_invalid
 
+        # Real bed (with headboard): strict wall constraint (no door wall, no window wall)
+        _REAL_BED_TYPES = {"bed"}
+        # sofa_bed treated like sofa for placement: only avoid door wall
         _BED_TYPES = {"bed", "sofa_bed"}
-        _SOFA_TYPES = {"sofa", "armchair", "desk", "folding_desk"}
+        _SOFA_TYPES = {"sofa", "sofa_bed", "armchair", "desk", "folding_desk"}
+        # Items that belong in the center of the room, not against a wall
+        _CENTER_TYPES = {"area_rug", "rug", "coffee_table", "ottoman", "pouffe"}
 
         def _enforce_valid_wall(ftype: str, wall: str) -> str:
             """Override wall if it violates feng shui hard constraints."""
             if wall == "center":
                 return wall
             ft = ftype.lower().replace("-", "_").replace(" ", "_")
-            if ft in _BED_TYPES and wall in bed_invalid and bed_valid:
-                # Pick command position wall (opposite first door) if available
+            # Center-type items should always be in center, not against a wall
+            if ft in _CENTER_TYPES and wall != "center":
+                logger.info(f"LayoutResolver: forcing {ftype!r} to center (not a wall item)")
+                return "center"
+            # Real bed: must not be on door wall or window wall
+            if ft in _REAL_BED_TYPES and wall in bed_invalid and bed_valid:
                 cmd_wall = _OPPOSITE_WALL.get(next(iter(door_walls), "south"), "north")
                 new_wall = cmd_wall if cmd_wall in bed_valid else next(iter(bed_valid))
                 logger.warning(
@@ -155,6 +164,7 @@ class LayoutResolver:
                     f"(feng shui: door_walls={door_walls}, window_walls={window_walls})"
                 )
                 return new_wall
+            # sofa_bed + sofa + desk: must not be on door wall
             if ft in _SOFA_TYPES and wall in sofa_desk_invalid and sofa_desk_valid:
                 new_wall = next(iter(sofa_desk_valid))
                 logger.warning(
@@ -164,10 +174,19 @@ class LayoutResolver:
                 return new_wall
             return wall
 
+        _WARDROBE_TYPES = {"wardrobe", "cabinet", "closet", "armoire", "compact_wardrobe", "bookshelf"}
+
         # Validate each semantic dict; skip invalid ones with a warning
-        semantics: list[SemanticPlacement] = []
+        schemas: list[SemanticPlacementSchema] = []
         for raw in semantic_dicts:
             try:
+                # Fallback: if LLM sends empty furniture_type, derive from furniture_id prefix
+                if not raw.get("furniture_type"):
+                    fid = raw.get("furniture_id", "")
+                    derived = fid.split("-")[0].replace("_", "-") if fid else ""
+                    if derived:
+                        raw = {**raw, "furniture_type": derived}
+                        logger.info(f"LayoutResolver: derived furniture_type={derived!r} from id={fid!r}")
                 logger.info(f"LayoutResolver: validating raw={raw!r}")
                 schema = SemanticPlacementSchema.model_validate(raw)
                 # Hard-enforce feng shui wall constraints
@@ -177,10 +196,44 @@ class LayoutResolver:
                 logger.info(
                     f"LayoutResolver: validated → wall={schema.target_wall!r} align={schema.alignment!r} facing={schema.facing!r}"
                 )
-                semantics.append(self._schema_to_semantic(schema))
+                schemas.append(schema)
             except Exception as exc:
                 fid = raw.get("furniture_id", "<unknown>")
                 logger.warning(f"Skipping invalid semantic placement {fid!r}: {exc}")
+
+        # Post-pass: wardrobe must NOT be on the same wall as the bed headboard
+        # Only actual beds (not sofa_bed) have a headboard concern
+        # Also spread multiple wardrobes across different walls
+        _HEADBOARD_TYPES = {"bed"}  # only real beds have headboard — sofa_bed excluded
+        bed_walls = {
+            s.target_wall
+            for s in schemas
+            if s.furniture_type.lower().replace("-", "_").replace(" ", "_") in _HEADBOARD_TYPES
+            and s.target_wall != "center"
+        }
+        # Large furniture types that should not share a wall with the bed
+        _LARGE_TYPES = _WARDROBE_TYPES | {"sofa", "sofa_bed", "desk", "tv_stand", "tv"}
+
+        if bed_walls:
+            used_large_walls: set[str] = set(bed_walls)  # bed walls are already "taken"
+            for i, schema in enumerate(schemas):
+                ft = schema.furniture_type.lower().replace("-", "_").replace(" ", "_")
+                if ft in _LARGE_TYPES and schema.target_wall in bed_walls:
+                    non_bed = _ALL_WALLS - bed_walls
+                    available = non_bed - used_large_walls
+                    if not available:
+                        available = non_bed  # fallback: reuse non-bed wall
+                    new_wall = next(iter(available))
+                    logger.warning(
+                        f"LayoutResolver: overriding {schema.furniture_type!r} wall "
+                        f"{schema.target_wall!r} → {new_wall!r} (spread: not on bed wall)"
+                    )
+                    schemas[i] = schema.model_copy(update={"target_wall": new_wall})
+                    used_large_walls.add(new_wall)
+                elif ft in _LARGE_TYPES:
+                    used_large_walls.add(schema.target_wall)
+
+        semantics: list[SemanticPlacement] = [self._schema_to_semantic(s) for s in schemas]
 
         if not semantics:
             logger.warning("No valid semantic placements after validation.")
