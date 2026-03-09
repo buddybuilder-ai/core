@@ -181,6 +181,7 @@ class SpatialResolver:
             # Estimate door x/z position from offset (DoorPosition uses .offset field)
             offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
+            logger.info(f"_door_zones: door wall={wall} offset={offset:.3f}m width={door_w:.3f}m clearance={c}m")
             if wall == "south":
                 x0 = max(0.0, offset - 0.1)
                 x1 = min(room.width, offset + door_w + 0.1)

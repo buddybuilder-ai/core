@@ -18,6 +18,7 @@ from src.modules.layout.infrastructure.llm.prompts import (
     LAYOUT_PLANNING_PROMPT,
     SCORING_PROMPT,
 )
+from src.modules.layout.application.services.wall_assigner import WallAssigner
 
 logger = logging.getLogger(__name__)
 
@@ -234,25 +235,15 @@ class FengShuiLLMAgent:
                     lines.append(f"- {k}: {v}")
             user_preferences_section = "\n".join(lines) + "\n"
 
-        command_position_hint = self._build_command_position_hint(doors, room_type)
-        wall_capacity_section = self._build_wall_capacity_section(
-            width, depth, doors, furniture_list, windows
-        )
-
         prompt = LAYOUT_PLANNING_PROMPT.format(
             room_type=room_type,
             width=width,
             depth=depth,
             area=width * depth,
             usable_area=usable_area,
-            doors=json.dumps(doors, indent=2) if doors else "None",
-            windows=json.dumps(windows, indent=2) if windows else "None",
             furniture_list=self._format_furniture_list(furniture_list),
-            command_positions=json.dumps(command_positions, indent=2),
             extra_context=extra_context,
             user_preferences_section=user_preferences_section,
-            command_position_hint=command_position_hint,
-            wall_capacity_section=wall_capacity_section,
         )
 
         output_schema = {
@@ -261,12 +252,7 @@ class FengShuiLLMAgent:
                     "furniture_id": "string",
                     "furniture_type": "string - bed|desk|sofa|wardrobe|chair|...",
                     "size": {"w": "float", "l": "float", "h": "float"},
-                    "target_wall": "north|south|east|west|center",
-                    "alignment": "left|center|right",
-                    "offset_from_wall": "float (meters)",
                     "priority": "int (1=first)",
-                    "orientation": "string - human readable hint",
-                    "facing": "string - north|south|east|west| (direction front/seat faces, empty=auto)",
                 }
             ],
             "chi_flow_notes": "string - notes about energy flow",
@@ -290,11 +276,26 @@ class FengShuiLLMAgent:
         valid: list[dict[str, Any]] = []
         for raw in raw_placements:
             try:
+                # Fill defaults for fields the LLM no longer provides
+                raw.setdefault("target_wall", "center")
+                raw.setdefault("alignment", "center")
+                raw.setdefault("offset_from_wall", 0.05)
                 schema = SemanticPlacementSchema.model_validate(raw)
                 valid.append(schema.model_dump())
             except Exception as exc:
                 fid = raw.get("furniture_id", "<unknown>")
                 logger.warning(f"plan_layout: skipping invalid placement {fid!r}: {exc}")
+
+        # Let WallAssigner determine walls deterministically
+        room_spec = {
+            "width": width,
+            "depth": depth,
+            "doors": doors,
+            "windows": windows,
+        }
+        wall_assigner = WallAssigner()
+        valid = wall_assigner.assign(valid, room_spec)
+        logger.info(f"plan_layout: WallAssigner assigned walls for {len(valid)} items")
 
         response.content["placements"] = valid
         return response
@@ -307,7 +308,27 @@ class FengShuiLLMAgent:
         Uses position heuristics to guess target_wall/alignment.
         """
         fid = old.get("furniture_id", "unknown_01")
-        ftype = fid.split("_")[0]
+        # Derive type from ID prefix: "bed-queen-123" → "bed", "sofa_bed_01" → "sofa_bed"
+        import re
+        _tokens = re.split(r"[-_\s]+", fid.lower())
+        # Handle compound types like "sofa-bed", "tv-stand", "coffee-table"
+        _COMPOUND_PREFIXES = {
+            ("sofa", "bed"): "sofa_bed",
+            ("tv", "stand"): "tv_stand",
+            ("coffee", "table"): "coffee_table",
+            ("office", "chair"): "office_chair",
+            ("shoe", "cabinet"): "shoe_cabinet",
+            ("coat", "rack"): "coat_rack",
+            ("room", "divider"): "room_divider",
+            ("compact", "wardrobe"): "compact_wardrobe",
+            ("folding", "desk"): "folding_desk",
+            ("area", "rug"): "area_rug",
+        }
+        ftype = _tokens[0] if _tokens else "unknown"
+        if len(_tokens) >= 2:
+            pair = (_tokens[0], _tokens[1])
+            if pair in _COMPOUND_PREFIXES:
+                ftype = _COMPOUND_PREFIXES[pair]
         pos_x = float(old.get("pos_x", room_width / 2))
         pos_z = float(old.get("pos_z", room_depth / 2))
         w = float(old.get("width", 1.0))

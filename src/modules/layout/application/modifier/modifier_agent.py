@@ -546,9 +546,10 @@ class ModifierAgent:
             logger.info(f"_parse_wall_and_facing: has_against → {result}")
             return result
         if has_head:
-            # "หันหัวเตียงไปทิศ X" — only rotate, don't move (wall=None).
+            # "หันหัวเตียงไปทิศ X" — headboard must touch wall X → move to wall X.
+            # Facing is derived so occupant faces away from headboard wall.
             facing = cls._HEADBOARD_TO_FACING.get(direction, direction)
-            result = (None, facing, alignment_override)
+            result = (direction, facing, alignment_override)
             logger.info(f"_parse_wall_and_facing: has_head → {result}")
             return result
 
@@ -713,6 +714,10 @@ class ModifierAgent:
                 room_d,
             )
             category = item.get("category", "").lower()
+            # Override furniture_type with layout category if available (more reliable than ID-derived)
+            if category and category != semantic.get("furniture_type", ""):
+                semantic = dict(semantic)
+                semantic["furniture_type"] = category
             fid = semantic.get("furniture_id", "").lower()
             # Use word-boundary match to avoid "bed" matching "sofa-bed" or "bedside".
             # Split fid/category on non-alphanumeric chars and check exact token match.

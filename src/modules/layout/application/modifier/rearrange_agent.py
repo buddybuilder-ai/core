@@ -21,9 +21,7 @@ from src.modules.layout.application.pipeline.models import (
     SSEEventType,
 )
 from src.modules.layout.application.pipeline.steps.step4_repair import RepairStep
-from src.modules.layout.application.services.furniture_relationships import (
-    build_relationship_hints,
-)
+from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
@@ -142,7 +140,7 @@ class RearrangeAgent:
         # Track the exact set of furniture IDs that should appear in the output
         allowed_ids: set[str] = {f["id"] for f in furniture_list}
 
-        # --- 2. Build room feature dicts for LLM ---
+        # --- 2. Build room feature dicts ---
         raw_doors = room_spec.get("doors") or []
         raw_windows = room_spec.get("windows") or []
         doors = [
@@ -168,48 +166,24 @@ class RearrangeAgent:
             data={"step": "rearrange", "message": "Planning feng shui layout...", "progress": 0.40},
         )
 
-        # --- 3. Call LLM to re-plan ---
+        # --- 3. Call LLM to re-plan (simplified: LLM only assigns priority + type) ---
         owned_ids_str = ", ".join(sorted(allowed_ids))
-
-        # Build inter-furniture relationship hints so the LLM knows
-        # TV should face sofa, nightstand beside bed, etc.
-        rel_hints = build_relationship_hints(furniture_list)
-        rel_hints_str = "\n".join(f"- {h}" for h in rel_hints) if rel_hints else ""
-        logger.info(f"RearrangeAgent: {len(rel_hints)} relationship hints generated")
 
         # Detect explicit wall direction in user message (e.g. "ไปฝั่งเหนือทั้งหมด")
         wall_dir = _parse_wall_direction(modification_request)
         logger.info(f"RearrangeAgent: parsed wall_dir={wall_dir!r} from {modification_request!r}")
 
-        wall_constraint = ""
-        if wall_dir:
-            dir_th = _DIR_TH.get(wall_dir, wall_dir)
-            wall_constraint = (
-                f"CRITICAL USER INSTRUCTION: Place ALL furniture against the {wall_dir.upper()} wall. "
-                f'Every item must have target_wall="{wall_dir}" and offset_from_wall=0.05. '
-                f"(User said: place everything toward the {dir_th} side.)"
-            )
-            logger.info(f"RearrangeAgent: injecting wall_constraint={wall_constraint!r}")
-
         hard_constraints = (
             f"You MUST place ALL {len(furniture_list)} of these furniture IDs — every single one: [{owned_ids_str}]. "
             "Do NOT skip, drop, or omit any item from the list. "
-            "Do NOT add, rename, or invent any furniture not in this list. "
             f"Your response MUST contain exactly {len(furniture_list)} placements."
         )
-        if wall_constraint:
-            hard_constraints += f"\n{wall_constraint}"
 
         user_prefs: dict[str, Any] = {
             "user_message": modification_request,
             "owned_furniture": owned_ids_str,
             "placement_constraints": hard_constraints,
         }
-        if rel_hints_str:
-            user_prefs["furniture_relationships"] = (
-                "IMPORTANT — spatial relationships between items (MUST follow these):\n"
-                + rel_hints_str
-            )
 
         llm_response = await self._llm_agent.plan_layout(
             room_type=room_type,
@@ -253,9 +227,7 @@ class RearrangeAgent:
             for item in current_layout
         }
         corrected_placements = []
-        # Alignments to distribute items along the wall when packing everything there
-        _pack_alignments = ["left", "center", "right", "left", "center", "right"]
-        for idx, p in enumerate(placements):
+        for p in placements:
             fid = p.get("furniture_id", "")
             real_dims = dims_by_id.get(fid) or {}
             w = real_dims.get("width") or real_dims.get("w")
@@ -269,14 +241,27 @@ class RearrangeAgent:
                     "l": float(d or w),
                     "h": float(h or 1.0),
                 }
-            # If user explicitly requested a wall direction, force it on every item
-            if wall_dir:
+            # Fill defaults for fields the simplified LLM no longer provides
+            p = dict(p)
+            p.setdefault("target_wall", "center")
+            p.setdefault("alignment", "center")
+            p.setdefault("offset_from_wall", 0.05)
+            corrected_placements.append(p)
+
+        # WallAssigner handles wall placement deterministically
+        # If user explicitly requested a wall direction, override after assignment
+        wall_assigner = WallAssigner()
+        corrected_placements = wall_assigner.assign(corrected_placements, room_spec)
+
+        if wall_dir:
+            _pack_alignments = ["left", "center", "right", "left", "center", "right"]
+            for idx, p in enumerate(corrected_placements):
                 p = dict(p)
                 p["target_wall"] = wall_dir
                 p["offset_from_wall"] = 0.05
-                # Distribute alignments to avoid LLM putting everything at "center"
                 p["alignment"] = _pack_alignments[idx % len(_pack_alignments)]
-            corrected_placements.append(p)
+                corrected_placements[idx] = p
+
         resolution = self._resolver.resolve(corrected_placements, room_spec)
 
         # --- 4b. Repair collisions with RepairStep shift logic ---
@@ -562,17 +547,13 @@ class RearrangeAgent:
         from langchain_core.messages import HumanMessage, SystemMessage
 
         prompt = (
-            f"You just rearranged ALL {item_count} furniture pieces in a {room_type} "
-            f"({width}m × {depth}m) for feng shui.\n"
-            f'User request: "{modification_request}"\n'
-            f"Feng shui score: {feng_shui_score}/70\n"
-            f"Remaining collisions: {collisions_remaining}\n\n"
-            "Write a short confirmation in Thai (60–100 words) that:\n"
-            "1. Confirms ALL furniture has been rearranged for feng shui\n"
-            "2. Mentions the key feng shui principle applied (command position, chi flow, etc.)\n"
-            "3. States the feng shui score briefly\n"
-            "4. If collisions remain, mention it\n"
-            "Write in plain, warm Thai prose only. No JSON, no bullet lists."
+            f"จัดเฟอร์นิเจอร์ {item_count} ชิ้นในห้อง{room_type} "
+            f"({width}m × {depth}m) ตามหลักฮวงจุ้ยแล้ว\n"
+            f'ผู้ใช้ขอ: "{modification_request}"\n'
+            f"คะแนนฮวงจุ้ย: {feng_shui_score}/70\n"
+            f"เฟอร์นิเจอร์ชนกัน: {collisions_remaining} จุด\n\n"
+            "ตอบเป็นภาษาไทยล้วน กระชับ 30-60 คำ ว่าจัดเสร็จแล้ว คะแนนเท่าไหร่ "
+            "ถ้าชนกันให้บอก ห้าม JSON ห้าม bullet list"
         )
         try:
             response = await self._llm_agent._llm.ainvoke(
