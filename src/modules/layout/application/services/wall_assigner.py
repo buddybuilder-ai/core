@@ -13,6 +13,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.modules.layout.application.services.kua_calculator import (
+    calculate_kua,
+    detect_kua_priority,
+    kua_auspicious_walls,
+    kua_best_direction_info,
+    kua_inauspicious_walls,
+)
+
 logger = logging.getLogger(__name__)
 
 _ALL_WALLS = {"north", "south", "east", "west"}
@@ -35,7 +43,7 @@ _STORAGE_TYPES = _WARDROBE_TYPES | _SHELF_TYPES
 
 _NIGHTSTAND_TYPES = {"nightstand", "bedside_table", "lamp"}
 _CENTER_TYPES = {"area_rug", "rug", "coffee_table", "ottoman", "pouffe", "room_divider"}
-_DOOR_ADJACENT_TYPES = {"shoe_cabinet", "coat_rack"}
+_DOOR_ADJACENT_TYPES = {"shoe_cabinet"}
 _TV_TYPES = {"tv_stand", "tv", "media_console"}
 _SMALL_TYPES = {"plant", "mirror", "floor_lamp", "mini_fridge"}
 
@@ -134,13 +142,65 @@ class WallAssigner:
         primary_door_wall = next(iter(door_walls), "south")
         command_wall = _OPPOSITE_WALL.get(primary_door_wall, "north")
 
-        # Bed valid walls: not door wall, not window wall
-        bed_invalid = door_walls | window_walls
-        bed_valid = _ALL_WALLS - bed_invalid
-        # Prefer command wall for bed
-        bed_wall = command_wall if command_wall in bed_valid else (
-            next(iter(bed_valid)) if bed_valid else command_wall
-        )
+        # Bed constraints:
+        # Rule: bed must NOT be in direct door axis (ตรงกับประตู) — but CAN be on same wall
+        # as long as it's offset. WallAssigner works at wall level, not coordinate level,
+        # so we treat door wall as soft-invalid (prefer to avoid, but Kua can override).
+        # The spatial_resolver and clearance checker enforce the actual axis constraint.
+        bed_hard_invalid: set[str] = set()  # nothing is truly hard-blocked at wall level
+        bed_soft_invalid = window_walls | door_walls  # prefer to avoid, but overridable
+        bed_valid_strict = _ALL_WALLS - bed_soft_invalid
+        bed_valid_kua_override = _ALL_WALLS  # Kua can place on any wall
+
+        # Kua-based preferred wall for bed headboard (highest priority)
+        user_prefs = room_spec.get("user_preferences") or {}
+        birth_year = user_prefs.get("birth_year")
+        gender = user_prefs.get("gender", "")
+        user_message = user_prefs.get("user_message", "")
+        kua_walls: list[str] = []
+        if birth_year and gender:
+            try:
+                kua = calculate_kua(int(birth_year), gender)
+                priority = detect_kua_priority(user_message)
+                # Put priority direction first, then remaining auspicious walls as fallback
+                priority_info = kua_best_direction_info(kua, priority)
+                priority_wall = priority_info["wall"]
+                kua_walls = [priority_wall] + [
+                    w for w in kua_auspicious_walls(kua) if w != priority_wall
+                ]
+                kua_bad = kua_inauspicious_walls(kua)
+                logger.info(
+                    f"WallAssigner: Kua={kua} (birth={birth_year}, gender={gender}) "
+                    f"priority={priority} → {priority_wall}, auspicious_walls={kua_walls[:4]} inauspicious={kua_bad}"
+                )
+            except Exception as e:
+                logger.warning(f"WallAssigner: Kua calculation failed: {e}")
+
+        # Pick bed wall:
+        # Priority 1: Kua auspicious wall (even if window wall — Kua overrides feng shui)
+        # Priority 2: feng shui valid wall (no door, no window)
+        # Priority 3: any non-door wall
+        bed_wall = command_wall  # fallback
+        if kua_walls:
+            # Try Kua walls — only exclude door wall (hard constraint)
+            for w in kua_walls:
+                if w in bed_valid_kua_override:
+                    bed_wall = w
+                    if w in bed_soft_invalid:
+                        logger.info(f"WallAssigner: bed wall set by Kua → {w} (overrides window rule)")
+                    else:
+                        logger.info(f"WallAssigner: bed wall set by Kua → {w}")
+                    break
+            else:
+                # All Kua walls unavailable — fall back to command wall
+                bed_wall = command_wall if command_wall in bed_valid_strict else (
+                    next(iter(bed_valid_strict)) if bed_valid_strict else command_wall
+                )
+        else:
+            # No Kua data — prefer no-door, no-window wall; command wall is best
+            bed_wall = command_wall if command_wall in bed_valid_strict else (
+                next(iter(bed_valid_strict)) if bed_valid_strict else command_wall
+            )
 
         # Sort by priority
         items = sorted(furniture_items, key=lambda x: x.get("priority", 99))
@@ -162,9 +222,28 @@ class WallAssigner:
             if ft in _REAL_BED_TYPES:
                 wall = bed_wall
                 bed_assigned_wall = wall
+                # If bed shares a wall with a door, slide it away from the door
+                bed_align = "center"
+                doors_on_wall = [
+                    d for d in room_spec.get("doors", [])
+                    if str(d.get("wall", "")).lower() == wall
+                ]
+                if doors_on_wall:
+                    door = doors_on_wall[0]
+                    door_off = float(door.get("offset", 0.0))
+                    door_w = float(door.get("width", 0.9))
+                    wall_len = _wall_length(wall, room_w, room_d)
+                    # Space on each side of the door
+                    left_space = door_off
+                    right_space = wall_len - (door_off + door_w)
+                    bed_align = "right" if right_space >= left_space else "left"
+                    logger.info(
+                        f"WallAssigner: bed shares {wall} wall with door → align={bed_align} "
+                        f"(left_space={left_space:.2f}, right_space={right_space:.2f})"
+                    )
                 assignments[fid] = {
                     "target_wall": wall,
-                    "alignment": "center",
+                    "alignment": bed_align,
                     "offset_from_wall": 0.05,
                     "facing": _OPPOSITE_WALL.get(wall, ""),
                 }
@@ -338,13 +417,15 @@ class WallAssigner:
                 continue
 
             if ft in _TV_TYPES:
-                # TV goes opposite sofa or bed
+                # TV goes opposite sofa (viewing direction); fallback to opposite bed
                 ref_wall = sofa_assigned_wall or bed_assigned_wall
                 if ref_wall:
                     wall = _OPPOSITE_WALL.get(ref_wall, "north")
-                    if wall in door_walls:
+                    # If opposite wall is taken by bed, sofa_bed, or door, pick best free wall
+                    occupied = door_walls | ({bed_assigned_wall} if bed_assigned_wall else set()) | ({sofa_assigned_wall} if sofa_assigned_wall else set())
+                    if wall in occupied:
                         wall = self._pick_wall(
-                            exclude=door_walls | ({ref_wall} if ref_wall else set()),
+                            exclude=occupied | ({ref_wall} if ref_wall else set()),
                             prefer_side=False,
                             room_w=room_w, room_d=room_d,
                             wall_usage=wall_usage, item_width=fw,

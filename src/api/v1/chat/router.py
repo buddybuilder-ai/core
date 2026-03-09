@@ -333,10 +333,16 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 async for event in orchestrator.run(room_spec, mode=request.mode):
                     yield event.to_sse()
             else:
+                rearrange_room_spec = _apply_clarification_answers(
+                    dict(request.room_spec), request.clarification_answers
+                )
+                rearrange_prefs = dict(rearrange_room_spec.get("user_preferences") or {})
+                rearrange_prefs["user_message"] = request.message
+                rearrange_room_spec["user_preferences"] = rearrange_prefs
                 agent = RearrangeAgent()
                 async for event in agent.apply(
                     current_layout=request.current_layout,
-                    room_spec=request.room_spec,
+                    room_spec=rearrange_room_spec,
                     modification_request=request.message,
                 ):
                     yield event.to_sse()

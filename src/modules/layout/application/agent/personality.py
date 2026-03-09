@@ -76,6 +76,12 @@ _MODE_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+_RULES_SUFFIX = (
+    " ตอบเป็นภาษาไทยล้วน 35-50 คำ โทนอบอุ่น น่าเชื่อถือ ห้าม bullet list"
+    " ถ้ามีเลขกัวให้พูดถึงทิศมงคลและสิ่งที่จะได้รับ เพื่อให้ผู้ใช้รู้สึกว่าห้องเสริมชีวิตจริงๆ"
+)
+
+
 def get_system_prompt(mode: str, mood: str = "neutral") -> str:
     """Return a Thai system prompt for the given personality mode.
 
@@ -94,7 +100,7 @@ def get_system_prompt(mode: str, mood: str = "neutral") -> str:
         base += " ใช้น้ำเสียงที่อ่อนโยนและเห็นอกเห็นใจเป็นพิเศษ"
     elif mood == "excited":
         base += " ใช้น้ำเสียงที่กระตือรือร้นและเต็มไปด้วยพลังงาน"
-    return base
+    return base + _RULES_SUFFIX
 
 
 def detect_mood(message: str) -> str:

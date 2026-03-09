@@ -365,6 +365,8 @@ class RearrangeAgent:
             modification_request=modification_request,
             collisions_remaining=len(collisions),
             feng_shui_score=resolution.deterministic_score,
+            room_spec=room_spec,
+            enriched_layout=enriched,
         )
 
         yield SSEEvent(
@@ -542,23 +544,71 @@ class RearrangeAgent:
         modification_request: str,
         collisions_remaining: int,
         feng_shui_score: int,
+        room_spec: dict[str, Any] | None = None,
+        enriched_layout: list[dict[str, Any]] | None = None,
     ) -> str:
         """Generate a Thai explanation of the rearranged layout."""
+        from src.modules.layout.application.services.kua_calculator import (
+            calculate_kua,
+            detect_kua_priority,
+            kua_best_direction_info,
+        )
+        from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT
+        from src.modules.layout.application.agent.personality import get_system_prompt
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        prompt = (
-            f"จัดเฟอร์นิเจอร์ {item_count} ชิ้นในห้อง{room_type} "
-            f"({width}m × {depth}m) ตามหลักฮวงจุ้ยแล้ว\n"
-            f'ผู้ใช้ขอ: "{modification_request}"\n'
-            f"คะแนนฮวงจุ้ย: {feng_shui_score}/70\n"
-            f"เฟอร์นิเจอร์ชนกัน: {collisions_remaining} จุด\n\n"
-            "ตอบเป็นภาษาไทยล้วน กระชับ 30-60 คำ ว่าจัดเสร็จแล้ว คะแนนเท่าไหร่ "
-            "ถ้าชนกันให้บอก ห้าม JSON ห้าม bullet list"
+        # Build kua_line — pre-rendered Thai text, no LLM logic needed
+        kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"
+        if room_spec:
+            user_prefs = room_spec.get("user_preferences") or {}
+            birth_year = user_prefs.get("birth_year")
+            gender = user_prefs.get("gender", "")
+            logger.info(f"RearrangeAgent: _generate_explanation user_prefs={user_prefs!r}")
+            if birth_year and gender:
+                try:
+                    kua = calculate_kua(int(birth_year), gender)
+                    priority = detect_kua_priority(modification_request)
+                    info = kua_best_direction_info(kua, priority)
+                    # Find actual bed wall from enriched layout
+                    actual_bed_wall = None
+                    if enriched_layout:
+                        actual_bed_wall = next(
+                            (
+                                e.get("wall") or e.get("target_wall")
+                                for e in enriched_layout
+                                if (e.get("category") or "").lower() in ("bed", "sofa_bed")
+                                or "bed" in (e.get("furniture_id") or "").lower()
+                            ),
+                            None,
+                        )
+                    _wall_th = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก"}
+                    if actual_bed_wall and actual_bed_wall != info["wall"]:
+                        actual_wall_th = _wall_th.get(actual_bed_wall, actual_bed_wall)
+                        kua_line = (
+                            f"อยากเสริม{info['benefit']} แต่ทิศ{info['wall_th']}ติดประตู "
+                            f"จึงจัดหัวเตียงไว้ทิศ{actual_wall_th}ซึ่งเป็นทิศมงคลรองของเลขกัว {kua} แทน"
+                        )
+                    else:
+                        kua_line = f"หัวเตียงหันทิศ{info['wall_th']}ตามเลขกัว {kua} เสริม{info['benefit']}ให้คุณโดยตรง"
+                except Exception as e:
+                    logger.warning(f"RearrangeAgent: kua_line build failed: {e}")
+
+        logger.info(f"RearrangeAgent: kua_line={kua_line!r}")
+
+        grade = "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
+
+        prompt = EXPLANATION_PROMPT.format(
+            total_score=feng_shui_score,
+            grade=grade,
+            remaining_issues="ไม่มี" if collisions_remaining == 0 else f"{collisions_remaining} จุดชนกัน",
+            kua_line=kua_line,
         )
+
         try:
+            system_prompt = get_system_prompt("buddy")
             response = await self._llm_agent._llm.ainvoke(
                 [
-                    SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT),
+                    SystemMessage(content=system_prompt),
                     HumanMessage(content=prompt),
                 ]
             )

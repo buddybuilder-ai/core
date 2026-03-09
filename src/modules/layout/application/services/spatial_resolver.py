@@ -174,7 +174,7 @@ class SpatialResolver:
     _BUMP_STEPS = [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 1.5]
 
     # Minimum clearance in front of a door (meters) — kept free for walking
-    _DOOR_CLEARANCE = 0.9
+    _DOOR_CLEARANCE = 1.5
 
     def _door_zones(self, room: RoomSpec) -> list[AABB]:
         """Return clearance AABBs in front of each door that must stay empty."""
@@ -189,24 +189,26 @@ class SpatialResolver:
             # Estimate door x/z position from offset (DoorPosition uses .offset field)
             offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
+            # Expand clearance zone sideways by 0.5m each side so walking path is clear
+            _SIDE_PAD = 0.5
             logger.info(f"_door_zones: door wall={wall} offset={offset:.3f}m width={door_w:.3f}m clearance={c}m")
             if wall == "south":
-                x0 = max(0.0, offset - 0.1)
-                x1 = min(room.width, offset + door_w + 0.1)
+                x0 = max(0.0, offset - _SIDE_PAD)
+                x1 = min(room.width, offset + door_w + _SIDE_PAD)
                 zones.append(AABB(min_x=x0, max_x=x1, min_z=_MIN_GAP, max_z=c))
             elif wall == "north":
-                x0 = max(0.0, offset - 0.1)
-                x1 = min(room.width, offset + door_w + 0.1)
+                x0 = max(0.0, offset - _SIDE_PAD)
+                x1 = min(room.width, offset + door_w + _SIDE_PAD)
                 zones.append(
                     AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _MIN_GAP)
                 )
             elif wall == "west":
-                z0 = max(0.0, offset - 0.1)
-                z1 = min(room.depth, offset + door_w + 0.1)
+                z0 = max(0.0, offset - _SIDE_PAD)
+                z1 = min(room.depth, offset + door_w + _SIDE_PAD)
                 zones.append(AABB(min_x=_MIN_GAP, max_x=c, min_z=z0, max_z=z1))
             elif wall == "east":
-                z0 = max(0.0, offset - 0.1)
-                z1 = min(room.depth, offset + door_w + 0.1)
+                z0 = max(0.0, offset - _SIDE_PAD)
+                z1 = min(room.depth, offset + door_w + _SIDE_PAD)
                 zones.append(
                     AABB(min_x=room.width - c, max_x=room.width - _MIN_GAP, min_z=z0, max_z=z1)
                 )
@@ -267,13 +269,26 @@ class SpatialResolver:
         on_west = item.x <= _WALL_TOL
         on_east = item.x >= room.width - w - _WALL_TOL
 
+        # Which walls have a door? Used to decide if a wall-hugging item
+        # should still respect door clearance zones.
+        door_walls: set[str] = {
+            str(getattr(door, "wall", "")).lower() for door in room.doors
+        }
+
         def overlaps_any(x: float, z: float) -> bool:
             box = AABB.from_position_and_size(x, z, w, d)
             if any(box.intersects(p.bbox) for p in placed):
                 return True
-            # Furniture hugging a wall is allowed to sit in front of a door on
-            # that same wall — only floating/inward items must clear door zones.
-            if on_south or on_north or on_west or on_east:
+            # Wall-hugging items on a wall that has NO door may skip door-zone
+            # checks (they can't block a door that isn't on their wall).
+            # Items on the SAME wall as a door must still respect clearance.
+            if on_south and "south" not in door_walls:
+                return False
+            if on_north and "north" not in door_walls:
+                return False
+            if on_west and "west" not in door_walls:
+                return False
+            if on_east and "east" not in door_walls:
                 return False
             return any(box.intersects(dz) for dz in _door_zones)
 

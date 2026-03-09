@@ -560,6 +560,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         total_score: int,
         grade: str,
         remaining_issues: str,
+        kua_line: str = "",
         personality_mode: str = "buddy",
     ) -> LLMResponse:
         """Generate a Thai natural-language explanation of the layout result.
@@ -583,15 +584,10 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         system_prompt = get_system_prompt(personality_mode)
         prompt = EXPLANATION_PROMPT.format(
-            room_type=room_type,
-            width=width,
-            depth=depth,
-            items_summary=items_summary,
-            conflicts_summary=conflicts_summary,
-            repairs_summary=repairs_summary,
             total_score=total_score,
             grade=grade,
             remaining_issues=remaining_issues,
+            kua_line=kua_line,
         )
         messages = [
             SystemMessage(content=system_prompt),

@@ -23,6 +23,11 @@ from src.modules.layout.application.pipeline.models import (
     SSEEvent,
 )
 from src.modules.layout.application.pipeline.steps.base import BaseStep
+from src.modules.layout.application.services.kua_calculator import (
+    calculate_kua,
+    kua_auspicious_walls,
+    kua_best_direction_info,
+)
 from src.modules.layout.infrastructure.geometry import AABB
 from src.modules.layout.infrastructure.llm.langchain_agent import FengShuiLLMAgent
 
@@ -53,9 +58,13 @@ class ExplainerStep(BaseStep):
 
         yield self._emit_progress("Calling LLM for explanation...", 0.6)
 
+        logger.info(f"   kua_line = {summary['kua_line']!r}")
         try:
             llm_response = await self._llm_agent.explain_layout(
-                **summary,
+                total_score=summary["total_score"],
+                grade=summary["grade"],
+                remaining_issues=summary["remaining_issues"],
+                kua_line=summary["kua_line"],
                 personality_mode=state.personality_mode,
             )
             state.explanation = llm_response.content
@@ -63,6 +72,7 @@ class ExplainerStep(BaseStep):
                 f"   ✓ LLM explanation generated "
                 f"({len(state.explanation)} chars, mode={state.personality_mode!r})"
             )
+            logger.info(f"   LLM raw: {state.explanation[:300]!r}")
         except Exception as exc:
             logger.warning(f"   explain_layout LLM failed — using template fallback: {exc}")
             state.explanation = self._template_explanation(summary, state)
@@ -151,6 +161,19 @@ class ExplainerStep(BaseStep):
         else:
             remaining_issues = "none"
 
+        # Kua line — pre-rendered Thai text
+        user_prefs = spec.get("user_preferences") or {}
+        birth_year = user_prefs.get("birth_year")
+        gender = user_prefs.get("gender", "")
+        kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"
+        if birth_year and gender:
+            try:
+                kua = calculate_kua(int(birth_year), gender)
+                info = kua_best_direction_info(kua)
+                kua_line = f"หัวเตียงหันทิศ{info['wall_th']}ตามเลขกัว {kua} เสริม{info['benefit']}ให้คุณโดยตรง"
+            except Exception:
+                pass
+
         return {
             "room_type": room_type,
             "width": width,
@@ -161,6 +184,7 @@ class ExplainerStep(BaseStep):
             "total_score": total_score,
             "grade": grade,
             "remaining_issues": remaining_issues,
+            "kua_line": kua_line,
         }
 
     # ------------------------------------------------------------------
