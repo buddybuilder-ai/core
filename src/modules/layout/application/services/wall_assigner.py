@@ -40,9 +40,43 @@ _TV_TYPES = {"tv_stand", "tv", "media_console"}
 _SMALL_TYPES = {"plant", "mirror", "floor_lamp", "mini_fridge"}
 
 
-def _normalize_type(furniture_type: str) -> str:
-    """Normalize furniture_type to snake_case for matching."""
-    return furniture_type.lower().replace("-", "_").replace(" ", "_")
+_COMPOUND_TYPES: dict[tuple[str, str], str] = {
+    ("sofa", "bed"): "sofa_bed",
+    ("tv", "stand"): "tv_stand",
+    ("coffee", "table"): "coffee_table",
+    ("office", "chair"): "office_chair",
+    ("shoe", "cabinet"): "shoe_cabinet",
+    ("coat", "rack"): "coat_rack",
+    ("room", "divider"): "room_divider",
+    ("compact", "wardrobe"): "compact_wardrobe",
+    ("folding", "desk"): "folding_desk",
+    ("area", "rug"): "area_rug",
+    ("floor", "lamp"): "floor_lamp",
+    ("mini", "fridge"): "mini_fridge",
+}
+
+
+def _normalize_type(furniture_type: str, furniture_id: str = "") -> str:
+    """Normalize furniture_type to snake_case for matching.
+
+    If furniture_type looks incomplete (single token that is a known prefix),
+    attempt to derive the full compound type from furniture_id tokens.
+    """
+    import re
+
+    normalized = furniture_type.lower().replace("-", "_").replace(" ", "_")
+
+    # If type already looks complete (contains underscore or is multi-word), return as-is
+    if "_" in normalized:
+        return normalized
+
+    # Try to derive compound type from furniture_id
+    if furniture_id:
+        tokens = re.split(r"[-_\s]+", furniture_id.lower())
+        if len(tokens) >= 2 and (tokens[0], tokens[1]) in _COMPOUND_TYPES:
+            return _COMPOUND_TYPES[(tokens[0], tokens[1])]
+
+    return normalized
 
 
 def _wall_length(wall: str, room_width: float, room_depth: float) -> float:
@@ -122,7 +156,7 @@ class WallAssigner:
         # Pass 1: assign high-priority items
         for item in items:
             fid = item.get("furniture_id", item.get("id", ""))
-            ft = _normalize_type(item.get("furniture_type", ""))
+            ft = _normalize_type(item.get("furniture_type", ""), fid)
             fw = float(item.get("size", {}).get("w", item.get("width", 1.0)))
 
             if ft in _REAL_BED_TYPES:
@@ -160,6 +194,7 @@ class WallAssigner:
                     "facing": _OPPOSITE_WALL.get(wall, ""),
                 }
                 wall_usage[wall] += fw
+                sofa_assigned_wall = wall
                 if bed_assigned_wall is None:
                     bed_assigned_wall = wall
                 logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall")
@@ -169,7 +204,7 @@ class WallAssigner:
             fid = item.get("furniture_id", item.get("id", ""))
             if fid in assignments:
                 continue
-            ft = _normalize_type(item.get("furniture_type", ""))
+            ft = _normalize_type(item.get("furniture_type", ""), fid)
             fw = float(item.get("size", {}).get("w", item.get("width", 0.5)))
 
             if ft in _NIGHTSTAND_TYPES and bed_assigned_wall:
@@ -200,7 +235,7 @@ class WallAssigner:
             fid = item.get("furniture_id", item.get("id", ""))
             if fid in assignments:
                 continue
-            ft = _normalize_type(item.get("furniture_type", ""))
+            ft = _normalize_type(item.get("furniture_type", ""), fid)
             fw = float(item.get("size", {}).get("w", item.get("width", 1.0)))
 
             if ft in _CENTER_TYPES:
@@ -215,16 +250,46 @@ class WallAssigner:
 
             if ft in _DOOR_ADJACENT_TYPES:
                 wall = primary_door_wall
-                # Put near door corner
-                existing_door = sum(
-                    1 for a in assignments.values() if a["target_wall"] == wall
+                wall_len = _wall_length(wall, room_w, room_d)
+                # Find primary door info to check available space on each side
+                primary_door = next(
+                    (d for d in room_spec.get("doors", [])
+                     if str(d.get("wall", "")).lower() == wall),
+                    None,
                 )
-                align = "left" if existing_door == 0 else "right"
+                _GAP = 0.15
+                if primary_door:
+                    door_off = float(primary_door.get("offset", 0.0))
+                    door_w = float(primary_door.get("width", 0.9))
+                    left_space = door_off - _GAP
+                    right_space = wall_len - (door_off + door_w + _GAP)
+                    # Determine which side has been used already
+                    existing_door_items = [
+                        a for a in assignments.values() if a["target_wall"] == wall
+                        and a.get("_door_side")
+                    ]
+                    used_left = any(a.get("_door_side") == "left" for a in existing_door_items)
+                    used_right = any(a.get("_door_side") == "right" for a in existing_door_items)
+                    # Pick side: prefer left if fits, else right if fits
+                    if not used_left and left_space >= fw:
+                        align = "left"
+                    elif not used_right and right_space >= fw:
+                        align = "right"
+                    elif left_space >= fw:
+                        align = "left"
+                    else:
+                        align = "right"
+                else:
+                    existing_door = sum(
+                        1 for a in assignments.values() if a["target_wall"] == wall
+                    )
+                    align = "left" if existing_door == 0 else "right"
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": align,
                     "offset_from_wall": 0.05,
                     "facing": "",
+                    "_door_side": align,
                 }
                 wall_usage[wall] += fw
                 logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (door adjacent, {align})")
@@ -234,6 +299,8 @@ class WallAssigner:
                 exclude = door_walls.copy()
                 if bed_assigned_wall:
                     exclude.add(bed_assigned_wall)
+                if sofa_assigned_wall:
+                    exclude.add(sofa_assigned_wall)
                 wall = self._pick_wall(
                     exclude=exclude, prefer_side=True,
                     room_w=room_w, room_d=room_d,

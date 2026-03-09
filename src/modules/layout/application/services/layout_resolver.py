@@ -135,22 +135,27 @@ class LayoutResolver:
                 fid = raw.get("furniture_id", "")
                 fid_lower = fid.lower()
                 current_ftype = raw.get("furniture_type", "")
-                # Detect bad type: empty, contains digits, or equals the full ID
+                import re as _re
+                _COMPOUND = {
+                    ("sofa", "bed"): "sofa_bed", ("tv", "stand"): "tv_stand",
+                    ("coffee", "table"): "coffee_table", ("office", "chair"): "office_chair",
+                    ("shoe", "cabinet"): "shoe_cabinet", ("coat", "rack"): "coat_rack",
+                    ("room", "divider"): "room_divider", ("compact", "wardrobe"): "compact_wardrobe",
+                    ("folding", "desk"): "folding_desk", ("area", "rug"): "area_rug",
+                    ("floor", "lamp"): "floor_lamp", ("mini", "fridge"): "mini_fridge",
+                }
+                _COMPOUND_PREFIXES = {k[0] for k in _COMPOUND}
+                # Detect bad type: empty, contains digits, equals full ID,
+                # or is a single-token prefix of a known compound type
+                _ftype_norm = current_ftype.lower().replace("-", "_").replace(" ", "_")
                 _needs_derive = (
                     not current_ftype
                     or any(c.isdigit() for c in current_ftype)
                     or current_ftype == fid
+                    or ("_" not in _ftype_norm and _ftype_norm in _COMPOUND_PREFIXES)
                 )
                 if _needs_derive and fid:
-                    import re as _re
                     _id_tokens = _re.split(r"[-_\s]+", fid_lower)
-                    _COMPOUND = {
-                        ("sofa", "bed"): "sofa_bed", ("tv", "stand"): "tv_stand",
-                        ("coffee", "table"): "coffee_table", ("office", "chair"): "office_chair",
-                        ("shoe", "cabinet"): "shoe_cabinet", ("coat", "rack"): "coat_rack",
-                        ("room", "divider"): "room_divider", ("compact", "wardrobe"): "compact_wardrobe",
-                        ("folding", "desk"): "folding_desk", ("area", "rug"): "area_rug",
-                    }
                     derived = _id_tokens[0] if _id_tokens else ""
                     if len(_id_tokens) >= 2 and (_id_tokens[0], _id_tokens[1]) in _COMPOUND:
                         derived = _COMPOUND[(_id_tokens[0], _id_tokens[1])]

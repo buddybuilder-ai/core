@@ -120,6 +120,14 @@ _OPPOSITE_WALL: dict[str, str] = {
     "west": "east",
 }
 
+# Furniture types placed beside the door (not in front of it).
+# SpatialResolver will compute their x/z from actual door position instead of
+# using generic left/right alignment which may land them in front of the door.
+_DOOR_ADJACENT_TYPES: frozenset[str] = frozenset({"shoe_cabinet", "coat_rack"})
+
+# Gap between door-adjacent furniture and the door edge (meters)
+_DOOR_ADJACENT_GAP = 0.1
+
 # Furniture types that MUST face inward (away from their wall) regardless of LLM output.
 # These are items where "facing the wall" is physically nonsensical.
 # Value = "inward" means: use opposite of target_wall as facing.
@@ -481,6 +489,19 @@ class SpatialResolver:
         w, length = self._footprint(p.size, rotation)
         gap = p.offset_from_wall
 
+        ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
+        if ftype in _DOOR_ADJACENT_TYPES and room.doors:
+            door_x = self._door_adjacent_x(p.alignment, w, wall, room)
+            if door_x is not None:
+                if wall == "south":
+                    return door_x, gap
+                elif wall == "north":
+                    return door_x, room.depth - length - gap
+                elif wall == "west":
+                    return gap, door_x
+                elif wall == "east":
+                    return room.width - w - gap, door_x
+
         if wall == "south":
             z = gap
             x = self._align_along_axis(p.alignment, w, room.width)
@@ -498,6 +519,46 @@ class SpatialResolver:
             z = gap
 
         return x, z
+
+    def _door_adjacent_x(
+        self, alignment: str, item_size: float, wall: str, room: RoomSpec
+    ) -> float | None:
+        """Return start-coordinate placing item beside the door (not in front of it).
+
+        Items are placed as close to the door as possible while keeping the
+        doorway itself clear. WallAssigner already checked which side fits —
+        spatial_resolver just computes the exact coordinate.
+
+        alignment='left'  → place to the left  of the door
+        alignment='right' → place to the right of the door
+        Returns None if no door is on this wall.
+        """
+        door = next(
+            (d for d in room.doors if str(getattr(d, "wall", "")).lower() == wall),
+            None,
+        )
+        if door is None:
+            return None
+
+        door_offset = float(getattr(door, "offset", 0.0))
+        door_width = float(getattr(door, "width", 0.9))
+        axis_length = room.width if wall in ("south", "north") else room.depth
+
+        left_x = door_offset - item_size - _DOOR_ADJACENT_GAP
+        right_x = door_offset + door_width + _DOOR_ADJACENT_GAP
+        left_fits = left_x >= 0.0
+        right_fits = right_x + item_size <= axis_length
+
+        if alignment.lower() == "left":
+            x = left_x if left_fits else (right_x if right_fits else max(0.0, left_x))
+        else:
+            x = right_x if right_fits else (left_x if left_fits else min(axis_length - item_size, right_x))
+
+        logger.info(
+            f"_door_adjacent_x: {alignment} of door(offset={door_offset}, w={door_width}) "
+            f"→ x={x:.3f} (item_size={item_size:.3f}, left_fits={left_fits}, right_fits={right_fits})"
+        )
+        return x
 
     @staticmethod
     def _align_along_axis(alignment: str, item_size: float, axis_length: float) -> float:
