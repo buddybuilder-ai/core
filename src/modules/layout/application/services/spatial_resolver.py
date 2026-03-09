@@ -267,6 +267,7 @@ class SpatialResolver:
         w = item.bbox.max_x - item.bbox.min_x
         d = item.bbox.max_z - item.bbox.min_z
         _door_zones = door_zones or []
+        _GAP = 0.05  # minimum gap between furniture pieces
 
         # Detect which wall(s) the item is hugging (within 0.1 m tolerance)
         _WALL_TOL = 0.1
@@ -294,13 +295,29 @@ class SpatialResolver:
 
         def overlaps_any(x: float, z: float) -> bool:
             box = AABB.from_position_and_size(x, z, w, d)
-            if any(box.intersects(p.bbox) for p in placed):
+            # Expand check box by _GAP to enforce minimum spacing between items
+            box_padded = AABB(
+                min_x=box.min_x - _GAP, max_x=box.max_x + _GAP,
+                min_z=box.min_z - _GAP, max_z=box.max_z + _GAP,
+            )
+            if any(box_padded.intersects(p.bbox) for p in placed):
                 return True
             # Door openings are never OK to block — check for all items
             if any(box.intersects(dz) for dz in _door_opening_zones):
                 return True
             if is_door_adjacent:
-                return False  # skip walking clearance zones — placed beside door intentionally
+                # Door-adjacent items CAN sit in clearance zone only when truly
+                # flush against the door wall (depth ≤ 15 cm from wall).
+                # If they've drifted into the walking path, treat as blocked.
+                _CLEAR_GAP = 0.15
+                flush_south = on_south and (z + d) <= _CLEAR_GAP
+                flush_north = on_north and z >= room.depth - _CLEAR_GAP
+                flush_west = on_west and (x + w) <= _CLEAR_GAP
+                flush_east = on_east and x >= room.width - _CLEAR_GAP
+                if flush_south or flush_north or flush_west or flush_east:
+                    return False  # truly flush — OK
+                # Not flush: apply full door zone check
+                return any(box.intersects(dz) for dz in _door_zones)
             # Wall-hugging items on a wall that has NO door may skip door-zone
             # checks (they can't block a door that isn't on their wall).
             # Items on the SAME wall as a door must still respect clearance.
@@ -318,9 +335,39 @@ class SpatialResolver:
             return item  # already clear
 
         # Door-adjacent items have a fixed position beside the door.
-        # If they still overlap (e.g. another piece is on the same wall),
-        # try sliding along the wall only — never push them to another wall.
+        # If they still overlap, first try the other side of the door, then
+        # slide along the wall. Never push to another wall.
         if is_door_adjacent:
+            # Try opposite side of door first (if item was placed left, try right and vice versa)
+            for door in room.doors:
+                door_wall = str(getattr(door, "wall", "")).lower()
+                door_offset = float(getattr(door, "offset", 0.0))
+                door_dw = float(getattr(door, "width", 0.9))
+                _ADJ_GAP = 0.1
+                axis_len = room.width if door_wall in ("south", "north") else room.depth
+                right_x = door_offset + door_dw + _ADJ_GAP
+                left_x = door_offset - w - _ADJ_GAP
+                for candidate_x in [right_x, left_x]:
+                    candidate_x = max(0.0, min(candidate_x, axis_len - w))
+                    if door_wall in ("south", "north"):
+                        nx, nz = candidate_x, item.z
+                    else:
+                        nx, nz = item.x, candidate_x
+                    if not overlaps_any(nx, nz):
+                        new_bbox = AABB.from_position_and_size(nx, nz, w, d)
+                        logger.info(
+                            f"_bump_out door_adjacent: {item.furniture_id} "
+                            f"switched side → ({nx:.3f},{nz:.3f})"
+                        )
+                        return PhysicalPlacement(
+                            furniture_id=item.furniture_id,
+                            x=round(nx, 3),
+                            y=item.y,
+                            z=round(nz, 3),
+                            rotation=item.rotation,
+                            bbox=new_bbox,
+                        )
+
             # Slide along the wall axis only, using fine steps
             if on_south or on_north:
                 slide_dirs = [(1, 0), (-1, 0)]
@@ -337,7 +384,7 @@ class SpatialResolver:
                         new_bbox = AABB.from_position_and_size(nx, nz, w, d)
                         logger.info(
                             f"_bump_out door_adjacent: {item.furniture_id} "
-                            f"moved from ({item.x:.3f},{item.z:.3f}) → ({nx:.3f},{nz:.3f}) step={step}"
+                            f"slid from ({item.x:.3f},{item.z:.3f}) → ({nx:.3f},{nz:.3f}) step={step}"
                         )
                         return PhysicalPlacement(
                             furniture_id=item.furniture_id,
