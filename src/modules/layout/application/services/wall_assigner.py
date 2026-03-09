@@ -419,10 +419,11 @@ class WallAssigner:
             if ft in _TV_TYPES:
                 # TV goes opposite sofa (viewing direction); fallback to opposite bed
                 ref_wall = sofa_assigned_wall or bed_assigned_wall
+                # All walls already occupied by furniture — TV must not share these
+                occupied_walls = {a["target_wall"] for a in assignments.values() if a["target_wall"] != "center"}
+                occupied = door_walls | occupied_walls
                 if ref_wall:
                     wall = _OPPOSITE_WALL.get(ref_wall, "north")
-                    # If opposite wall is taken by bed, sofa_bed, or door, pick best free wall
-                    occupied = door_walls | ({bed_assigned_wall} if bed_assigned_wall else set()) | ({sofa_assigned_wall} if sofa_assigned_wall else set())
                     if wall in occupied:
                         wall = self._pick_wall(
                             exclude=occupied | ({ref_wall} if ref_wall else set()),
@@ -432,15 +433,19 @@ class WallAssigner:
                         )
                 else:
                     wall = self._pick_wall(
-                        exclude=door_walls,
+                        exclude=occupied,
                         prefer_side=False,
                         room_w=room_w, room_d=room_d,
                         wall_usage=wall_usage, item_width=fw,
                     )
                 tv_assigned_wall = wall
+                tv_align = (
+                    self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
+                    if wall in door_walls else "center"
+                )
                 assignments[fid] = {
                     "target_wall": wall,
-                    "alignment": "center",
+                    "alignment": tv_align,
                     "offset_from_wall": 0.05,
                     "facing": _OPPOSITE_WALL.get(wall, ""),
                 }
@@ -457,9 +462,14 @@ class WallAssigner:
                     room_w=room_w, room_d=room_d,
                     wall_usage=wall_usage, item_width=fw,
                 )
+                align = (
+                    self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
+                    if wall in door_walls
+                    else self._pick_alignment(wall, wall_usage, fw, room_w, room_d)
+                )
                 assignments[fid] = {
                     "target_wall": wall,
-                    "alignment": self._pick_alignment(wall, wall_usage, fw, room_w, room_d),
+                    "alignment": align,
                     "offset_from_wall": 0.0,
                     "facing": "",
                 }
@@ -474,9 +484,14 @@ class WallAssigner:
                 room_w=room_w, room_d=room_d,
                 wall_usage=wall_usage, item_width=fw,
             )
+            align = (
+                self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
+                if wall in door_walls
+                else self._pick_alignment(wall, wall_usage, fw, room_w, room_d)
+            )
             assignments[fid] = {
                 "target_wall": wall,
-                "alignment": self._pick_alignment(wall, wall_usage, fw, room_w, room_d),
+                "alignment": align,
                 "offset_from_wall": 0.05,
                 "facing": "",
             }
@@ -567,3 +582,40 @@ class WallAssigner:
         elif used < length * 0.6:
             return "right"
         return "center"
+
+    @staticmethod
+    def _safe_alignment_for_door_wall(
+        wall: str,
+        item_width: float,
+        room_w: float,
+        room_d: float,
+        doors: list[dict[str, Any]],
+    ) -> str:
+        """Return alignment that keeps item away from door clearance zone.
+
+        Picks the side of the wall (left or right) that has the most space
+        away from any door on that wall. Used to prevent furniture from
+        landing in the walking path in front of the door.
+        """
+        wall_len = _wall_length(wall, room_w, room_d)
+        best_align = "left"
+        best_space = -1.0
+        for door in doors:
+            if str(door.get("wall", "")).lower() != wall:
+                continue
+            door_off = float(door.get("offset", 0.0))
+            door_w = float(door.get("width", 0.9))
+            _SIDE_CLEAR = 0.6  # match spatial_resolver _SIDE_PAD + a bit
+            # Space on each side OUTSIDE the door+padding zone
+            left_clear = door_off - _SIDE_CLEAR
+            right_clear = wall_len - (door_off + door_w + _SIDE_CLEAR)
+            if right_clear >= left_clear:
+                align = "right"
+                space = right_clear
+            else:
+                align = "left"
+                space = left_clear
+            if space > best_space:
+                best_space = space
+                best_align = align
+        return best_align

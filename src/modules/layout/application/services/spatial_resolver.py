@@ -177,41 +177,47 @@ class SpatialResolver:
     _DOOR_CLEARANCE = 1.5
 
     def _door_zones(self, room: RoomSpec) -> list[AABB]:
-        """Return clearance AABBs in front of each door that must stay empty."""
+        """Return clearance AABBs that must stay empty around each door.
+
+        Two zones per door:
+        1. Door opening (the doorway itself — items must not block the opening)
+        2. Walking clearance (1.5 m into room from door wall)
+        """
         zones: list[AABB] = []
         c = self._DOOR_CLEARANCE
-        # Door width assumed ~0.9 m; clearance rectangle extends inward from the door wall
-        # Clearance starts slightly inward from the wall so that furniture
-        # hugging the same wall is not considered to block the door.
-        _MIN_GAP = 0.15
+        _MIN_GAP = 0.0   # door opening starts at the wall itself
+        _CLEAR_GAP = 0.15  # walking clearance starts 15cm inside
+        _SIDE_PAD = 0.5
         for door in room.doors:
             wall = str(getattr(door, "wall", "")).lower()
-            # Estimate door x/z position from offset (DoorPosition uses .offset field)
             offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
-            # Expand clearance zone sideways by 0.5m each side so walking path is clear
-            _SIDE_PAD = 0.5
             logger.info(f"_door_zones: door wall={wall} offset={offset:.3f}m width={door_w:.3f}m clearance={c}m")
             if wall == "south":
+                # Zone 1: door opening along south wall (x: door span, z: 0 → wall thickness ~0.15m)
+                zones.append(AABB(min_x=offset, max_x=offset + door_w, min_z=_MIN_GAP, max_z=_CLEAR_GAP))
+                # Zone 2: walking clearance in front of door
                 x0 = max(0.0, offset - _SIDE_PAD)
                 x1 = min(room.width, offset + door_w + _SIDE_PAD)
-                zones.append(AABB(min_x=x0, max_x=x1, min_z=_MIN_GAP, max_z=c))
+                zones.append(AABB(min_x=x0, max_x=x1, min_z=_CLEAR_GAP, max_z=c))
             elif wall == "north":
+                zones.append(AABB(min_x=offset, max_x=offset + door_w,
+                                  min_z=room.depth - _CLEAR_GAP, max_z=room.depth))
                 x0 = max(0.0, offset - _SIDE_PAD)
                 x1 = min(room.width, offset + door_w + _SIDE_PAD)
-                zones.append(
-                    AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _MIN_GAP)
-                )
+                zones.append(AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _CLEAR_GAP))
             elif wall == "west":
+                zones.append(AABB(min_x=_MIN_GAP, max_x=_CLEAR_GAP,
+                                  min_z=offset, max_z=offset + door_w))
                 z0 = max(0.0, offset - _SIDE_PAD)
                 z1 = min(room.depth, offset + door_w + _SIDE_PAD)
-                zones.append(AABB(min_x=_MIN_GAP, max_x=c, min_z=z0, max_z=z1))
+                zones.append(AABB(min_x=_CLEAR_GAP, max_x=c, min_z=z0, max_z=z1))
             elif wall == "east":
+                zones.append(AABB(min_x=room.width - _CLEAR_GAP, max_x=room.width,
+                                  min_z=offset, max_z=offset + door_w))
                 z0 = max(0.0, offset - _SIDE_PAD)
                 z1 = min(room.depth, offset + door_w + _SIDE_PAD)
-                zones.append(
-                    AABB(min_x=room.width - c, max_x=room.width - _MIN_GAP, min_z=z0, max_z=z1)
-                )
+                zones.append(AABB(min_x=room.width - c, max_x=room.width - _CLEAR_GAP, min_z=z0, max_z=z1))
         return zones
 
     def resolve(
@@ -275,10 +281,26 @@ class SpatialResolver:
             str(getattr(door, "wall", "")).lower() for door in room.doors
         }
 
+        # Door-adjacent items (shoe_cabinet, coat_rack) are intentionally placed
+        # beside the door by _door_adjacent_x — exempt them from walking clearance
+        # zones but NOT from the door opening itself (must not block the door).
+        # PhysicalPlacement has no furniture_type; detect from furniture_id instead.
+        fid_lower = item.furniture_id.lower().replace("-", "_")
+        is_door_adjacent = any(t in fid_lower for t in _DOOR_ADJACENT_TYPES)
+
+        # Pre-compute door opening AABBs (zone index 0 of each door pair = opening zone)
+        # _door_zones returns [opening, clearance, opening, clearance, ...]
+        _door_opening_zones = _door_zones[0::2]  # every other starting at 0 = door opening AABBs
+
         def overlaps_any(x: float, z: float) -> bool:
             box = AABB.from_position_and_size(x, z, w, d)
             if any(box.intersects(p.bbox) for p in placed):
                 return True
+            # Door openings are never OK to block — check for all items
+            if any(box.intersects(dz) for dz in _door_opening_zones):
+                return True
+            if is_door_adjacent:
+                return False  # skip walking clearance zones — placed beside door intentionally
             # Wall-hugging items on a wall that has NO door may skip door-zone
             # checks (they can't block a door that isn't on their wall).
             # Items on the SAME wall as a door must still respect clearance.
@@ -294,6 +316,39 @@ class SpatialResolver:
 
         if not overlaps_any(item.x, item.z):
             return item  # already clear
+
+        # Door-adjacent items have a fixed position beside the door.
+        # If they still overlap (e.g. another piece is on the same wall),
+        # try sliding along the wall only — never push them to another wall.
+        if is_door_adjacent:
+            # Slide along the wall axis only, using fine steps
+            if on_south or on_north:
+                slide_dirs = [(1, 0), (-1, 0)]
+            elif on_west or on_east:
+                slide_dirs = [(0, 1), (0, -1)]
+            else:
+                slide_dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            fine_steps = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.2, 1.5, 2.0]
+            for step in fine_steps:
+                for dx, dz in slide_dirs:
+                    nx = max(0.0, min(item.x + dx * step, room.width - w))
+                    nz = max(0.0, min(item.z + dz * step, room.depth - d))
+                    if not overlaps_any(nx, nz):
+                        new_bbox = AABB.from_position_and_size(nx, nz, w, d)
+                        logger.info(
+                            f"_bump_out door_adjacent: {item.furniture_id} "
+                            f"moved from ({item.x:.3f},{item.z:.3f}) → ({nx:.3f},{nz:.3f}) step={step}"
+                        )
+                        return PhysicalPlacement(
+                            furniture_id=item.furniture_id,
+                            x=round(nx, 3),
+                            y=item.y,
+                            z=round(nz, 3),
+                            rotation=item.rotation,
+                            bbox=new_bbox,
+                        )
+            logger.warning(f"_bump_out door_adjacent: {item.furniture_id} cannot slide — placed as-is")
+            return item  # cannot move — place as-is beside door
 
         # For wall-hugging items: slide ALONG the wall first, then push inward.
         # For floating/center items: try all directions toward room centre.
