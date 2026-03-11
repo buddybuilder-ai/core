@@ -107,8 +107,15 @@ def process_with_elevation(img_path, output_json, user_h):
     with torch.no_grad():
         depth_map = zoe_model.infer_pil(img_pil)
     
-    dist_to_floor = float(np.median(depth_map[-20:, w_img//2]))
-    dist_to_ceiling = float(np.median(depth_map[:20, w_img//2]))
+    # Get depth map dimensions
+    h_depth, w_depth = depth_map.shape
+    
+    # Calculate scaling factors
+    x_scale = w_depth / w_img
+    y_scale = h_depth / h_img
+
+    dist_to_floor = float(np.median(depth_map[-20:, w_depth//2]))
+    dist_to_ceiling = float(np.median(depth_map[:20, w_depth//2]))
     raw_ai_height = dist_to_floor + dist_to_ceiling
     scale_factor = user_h / raw_ai_height if raw_ai_height > 0 else 1.0
     cam_height = user_h / 2 
@@ -121,9 +128,17 @@ def process_with_elevation(img_path, output_json, user_h):
             if conf < 0.1: continue
             
             x1, y1, x2, y2 = box.xyxy[0].tolist()
-            cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+            cx_orig, cy_orig = int((x1 + x2) / 2), int((y1 + y2) / 2)
+
+            # Scale coordinates to match depth map dimensions
+            scaled_cx = int(cx_orig * x_scale)
+            scaled_cy = int(cy_orig * y_scale)
+
+            # Clamp values to be within the bounds of the depth map
+            scaled_cx = max(0, min(w_depth - 1, scaled_cx))
+            scaled_cy = max(0, min(h_depth - 1, scaled_cy))
             
-            real_dist = float(depth_map[cy, cx]) * scale_factor
+            real_dist = float(depth_map[scaled_cy, scaled_cx]) * scale_factor
             w_m = ((x2 - x1) / w_img) * (2 * np.pi * real_dist)
             h_m = ((y2 - y1) / h_img) * (np.pi * real_dist)
             
@@ -145,7 +160,7 @@ def process_with_elevation(img_path, output_json, user_h):
                 "height_m": round(h_m, 2),
                 "elevation_m": round(elevation_m, 2),
                 "distance_m": round(real_dist, 2),
-                "center_pixel": [cx, cy]
+                "center_pixel": [cx_orig, cy_orig]
             })
             print(f"✅ Found {label:15}: {w_m:.2f}x{h_m:.2f}m at {elevation_m:.2f}m")
 
