@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 from src.modules.layout.domain.entities.room import DoorPosition, WindowPosition
 from src.modules.layout.infrastructure.geometry.collision import AABB
+from src.modules.layout.infrastructure.tools.furniture_catalog_data import FURNITURE_CATALOG
 
 
 @dataclass(frozen=True)
@@ -138,6 +139,7 @@ _FORCE_INWARD_TYPES: frozenset[str] = frozenset(
         "office_chair",
         "armchair",
         "dining_chair",
+        "dining_table",     # seats accessible from room side
         "desk",
         "folding_desk",
         "sofa",
@@ -165,6 +167,28 @@ _FACING_ROTATION: dict[str, int] = {
     "east": 270,
     "west": 90,
 }
+
+# ---------------------------------------------------------------------------
+# Furniture pairing rules — dependent items are placed next to their anchor
+# during the resolve loop itself (not as a post-process).
+# ---------------------------------------------------------------------------
+from dataclasses import dataclass as _pair_dc
+
+@_pair_dc(frozen=True)
+class _PairRule:
+    anchor_type: str    # e.g. "dining_table"
+    relation: str       # "in_front"
+    gap: float          # gap between anchor and dependent (m)
+
+_PAIR_RULES: dict[str, _PairRule] = {
+    "chair":        _PairRule(anchor_type="desk",          relation="in_front", gap=0.05),
+    "office_chair": _PairRule(anchor_type="desk",          relation="in_front", gap=0.05),
+    "dining_chair": _PairRule(anchor_type="dining_table",  relation="in_front", gap=0.05),
+    "coffee_table": _PairRule(anchor_type="sofa",          relation="in_front", gap=0.10),
+}
+
+# Minimum gap between any two furniture pieces
+_GAP = 0.05
 
 
 class SpatialResolver:
@@ -239,13 +263,159 @@ class SpatialResolver:
             List of PhysicalPlacements sorted by priority.
         """
         sorted_items = sorted(placements, key=lambda p: p.priority)
+
+        # Re-order: anchors before their dependents.
+        # Collect which types are anchors, then place anchors first.
+        anchor_types_needed: set[str] = set()
+        for p in sorted_items:
+            ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
+            rule = _PAIR_RULES.get(ftype)
+            if rule:
+                anchor_types_needed.add(rule.anchor_type)
+
+        # Partition: anchors first (maintaining priority order within each group)
+        anchors_first: list[SemanticPlacement] = []
+        dependents: list[SemanticPlacement] = []
+        for p in sorted_items:
+            ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
+            if ftype in anchor_types_needed:
+                anchors_first.append(p)
+            elif ftype in _PAIR_RULES:
+                dependents.append(p)
+            else:
+                anchors_first.append(p)
+        ordered_items = anchors_first + dependents
+
         placed: list[PhysicalPlacement] = []
         door_zones = self._door_zones(room)
-        for p in sorted_items:
-            result = self._resolve_one(p, room)
-            result = self._bump_out(result, placed, room, door_zones)
+
+        # anchor_type → PhysicalPlacement (filled as anchors are placed)
+        anchor_phys: dict[str, PhysicalPlacement] = {}
+
+        for p in ordered_items:
+            ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
+            rule = _PAIR_RULES.get(ftype)
+
+            if rule and rule.anchor_type in anchor_phys:
+                # --- Pair-aware placement: place next to anchor directly ---
+                result = self._place_beside_anchor(
+                    p, anchor_phys[rule.anchor_type], rule, placed, room, door_zones,
+                )
+            else:
+                # --- Normal placement ---
+                result = self._resolve_one(p, room)
+                result = self._bump_out(result, placed, room, door_zones)
+
             placed.append(result)
+            # Register as potential anchor for later dependents
+            if ftype not in anchor_phys:
+                anchor_phys[ftype] = result
+
         return placed
+
+    def _place_beside_anchor(
+        self,
+        p: SemanticPlacement,
+        anchor: PhysicalPlacement,
+        rule: _PairRule,
+        placed: list[PhysicalPlacement],
+        room: RoomSpec,
+        door_zones: list[AABB],
+    ) -> PhysicalPlacement:
+        """Place a dependent item next to its anchor (e.g. chair next to desk).
+
+        Tries all 4 sides of the anchor, prioritising the anchor's front face.
+        Falls back to normal resolve + bump_out if no clear position is found.
+        """
+        ftype = p.furniture_type.lower().replace("-", "_").replace(" ", "_")
+        # Use original (unrotated) size — rotation will be set per candidate
+        raw_w, raw_l = p.size.w, p.size.length
+
+        # Look up model_rotation_offset so we can compensate when setting rotation.
+        # The frontend applies: effective = rotation + offset.  We want the model
+        # to face a specific direction, so we send: rotation = (target - offset) % 360
+        _cat = next(
+            (c for c in FURNITURE_CATALOG if c.id.startswith(ftype) or c.category.value == ftype),
+            None,
+        )
+        _offset = _cat.model_rotation_offset if _cat else 0
+
+        ax0, ax1 = anchor.bbox.min_x, anchor.bbox.max_x
+        az0, az1 = anchor.bbox.min_z, anchor.bbox.max_z
+        anchor_cx = (ax0 + ax1) / 2.0
+        anchor_cz = (az0 + az1) / 2.0
+
+        # Build candidates: (x, z, rotation) for each side
+        # Each candidate places the dependent with its front facing the anchor
+        gap = rule.gap
+        candidates: list[tuple[float, float, int]] = []
+
+        if rule.relation == "in_front":
+            # Place dependent at each face of anchor, facing TOWARD the anchor.
+            # Backend coord: z=0 at south wall, z increases toward north.
+            # rot=0 → front faces south(+Z direction in Three.js, but south in backend)
+            #
+            def _adj(target: int) -> int:
+                return (target - _offset) % 360
+
+            # north of anchor (higher z): faces south toward anchor
+            w, d = raw_w, raw_l
+            candidates.append((anchor_cx - w / 2.0, az1 + gap, _adj(0), w, d))
+            # south of anchor (lower z): faces north toward anchor
+            w, d = raw_w, raw_l
+            candidates.append((anchor_cx - w / 2.0, az0 - gap - d, _adj(180), w, d))
+            # east of anchor (+X): faces west toward anchor
+            w, d = raw_l, raw_w
+            candidates.append((ax1 + gap, anchor_cz - d / 2.0, _adj(270), w, d))
+            # west of anchor (-X): faces east toward anchor
+            w, d = raw_l, raw_w
+            candidates.append((ax0 - gap - w, anchor_cz - d / 2.0, _adj(90), w, d))
+
+        # Prioritise the anchor's FRONT face — place dependent in front of anchor.
+        # candidates: idx 0=north(+z), idx 1=south(-z), idx 2=east(+x), idx 3=west(-x)
+        # anchor rot=0 → front faces south → dependent should be south (idx 1)
+        # anchor rot=180 → front faces north → dependent should be north (idx 0)
+        # anchor rot=90 → front faces east → dependent should be east (idx 2)  (west wall item)
+        # anchor rot=270 → front faces west → dependent should be west (idx 3) (east wall item)
+        front_priority = {0: 1, 180: 0, 90: 2, 270: 3}
+        primary = front_priority.get(anchor.rotation, 0)
+        # Try primary first, then the two side candidates, skip the opposite face
+        # (opposite face would make chair face away from anchor)
+        opposite = {0: 1, 1: 0, 2: 3, 3: 2}
+        sides = [i for i in range(4) if i != primary and i != opposite.get(primary, -1)]
+        ordered = [primary] + sides  # skip opposite entirely
+
+        for idx in ordered:
+            nx, nz, rot, cw, cd = candidates[idx]
+            # Clamp to room bounds
+            nx = max(0.0, min(nx, room.width - cw))
+            nz = max(0.0, min(nz, room.depth - cd))
+            box = AABB.from_position_and_size(nx, nz, cw, cd)
+            # Check no collision with placed items or door zones
+            collides = any(box.intersects(ph.bbox) for ph in placed)
+            in_door = any(box.intersects(dz) for dz in door_zones)
+            if not collides and not in_door:
+                logger.info(
+                    f"_place_beside_anchor: {p.furniture_id} ({ftype}) → "
+                    f"beside {anchor.furniture_id} ({rule.anchor_type}) "
+                    f"at ({nx:.3f},{nz:.3f}) rot={rot}"
+                )
+                return PhysicalPlacement(
+                    furniture_id=p.furniture_id,
+                    x=round(nx, 3),
+                    y=0.0,
+                    z=round(nz, 3),
+                    rotation=rot,
+                    bbox=box,
+                )
+
+        # No clear spot beside anchor — fall back to normal placement
+        logger.info(
+            f"_place_beside_anchor: {p.furniture_id} ({ftype}) — "
+            f"no clear position beside {anchor.furniture_id}, falling back to normal"
+        )
+        result = self._resolve_one(p, room)
+        return self._bump_out(result, placed, room, door_zones)
 
     def _bump_out(
         self,
@@ -267,7 +437,6 @@ class SpatialResolver:
         w = item.bbox.max_x - item.bbox.min_x
         d = item.bbox.max_z - item.bbox.min_z
         _door_zones = door_zones or []
-        _GAP = 0.05  # minimum gap between furniture pieces
 
         # Detect which wall(s) the item is hugging (within 0.1 m tolerance)
         _WALL_TOL = 0.1
@@ -619,6 +788,16 @@ class SpatialResolver:
                 elif wall == "east":
                     return room.width - w - gap, door_x
 
+        # For west/east walls: when alignment=left the z starts at 0 (south corner).
+        # If there's a south door, clamp z_min to door clearance so the item
+        # doesn't block the door opening or its walking clearance zone.
+        south_door_clearance = 0.0
+        if wall in ("west", "east") and room.doors:
+            for door in room.doors:
+                if str(getattr(door, "wall", "")).lower() == "south":
+                    south_door_clearance = self._DOOR_CLEARANCE
+                    break
+
         if wall == "south":
             z = gap
             x = self._align_along_axis(p.alignment, w, room.width)
@@ -628,9 +807,11 @@ class SpatialResolver:
         elif wall == "west":
             x = gap
             z = self._align_along_axis(p.alignment, length, room.depth)
+            z = max(z, south_door_clearance)
         elif wall == "east":
             x = room.width - w - gap
             z = self._align_along_axis(p.alignment, length, room.depth)
+            z = max(z, south_door_clearance)
         else:
             x = gap
             z = gap

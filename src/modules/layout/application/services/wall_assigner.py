@@ -53,6 +53,8 @@ _COMPOUND_TYPES: dict[tuple[str, str], str] = {
     ("tv", "stand"): "tv_stand",
     ("coffee", "table"): "coffee_table",
     ("office", "chair"): "office_chair",
+    ("dining", "chair"): "dining_chair",
+    ("dining", "table"): "dining_table",
     ("shoe", "cabinet"): "shoe_cabinet",
     ("coat", "rack"): "coat_rack",
     ("room", "divider"): "room_divider",

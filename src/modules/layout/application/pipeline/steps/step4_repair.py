@@ -63,9 +63,16 @@ class RepairStep(BaseStep):
 
         unresolved = state.unresolved_conflicts
         if not unresolved:
-            logger.info("🔧 STEP 4: No conflicts to repair - skipping")
+            logger.info("🔧 STEP 4: No conflicts to repair - checking pair alignment")
+            reanchored = self._reanchor_pairs(state.layout_items, room)
+            if reanchored:
+                logger.info(f"🔧 STEP 4: Re-anchored {reanchored} dependent item(s)")
+                yield SSEEvent(
+                    event_type=SSEEventType.LAYOUT_UPDATED,
+                    data={"items": state.layout_items, "step": self.step.value},
+                )
             yield self._emit_progress("No conflicts to repair", 1.0)
-            yield self._emit_completed({"repairs_applied": 0})
+            yield self._emit_completed({"repairs_applied": 0, "reanchored": reanchored})
             return
 
         total = len(unresolved)
@@ -93,8 +100,14 @@ class RepairStep(BaseStep):
             else:
                 logger.info("      ✗ Could not fix automatically")
 
+        # Re-center dependent items (chairs) on their anchors (desks/tables)
+        # after repair may have shifted them off-center.
+        reanchored = self._reanchor_pairs(state.layout_items, room)
+        if reanchored:
+            logger.info(f"🔧 STEP 4: Re-anchored {reanchored} dependent item(s) to their anchors")
+
         # Emit updated layout after repairs
-        if repaired > 0:
+        if repaired > 0 or reanchored > 0:
             yield SSEEvent(
                 event_type=SSEEventType.LAYOUT_UPDATED,
                 data={"items": state.layout_items, "step": self.step.value},
@@ -320,3 +333,155 @@ class RepairStep(BaseStep):
             if item.get("id") == item_id or item.get("furniture_id") == item_id:
                 return item
         return None
+
+    # Each rule: (dependent_tokens, anchor_tokens, gap_metres).
+    # Token matching: dep_tokens must be a subset of the item's token set.
+    # Categories come from furniture_id prefix (e.g. "office-chair_01" → "office-chair")
+    # so we split on [-_] and match token subsets for robustness.
+    _ANCHOR_RULES: list[tuple[frozenset[str], frozenset[str], float]] = [
+        (frozenset({"office", "chair"}), frozenset({"desk"}),            0.05),
+        (frozenset({"dining", "chair"}), frozenset({"dining", "table"}), 0.05),
+        (frozenset({"chair"}),           frozenset({"desk"}),            0.05),
+        (frozenset({"coffee", "table"}), frozenset({"sofa"}),            0.10),
+    ]
+
+    @staticmethod
+    def _item_tokens(item: dict[str, Any]) -> frozenset[str]:
+        """Lowercase token set from category field (e.g. 'office-chair' → {'office','chair'})."""
+        import re
+        raw = item.get("category", "") or item.get("id", "")
+        return frozenset(t for t in re.split(r"[-_\s]+", raw.lower()) if t)
+
+    def _reanchor_pairs(self, items: list[dict[str, Any]], room: Room) -> int:
+        """Re-center dependent items (chairs) on their anchors after repair.
+
+        Determines which side of the anchor the chair is currently closest to,
+        snaps it to the correct centred position on that side, and corrects
+        the chair's rotation so it faces the anchor.  The snap is skipped if
+        it would introduce a new collision with a third item.
+        """
+        half_w = room.width / 2
+        half_d = room.depth / 2
+        snapped = 0
+
+        for item in items:
+            item_tokens = self._item_tokens(item)
+
+            # Find first matching rule for this item
+            matched_anchor_tokens: frozenset[str] | None = None
+            matched_gap = 0.05
+            for dep_tokens, anc_tokens, gap in self._ANCHOR_RULES:
+                if dep_tokens.issubset(item_tokens):
+                    matched_anchor_tokens = anc_tokens
+                    matched_gap = gap
+                    break
+
+            if matched_anchor_tokens is None:
+                continue
+
+            # Find anchor candidates by token match
+            candidates = [
+                a for a in items
+                if a.get("id") != item.get("id")
+                and matched_anchor_tokens.issubset(self._item_tokens(a))
+            ]
+            if not candidates:
+                continue
+
+            cur_x = item.get("pos_x", 0.0)
+            cur_z = item.get("pos_z", 0.0)
+
+            # Pick nearest anchor by centre distance
+            anchor = min(
+                candidates,
+                key=lambda a: (a.get("pos_x", 0.0) - cur_x) ** 2 + (a.get("pos_z", 0.0) - cur_z) ** 2,
+            )
+
+            a_fw, a_fd = self._footprint_wh(
+                anchor.get("dimensions", {}), anchor.get("rotation", 0)
+            )
+            ax = anchor.get("pos_x", 0.0)
+            az = anchor.get("pos_z", 0.0)
+            gap = matched_gap
+
+            # fw/fd — will be recalculated per side below
+            fw_orig = item.get("dimensions", {}).get("width", 0.6)
+            fd_orig = item.get("dimensions", {}).get("depth", 0.6)
+            cur_rot = item.get("rotation", 0) % 360
+
+            # Determine which side to place the chair using anchor's stored rotation.
+            # Matches spatial_resolver.py front_priority = {0:1(south), 180:0(north), 90:2(east), 270:3(west)}
+            # Three.js CW: stored=0→south, 90→east, 180→north, 270→west
+            # anchor faces its front → chair placed on that same side (in front of anchor)
+            #   anchor rot=0   → faces south → chair SOUTH of anchor (side 0)
+            #   anchor rot=180 → faces north → chair NORTH of anchor (side 1)
+            #   anchor rot=90  → faces east  → chair EAST  of anchor (side 2)
+            #   anchor rot=270 → faces west  → chair WEST  of anchor (side 3)
+            anchor_rot = anchor.get("rotation", 0) % 360
+            anchor_model_offset = anchor.get("model_rotation_offset", 0)
+            anchor_effective = (anchor_rot + anchor_model_offset) % 360
+            # Use anchor_effective (stored + offset) to determine actual facing direction
+            # front_side: 0=south, 1=north, 2=east, 3=west
+            _front_side = {0: 0, 90: 2, 180: 1, 270: 3}.get(anchor_effective, 0)
+
+            logger.info(
+                f"_reanchor_pairs DEBUG: {item.get('id')} tokens={item_tokens} "
+                f"cur=({cur_x:.3f},{cur_z:.3f}) anchor={anchor.get('id')} "
+                f"anchor_pos=({ax:.3f},{az:.3f}) anchor_rot={anchor_rot} anchor_eff={anchor_effective} front_side={_front_side} "
+                f"a_fw={a_fw:.3f} a_fd={a_fd:.3f}"
+            )
+
+            # effective = stored_rotation + model_rotation_offset  (Three.js)
+            # effective=0→south, 180→north, 90→west, 270→east
+            model_offset = item.get("model_rotation_offset", 0)
+
+            # Build all 4 candidate sides: (facing_rot, fw, fd, cx, cz)
+            # facing_rot = stored rotation (no offset) that makes chair face toward anchor.
+            # Three.js Y-rotation is CLOCKWISE from above:
+            #   stored=0   → faces south (+Z)
+            #   stored=90  → faces east  (+X)   [CW 90°]
+            #   stored=180 → faces north (-Z)
+            #   stored=270 → faces west  (-X)   [CW 270°]
+            # Matches spatial_resolver.py _adj(target) where target is the desired facing stored rot.
+            # frontend coords: south=higher z (+), north=lower z (-)
+            _sides: list[tuple[int, float, float, float, float]] = [
+                (180, fw_orig, fd_orig, ax,                                   az + a_fd / 2 + gap + fd_orig / 2),  # south of anchor → faces north → stored=180
+                (0,   fw_orig, fd_orig, ax,                                   az - a_fd / 2 - gap - fd_orig / 2),  # north of anchor → faces south → stored=0
+                (270, fd_orig, fw_orig, ax + a_fw / 2 + gap + fd_orig / 2,   az),                                  # east of anchor  → faces west  → stored=270
+                (90,  fd_orig, fw_orig, ax - a_fw / 2 - gap - fd_orig / 2,   az),                                  # west of anchor  → faces east  → stored=90
+            ]
+            # Always snap to the primary front_side regardless of collision.
+            # Placing the chair on a lateral/wrong side is worse than a slight overlap
+            # because it makes the arrows face the wrong direction entirely.
+            _vrot, _fw, _fd, _cx, _cz = _sides[_front_side]
+            _cx = max(-half_w + _fw / 2, min(half_w - _fw / 2, _cx))
+            _cz = max(-half_d + _fd / 2, min(half_d - _fd / 2, _cz))
+            chosen = (_vrot, _fw, _fd, _cx, _cz)
+
+            facing_rot, fw, fd, best_x, best_z = chosen
+            # corrected_rot = stored rotation sent to Three.js
+            # effective = stored + model_offset → facing_rot = stored + model_offset
+            # → stored = facing_rot - model_offset
+            # Matches spatial_resolver.py: stored = _adj(facing_rot) = (facing_rot - offset) % 360
+            corrected_rot = (facing_rot - model_offset) % 360
+
+            pos_changed = abs(best_x - cur_x) > 0.01 or abs(best_z - cur_z) > 0.01
+            rot_changed = corrected_rot != cur_rot
+
+            if not pos_changed and not rot_changed:
+                continue
+
+            logger.info(
+                f"_reanchor_pairs: {item.get('id')} "
+                f"pos ({cur_x:.3f},{cur_z:.3f})→({best_x:.3f},{best_z:.3f}) "
+                f"rot {cur_rot}→{corrected_rot} "
+                f"beside {anchor.get('id')}"
+            )
+            if pos_changed:
+                item["pos_x"] = round(best_x, 3)
+                item["pos_z"] = round(best_z, 3)
+            if rot_changed:
+                item["rotation"] = corrected_rot
+            snapped += 1
+
+        return snapped

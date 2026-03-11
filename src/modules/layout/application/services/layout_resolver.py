@@ -139,12 +139,23 @@ class LayoutResolver:
                 _COMPOUND = {
                     ("sofa", "bed"): "sofa_bed", ("tv", "stand"): "tv_stand",
                     ("coffee", "table"): "coffee_table", ("office", "chair"): "office_chair",
+                    ("dining", "chair"): "dining_chair", ("dining", "table"): "dining_table",
                     ("shoe", "cabinet"): "shoe_cabinet", ("coat", "rack"): "coat_rack",
                     ("room", "divider"): "room_divider", ("compact", "wardrobe"): "compact_wardrobe",
                     ("folding", "desk"): "folding_desk", ("area", "rug"): "area_rug",
                     ("floor", "lamp"): "floor_lamp", ("mini", "fridge"): "mini_fridge",
                 }
                 _COMPOUND_PREFIXES = {k[0] for k in _COMPOUND}
+                # Always try compound type from ID tokens first
+                if fid:
+                    _id_tokens = _re.split(r"[-_\s]+", fid_lower)
+                    _derived_compound = None
+                    if len(_id_tokens) >= 2 and (_id_tokens[0], _id_tokens[1]) in _COMPOUND:
+                        _derived_compound = _COMPOUND[(_id_tokens[0], _id_tokens[1])]
+                    if _derived_compound and _derived_compound != current_ftype.lower().replace("-", "_"):
+                        raw = {**raw, "furniture_type": _derived_compound}
+                        logger.info(f"LayoutResolver: derived furniture_type={_derived_compound!r} from id={fid!r} (was {current_ftype!r})")
+                        current_ftype = _derived_compound
                 # Detect bad type: empty, contains digits, equals full ID,
                 # or is a single-token prefix of a known compound type
                 _ftype_norm = current_ftype.lower().replace("-", "_").replace(" ", "_")
@@ -331,6 +342,13 @@ class LayoutResolver:
         else:
             dim_w = fw
             dim_d = fd
+
+        logger.info(
+            f"_physical_to_dict: {p.furniture_id} "
+            f"backend=({p.x:.3f},{p.z:.3f}) rot={p.rotation}° "
+            f"footprint={fw}x{fd} room=({room.width}x{room.depth}) → "
+            f"frontend=({centre_x},{centre_z}) dim={dim_w}x{dim_d}"
+        )
 
         return {
             "id": p.furniture_id,

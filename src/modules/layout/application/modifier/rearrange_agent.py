@@ -25,6 +25,7 @@ from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
+from src.modules.layout.infrastructure.tools.furniture_catalog_data import FURNITURE_CATALOG
 from src.modules.layout.infrastructure.llm.langchain_agent import (
     FengShuiLLMAgent,
     LLMConfig,
@@ -116,6 +117,7 @@ class RearrangeAgent:
         room_w = float(room_spec.get("width") or dims.get("width") or 4.0)
         room_d = float(room_spec.get("depth") or dims.get("depth") or 4.0)
         room_type = room_spec.get("room_type", "bedroom")
+        logger.info(f"RearrangeAgent: room_spec keys={list(room_spec.keys())} room_w={room_w} room_d={room_d}")
 
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,
@@ -293,12 +295,18 @@ class RearrangeAgent:
         )
 
         # --- 5. Enrich with metadata from current_layout ---
+        logger.info(f"RearrangeAgent: physical before enrich: " + ", ".join(
+            f"{p.get('furniture_id','?')}=({p.get('pos_x','?')},{p.get('pos_z','?')})"
+            for p in physical
+        ))
         enriched = self._enrich_from_current(physical, current_layout)
 
         # Filter to only IDs that were in the original layout (LLM may hallucinate extras)
         enriched = [e for e in enriched if e.get("furniture_id", e.get("id", "")) in allowed_ids]
 
-        # Backfill any items the LLM dropped — try to find a collision-free spot first
+        # Backfill any items the LLM dropped — re-resolve paired items so they get
+        # placed beside their anchor; fall back to collision-free shift for others.
+        _DEPENDENT_TYPES = {"chair", "office_chair", "dining_chair", "coffee_table"}
         placed_ids = {e.get("furniture_id", e.get("id", "")) for e in enriched}
         for original in current_layout:
             fid = original.get("furniture_id", original.get("id", ""))
@@ -306,7 +314,66 @@ class RearrangeAgent:
                 logger.warning(
                     f"RearrangeAgent: LLM dropped {fid!r} — attempting to place collision-free"
                 )
-                # Try original position first; if it collides, shift until free
+                ftype = original.get("furniture_type", original.get("category", "")).lower().replace("-", "_")
+
+                # For paired items (chair beside desk, etc.) re-run resolver so
+                # _place_beside_anchor can position and orient it correctly.
+                if ftype in _DEPENDENT_TYPES:
+                    # Build a minimal semantic placement for this item using the
+                    # current wall assignment from the original item.
+                    dims = original.get("dimensions", {})
+                    synthetic_plan = [{
+                        "furniture_id": fid,
+                        "furniture_type": ftype,
+                        "size": {
+                            "w": float(dims.get("width", 0.6)),
+                            "l": float(dims.get("depth", 0.6)),
+                            "h": float(dims.get("height", 1.0)),
+                        },
+                        "target_wall": original.get("wall", "south"),
+                        "alignment": "center",
+                        "offset_from_wall": 0.05,
+                        "priority": 99,
+                        "orientation": "",
+                        "facing": "",
+                    }]
+                    # Include anchor items already placed so resolver can pair them
+                    anchor_plan = []
+                    for e in enriched:
+                        eid = e.get("furniture_id", e.get("id", ""))
+                        etype = e.get("furniture_type", e.get("category", "")).lower().replace("-", "_")
+                        edims = e.get("dimensions", {})
+                        anchor_plan.append({
+                            "furniture_id": eid,
+                            "furniture_type": etype,
+                            "size": {
+                                "w": float(edims.get("width", 1.0)),
+                                "l": float(edims.get("depth", 1.0)),
+                                "h": float(edims.get("height", 1.0)),
+                            },
+                            "target_wall": e.get("wall", "south"),
+                            "alignment": "center",
+                            "offset_from_wall": 0.05,
+                            "priority": 1,
+                            "orientation": "",
+                            "facing": "",
+                        })
+                    try:
+                        re_result = self._resolver.resolve(anchor_plan + synthetic_plan, room_spec)
+                        for ph in re_result.physical_placements:
+                            if ph.get("furniture_id", ph.get("id", "")) == fid:
+                                candidate = {**original, **ph}
+                                enriched.append(candidate)
+                                logger.info(f"RearrangeAgent: re-resolved {fid!r} via pairing at rot={ph.get('rotation')}")
+                                break
+                        else:
+                            enriched.append(dict(original))
+                    except Exception as exc:
+                        logger.warning(f"RearrangeAgent: re-resolve failed for {fid!r}: {exc} — using original")
+                        enriched.append(dict(original))
+                    continue
+
+                # Non-paired items: try original position; shift if colliding
                 room_obj = self._build_room(room_spec)
                 candidate = dict(original)
                 conflict = Conflict(
@@ -315,7 +382,6 @@ class RearrangeAgent:
                     items_involved=[fid],
                 )
                 repair = RepairStep.__new__(RepairStep)
-                # Check if original position already collides with placed items
                 from src.modules.layout.infrastructure.geometry import AABB
 
                 dims = original.get("dimensions", {})
@@ -341,7 +407,6 @@ class RearrangeAgent:
                     if e.get("furniture_id", e.get("id", "")) != fid
                 )
                 if has_collision:
-                    # Add as temporary item so _try_shift can shift it away from others
                     enriched.append(candidate)
                     action = repair._try_shift(conflict, enriched, room_obj)
                     if not (action and action.success):
@@ -350,6 +415,20 @@ class RearrangeAgent:
                         )
                 else:
                     enriched.append(candidate)
+
+        # Re-center chairs/dependent items on their anchors.
+        # Done after enrich so model_rotation_offset is available for rotation correction.
+        logger.info(
+            "RearrangeAgent: enriched positions before _reanchor_pairs: "
+            + ", ".join(
+                f"{e.get('furniture_id', e.get('id','?'))}=({e.get('pos_x',0):.3f},{e.get('pos_z',0):.3f})"
+                for e in enriched
+            )
+        )
+        _reanchor_repair = RepairStep.__new__(RepairStep)
+        _reanchored = _reanchor_repair._reanchor_pairs(enriched, self._build_room(room_spec))
+        if _reanchored:
+            logger.info(f"RearrangeAgent: re-anchored {_reanchored} dependent item(s)")
 
         yield SSEEvent(
             event_type=SSEEventType.MODIFIER_UPDATED,
@@ -435,6 +514,10 @@ class RearrangeAgent:
         for item in physical:
             fid = item.get("furniture_id", item.get("id", ""))
             src = catalog.get(fid, {})
+            logger.info(
+                f"_enrich_from_current: {fid} item.pos_x={item.get('pos_x','MISSING')} "
+                f"src.pos_x={src.get('pos_x','NONE')} src.keys={list(src.keys())[:8]}"
+            )
             # Use original dimensions from current_layout — Three.js needs pre-rotation
             # dims so that BoxGeometry(w, h, d) + group.rotation gives correct shape.
             # The resolved item's dimensions are post-rotation footprint sizes which
@@ -455,10 +538,22 @@ class RearrangeAgent:
             model_url = src.get("model_url") or item.get("model_url")
             if model_url:
                 enriched["model_url"] = model_url
-            # Preserve model_rotation_offset so renderer knows model's forward direction
-            mro = src.get("model_rotation_offset") or item.get("model_rotation_offset")
-            if mro:
-                enriched["model_rotation_offset"] = int(mro)
+            # Look up model_rotation_offset from catalog by furniture_type
+            ftype = item.get("furniture_type") or src.get("furniture_type") or src.get("category") or ""
+            ftype_norm = ftype.lower().replace("-", "_").replace(" ", "_")
+            catalog_entry = next(
+                (c for c in FURNITURE_CATALOG
+                 if c.category.value == ftype_norm
+                 or c.id.startswith(ftype_norm)
+                 or ftype_norm.startswith(c.category.value)),
+                None,
+            )
+            mro = (
+                catalog_entry.model_rotation_offset
+                if catalog_entry is not None
+                else src.get("model_rotation_offset") or item.get("model_rotation_offset", 0)
+            )
+            enriched["model_rotation_offset"] = int(mro) if mro is not None else 0
             result.append(enriched)
         return result
 

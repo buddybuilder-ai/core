@@ -267,9 +267,12 @@ class LayoutGeneratorStep(BaseStep):
             }
             # Carry model_rotation_offset from catalog so the frontend knows how
             # to correct for the 3D model's exported "forward" direction.
-            mro = cat.get("model_rotation_offset", 0)
-            if mro:
-                enriched_item["model_rotation_offset"] = int(mro)
+            # Prefer sel.item (FurnitureSearchResult) which carries the value from
+            # CatalogFurniture; fall back to cat dict for safety.
+            mro = getattr(getattr(sel, "item", None), "model_rotation_offset", None)
+            if mro is None:
+                mro = cat.get("model_rotation_offset", 0)
+            enriched_item["model_rotation_offset"] = int(mro)
             result.append(enriched_item)
         return result
 

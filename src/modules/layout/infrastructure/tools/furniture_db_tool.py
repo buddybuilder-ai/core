@@ -74,6 +74,7 @@ class FurnitureSearchResult:
     feng_shui_element: str
     placement_notes: str
     total_footprint: float
+    model_rotation_offset: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -91,6 +92,7 @@ class FurnitureSearchResult:
             "feng_shui_element": self.feng_shui_element,
             "placement_notes": self.placement_notes,
             "total_footprint": self.total_footprint,
+            "model_rotation_offset": self.model_rotation_offset,
         }
 
     @classmethod
@@ -110,6 +112,7 @@ class FurnitureSearchResult:
             feng_shui_element=furniture.feng_shui_element,
             placement_notes=furniture.placement_notes,
             total_footprint=furniture.total_footprint,
+            model_rotation_offset=furniture.model_rotation_offset,
         )
 
 
