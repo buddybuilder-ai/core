@@ -34,6 +34,7 @@ from src.modules.layout.infrastructure.tools.furniture_db_tool import (
 )
 from src.modules.layout.infrastructure.tools.rag_search_tool import (
     BaseRagSearchTool,
+    ChromaDbRagSearchTool,
     MockRagSearchTool,
     RagSearchInput,
     RagSearchOutput,
@@ -90,6 +91,7 @@ __all__ = [
     "InMemoryFurnitureDbTool",
     # RAG Search
     "BaseRagSearchTool",
+    "ChromaDbRagSearchTool",
     "FENG_SHUI_RULES",
     "FengShuiRule",
     "MockRagSearchTool",

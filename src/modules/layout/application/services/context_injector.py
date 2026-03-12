@@ -18,6 +18,7 @@ from typing import Any
 
 from src.modules.layout.infrastructure.tools.rag_search_tool import (
     BaseRagSearchTool,
+    ChromaDbRagSearchTool,
     MockRagSearchTool,
     RagSearchInput,
     RuleSearchResult,
@@ -27,6 +28,27 @@ logger = logging.getLogger(__name__)
 
 # Maximum rules to include in the LLM prompt (token budget)
 _MAX_RULES_IN_PROMPT = 6
+
+
+def _build_default_rag_tool() -> BaseRagSearchTool:
+    """Build the best available RAG search tool.
+
+    Prefers ChromaDbRagSearchTool (vector search from feng-shui-rag vectorstore).
+    Falls back to MockRagSearchTool if ChromaDB is unavailable, preserving
+    pipeline continuity with graceful degradation.
+    """
+    try:
+        tool = ChromaDbRagSearchTool()
+        # Trigger lazy vectorstore load to validate availability
+        tool._ensure_vectorstore()
+        logger.info("ContextInjector: using ChromaDbRagSearchTool (feng-shui-rag vectorstore)")
+        return tool
+    except Exception as exc:
+        logger.warning(
+            "ContextInjector: ChromaDB unavailable (%s) — falling back to MockRagSearchTool",
+            exc,
+        )
+        return MockRagSearchTool()
 
 
 @dataclass
@@ -60,7 +82,7 @@ class ContextInjector:
     """
 
     def __init__(self, rag_tool: BaseRagSearchTool | None = None) -> None:
-        self._tool = rag_tool or MockRagSearchTool()
+        self._tool = rag_tool if rag_tool is not None else _build_default_rag_tool()
 
     async def retrieve(self, room_spec: dict[str, Any]) -> RagContext:
         """Build queries from room_spec, retrieve top rules, format context.

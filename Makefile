@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format test test-cov run migrate migrate-create docker-build docker-run docker-down chroma-start clean
+.PHONY: help install dev lint format test test-cov run migrate migrate-create docker-build docker-run docker-down chroma-start clean rag-rebuild rag-rebuild-best rag-test-chat rag-check
 
 # Default target
 help:
@@ -88,6 +88,28 @@ run:
 
 run-prod:
 	uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# =============================================================================
+# RAG / Vectorstore
+# =============================================================================
+
+RAG_DIR := ./rag_pipeline
+
+rag-rebuild:
+	@echo "🔨 Rebuilding vectorstore (contextual method)..."
+	cd $(RAG_DIR) && python main.py --method contextual --rebuild
+
+rag-rebuild-best:
+	@echo "🔨 Rebuilding vectorstore (contextual + LLM context — best quality, slower)..."
+	cd $(RAG_DIR) && python main.py --method contextual --llm-context --rebuild
+
+rag-check:
+	@echo "🔍 Checking vectorstore..."
+	cd $(RAG_DIR) && python check_vectordb.py
+
+rag-test-chat:
+	@echo "💬 Starting interactive RAG chat tester..."
+	python test_rag_chat.py
 
 # =============================================================================
 # Docker

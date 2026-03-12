@@ -1,16 +1,26 @@
-"""Application settings and configuration."""
+"""Application settings and configuration.
+
+แก้ config ทั้งหมดได้ที่ core/.env ไฟล์เดียว
+"""
 
 from functools import lru_cache
-from typing import Any
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _env_files() -> tuple[str, ...]:
+    """หา core/.env — คำนวณจาก __file__ ใช้ได้ไม่ว่าจะรัน uvicorn จากที่ไหน"""
+    # core/src/config/settings.py → parent×3 = core/
+    core_env = Path(__file__).resolve().parent.parent.parent / ".env"
+    return (str(core_env),) if core_env.exists() else (".env",)
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -48,16 +58,29 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/buddybuilder"
 
     # ==========================================================================
-    # ChromaDB Vector Store
+    # ChromaDB Vector Store (Local file-based — RAG from feng-shui-rag)
     # ==========================================================================
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8000
-    CHROMA_COLLECTION: str = "interior_knowledge"
+    CHROMA_DB_PATH: str = "../feng-shui-rag/vectorstore/chroma_db"
+    """Path to local ChromaDB persistence directory (feng-shui RAG vectorstore)."""
 
     # ==========================================================================
     # Embedding Model
+    # รับ EMBEDDING_MODEL (shared) หรือ EMBEDDING_MODEL_LOCAL (project-specific)
     # ==========================================================================
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_MODEL_LOCAL: str = "BAAI/bge-m3"
+    """HuggingFace embedding model สำหรับ local ChromaDB — ตั้งค่าที่ Buddy Builder/.env"""
+
+    # ==========================================================================
+    # RAG Configuration  ← ตั้งค่าที่ Buddy Builder/.env
+    # ==========================================================================
+    RAG_TOP_K: int = 5
+    """Number of documents to retrieve per query."""
+
+    RAG_SEARCH_TYPE: str = "mmr"
+    """Retrieval search type: 'mmr' (diverse) or 'similarity' (precise)."""
+
+    RAG_RELEVANCE_THRESHOLD: float = 1.0
+    """L2 distance threshold for filtering out-of-scope queries (lower = stricter)."""
 
     # ==========================================================================
     # Security
@@ -70,7 +93,7 @@ class Settings(BaseSettings):
     # ==========================================================================
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
 
-    def __init__(self, **data: Any) -> None:
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
 
 
