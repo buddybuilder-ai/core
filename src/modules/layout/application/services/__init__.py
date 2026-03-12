@@ -47,6 +47,7 @@ from src.modules.layout.application.services.placement_engine import (
     PlacementEngine,
     RotationStrategy,
 )
+from src.modules.layout.application.services.rag_service import FengShuiRAGService
 from src.modules.layout.application.services.spatial_analyzer import SpatialAnalyzer
 from src.modules.layout.application.services.spatial_resolver import (
     FurnitureSize,
@@ -95,4 +96,6 @@ __all__ = [
     # RAG context injection
     "ContextInjector",
     "RagContext",
+    # Feng Shui RAG Service (ConversationRAGChain port)
+    "FengShuiRAGService",
 ]

@@ -49,44 +49,26 @@ async def send_message(
         ChatResponse with AI answer and source documents.
     """
     try:
-        # Use system prompt if provided, otherwise use mode-based default
-        system_prompt = request.system_prompt or _get_default_system_prompt(request.mode.value)
+        from src.modules.layout.application.services.rag_service import FengShuiRAGService
+        from src.schemas.chat import SourceDocument
 
-        # Call OpenRouter API with extended timeout for free models
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.OPENROUTER_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://buddybuilder.ai",
-                    "X-Title": "BuddyBuilder AI",
-                },
-                json={
-                    "model": settings.LLM_MODEL_RAG,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": request.text},
-                    ],
-                    "temperature": settings.LLM_TEMPERATURE_RAG,
-                    "max_tokens": 1000,
-                },
-                timeout=60.0,  # Increased to 60s for free models
-            )
+        service = FengShuiRAGService()
+        answer, source_docs = await service.ask(
+            question=request.text,
+            mode=request.mode.value,
+            conversation_history=[],
+        )
 
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"LLM API error: {response.text}",
+        return ChatResponse(
+            answer=answer,
+            source_documents=[
+                SourceDocument(
+                    content=d["content"],
+                    metadata=d.get("metadata"),
                 )
-
-            data = response.json()
-            answer = data["choices"][0]["message"]["content"]
-
-            return ChatResponse(
-                answer=answer,
-                source_documents=[],  # RAG implementation coming later
-            )
+                for d in source_docs
+            ],
+        )
 
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="LLM request timed out")
@@ -351,7 +333,12 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 yield event.to_sse()
 
         else:  # "question" (also the fallback)
-            answer = await _answer_question(request.message, request.mode, mood)
+            answer = await _answer_question(
+                request.message,
+                request.mode,
+                mood,
+                request.conversation_history,
+            )
             yield SSEEvent(
                 event_type=SSEEventType.PIPELINE_COMPLETED,
                 data={"intent": "question", "answer": answer},
@@ -368,58 +355,32 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     )
 
 
-async def _answer_question(message: str, mode: str, mood: str = "neutral") -> str:
-    """Answer a feng shui / design question directly via LLM with RAG augmentation.
+async def _answer_question(
+    message: str,
+    mode: str,
+    mood: str = "neutral",
+    conversation_history: list[dict[str, str]] | None = None,
+) -> str:
+    """Answer a feng shui / design question using FengShuiRAGService.
 
-    Retrieves relevant feng shui rules from the knowledge base and prepends them
-    to the user message for context-aware answers.  Falls back to plain LLM if
-    RAG retrieval fails or returns no results.
+    Implements the full feng-shui-rag ConversationRAGChain flow:
+    - 2-layer relevance check (domain keywords + ChromaDB L2 distance)
+    - MMR retrieval from feng-shui-rag vectorstore
+    - Thai-enforced system prompt with mode personality
+    - Conversation history injected into prompt
 
-    Reuses the same OpenRouter call logic as send_message().
-    Returns the answer string, or an error message if the call fails.
+    Falls back gracefully if vectorstore is unavailable.
+    Returns the answer string.
     """
-    from src.modules.layout.application.agent.personality import get_system_prompt
-    from src.modules.layout.application.services import ContextInjector
+    from src.modules.layout.application.services.rag_service import FengShuiRAGService
 
-    system_prompt = get_system_prompt(mode, mood)
-
-    # RAG augmentation — graceful; never raises
-    rag_context = ""
-    try:
-        injector = ContextInjector()
-        rag = await injector.retrieve({"room_type": "", "user_message": message})
-        rag_context = rag.layout_prompt_context
-    except Exception:
-        pass
-
-    augmented_message = f"{rag_context}\n\nUser question: {message}" if rag_context else message
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.OPENROUTER_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://buddybuilder.ai",
-                    "X-Title": "BuddyBuilder AI",
-                },
-                json={
-                    "model": settings.LLM_MODEL_RAG,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": augmented_message},
-                    ],
-                    "temperature": settings.LLM_TEMPERATURE_RAG,
-                    "max_tokens": 1000,
-                },
-                timeout=60.0,
-            )
-            if response.status_code == 200:
-                return str(response.json()["choices"][0]["message"]["content"])
-            return f"LLM error {response.status_code}: {response.text}"
-    except Exception as exc:
-        return f"Failed to answer question: {exc}"
+    service = FengShuiRAGService()
+    answer, _ = await service.ask(
+        question=message,
+        mode=mode,
+        conversation_history=conversation_history or [],
+    )
+    return answer
 
 
 def _get_default_system_prompt(mode: str) -> str:
