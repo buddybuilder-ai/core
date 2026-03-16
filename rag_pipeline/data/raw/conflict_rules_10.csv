@@ -1,0 +1,11 @@
+﻿rule_id,rule_th,rule_en,category,furniture_involved,check_type
+1,เตียงห้ามตรงกับประตู,Bed must not face door,bed_placement,"bed,door",alignment
+2,เตียงห้ามตรงกับหน้าต่าง,Bed must not face window,bed_placement,"bed,window",alignment
+3,เตียงห้ามตรงกับทีวีหรือกระจก,Bed must not face TV or mirror,bed_placement,"bed,tv,mirror",alignment
+4,เตียงห้ามตรงกับแอร์,Bed must not be under AC,bed_placement,"bed,air_conditioner",position
+5,ห้ามวางเตียงไว้กลางห้อง,Bed must not be in center,bed_placement,bed,position
+6,ประตูห้ามตรงกับหน้าต่าง,Door must not face window,room_layout,"door,window",alignment
+7,ห้ามตู้ติดผนังอยู่ที่หัวเตียง,No cabinet above headboard,furniture_placement,"cabinet,bed",position
+8,ห้ามเฟอร์นิเจอร์ใหญ่วางชิดเตียง,No large furniture close to bed,furniture_placement,"large_furniture,bed",proximity
+9,โต๊ะทำงานต้องหันไปทางประตูและห้ามหันตรงกับหน้าต่าง,"Desk must face door, not window",room_layout,"desk,door,window",orientation
+10,หัวเตียงหันทิศมงคลตามเลขกัว,Headboard faces auspicious direction per Gua,gua_direction,bed,direction
