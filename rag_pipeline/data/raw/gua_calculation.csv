@@ -1,0 +1,6 @@
+﻿step,description,formula,example_input,example_output
+1,บวกทุกหลักของปีเกิด (ค.ศ.),sum(digits(year)),1960,16
+2,บวกจนเหลือหลักเดียว,reduce_single(step1),16,7
+3a,ชาย: 11 - ผลลัพธ์,11 - step2,7,4
+3b,หญิง: ผลลัพธ์ + 4 (reduce ถ้า 2 หลัก),reduce_single(step2 + 4),7,2
+4,"ถ้าได้ 5 → ชายแทน 2, หญิงแทน 8","if result==5: male→2, female→8",5,male:2 / female:8
