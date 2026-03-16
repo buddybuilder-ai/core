@@ -40,7 +40,7 @@ depth_model = torch.hub.load("depth-anything/Depth-Anything-V2", "depth_anything
 depth_model.to("cpu").eval()
 
 # B. Load YOLOv11 (แทนที่ v8-world เพื่อความเป๊ะของ Box ในงาน Indoor)
-yolo_model = YOLO('yolo11s.pt') 
+yolo_model = YOLO('yolov8s-world.pt') 
 
 # --- 3. PROCESSING FUNCTION ---
 def process_room_3d(img_path, output_json, user_h):
