@@ -246,7 +246,7 @@ class WallAssigner:
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": bed_align,
-                    "offset_from_wall": 0.05,
+                    "offset_from_wall": 0.0,
                     "facing": _OPPOSITE_WALL.get(wall, ""),
                 }
                 wall_usage[wall] += fw
@@ -271,7 +271,7 @@ class WallAssigner:
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": "center",
-                    "offset_from_wall": 0.05,
+                    "offset_from_wall": 0.0,
                     "facing": _OPPOSITE_WALL.get(wall, ""),
                 }
                 wall_usage[wall] += fw
@@ -305,7 +305,7 @@ class WallAssigner:
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": align,
-                    "offset_from_wall": 0.05,
+                    "offset_from_wall": 0.0,
                     "facing": "",
                 }
                 wall_usage[wall] += fw

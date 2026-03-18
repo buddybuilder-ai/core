@@ -260,7 +260,7 @@ class RearrangeAgent:
             for idx, p in enumerate(corrected_placements):
                 p = dict(p)
                 p["target_wall"] = wall_dir
-                p["offset_from_wall"] = 0.05
+                p["offset_from_wall"] = 0.0
                 p["alignment"] = _pack_alignments[idx % len(_pack_alignments)]
                 corrected_placements[idx] = p
 
