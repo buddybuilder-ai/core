@@ -26,7 +26,9 @@ if str(_RAG_PIPELINE) not in sys.path:
     sys.path.insert(0, str(_RAG_PIPELINE))
 
 from rag_constants import (  # noqa: E402
+    BEDROOM_KEYWORDS,
     DOMAIN_KEYWORDS,
+    EXCLUDE_KEYWORDS,
     MODE_ADDITIONS as _MODE_ADDITIONS,
     OUT_OF_SCOPE_MSG,
     SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE,
@@ -111,12 +113,22 @@ class FengShuiRAGService:
     ) -> bool:
         """Layer 1 relevance: domain keywords + fuzzy match + conversation context.
 
-        Mirrors ConversationRAGChain._has_domain_keywords() with 3 sub-layers:
-        - Exact keyword match in question
-        - Fuzzy match for long keywords (>= 4 chars)
-        - History context for short follow-up questions (< 15 chars)
+        Sub-layer 0: Exclude non-bedroom rooms — block ถ้าคำถามมีห้องอื่น และไม่มี bedroom keyword
+        Sub-layer 1: Exact keyword match in question
+        Sub-layer 2: Fuzzy match for long keywords (>= 4 chars)
+        Sub-layer 3: History context for short follow-up questions (< 15 chars)
         """
         q_lower = question.lower()
+
+        # Sub-layer 0: block ห้องอื่นที่ไม่ใช่ห้องนอน
+        has_exclude = any(kw.lower() in q_lower for kw in EXCLUDE_KEYWORDS)
+        if has_exclude:
+            has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
+            if not has_bedroom:
+                matched_exclude = next(kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower)
+                print(f"  [RAG] Layer 0 ❌  non-bedroom room: \"{matched_exclude}\" (no bedroom keyword)")
+                return False
+            print(f"  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
 
         # Sub-layer 1: exact keyword match
         for kw in DOMAIN_KEYWORDS:
@@ -357,30 +369,56 @@ class FengShuiRAGService:
             print(f"  [RAG] OUT_OF_SCOPE — returning default message")
             return OUT_OF_SCOPE_MSG, []
 
+        # --- Detect mixed-room question: inject hard constraint into user message ---
+        q_lower = question.lower()
+        excluded_rooms = [kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower]
+        has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
+        if excluded_rooms and has_bedroom:
+            rooms_str = ", ".join(excluded_rooms[:3])
+            question_for_llm = (
+                f"[ระบบ: คำถามนี้พูดถึง {rooms_str} ซึ่งอยู่นอก scope — "
+                f"ห้ามตอบส่วน {rooms_str} เด็ดขาด ตอบเฉพาะห้องนอนเท่านั้น]\n{question}"
+            )
+            print(f"  [RAG] Mixed-room detected ({rooms_str}) — injecting constraint into prompt")
+        else:
+            question_for_llm = question
+
         # --- Retrieve context from ChromaDB ---
         context, source_docs = self._retrieve_context(question)
 
         # --- Build prompt messages ---
-        messages = self._build_messages(question, context, history, mode)
+        messages = self._build_messages(question_for_llm, context, history, mode)
 
-        # --- Call LLM via OpenRouter (reuses core's existing pattern) ---
+        # --- Call LLM (OpenRouter or Ollama depending on LLM_PROVIDER) ---
         import httpx
 
         from src.config.settings import get_settings
 
         settings = get_settings()
+
+        if settings.LLM_PROVIDER == "ollama":
+            url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+            model = settings.OLLAMA_MODEL_RAG
+            print(f"  [RAG] LLM: Ollama ({model})")
+        else:
+            url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://buddybuilder.ai",
+                "X-Title": "BuddyBuilder AI",
+            }
+            model = settings.LLM_MODEL_RAG
+            print(f"  [RAG] LLM: OpenRouter ({model})")
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{settings.OPENROUTER_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://buddybuilder.ai",
-                        "X-Title": "BuddyBuilder AI",
-                    },
+                    url,
+                    headers=headers,
                     json={
-                        "model": settings.LLM_MODEL_RAG,
+                        "model": model,
                         "messages": messages,
                         "temperature": settings.LLM_TEMPERATURE_RAG,
                         "max_tokens": 1200,

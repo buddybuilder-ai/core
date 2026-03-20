@@ -34,23 +34,36 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # ==========================================================================
+    # LLM Provider — "openrouter" | "ollama"
+    # ==========================================================================
+    LLM_PROVIDER: str = "openrouter"
+    """LLM backend สำหรับ RAG: openrouter (production) หรือ ollama (local)"""
+
+    # ==========================================================================
     # OpenRouter Configuration
     # ==========================================================================
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # ==========================================================================
-    # LLM Models
+    # Ollama Configuration (ใช้เมื่อ LLM_PROVIDER=ollama)
+    # ==========================================================================
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL_RAG: str = "qwen2.5:7b"
+    """Ollama model สำหรับ RAG chat เท่านั้น (ไม่กระทบ Layout pipeline)"""
+
+    # ==========================================================================
+    # RAG LLM — ใช้เมื่อ LLM_PROVIDER=openrouter (fallback)
     # ==========================================================================
     LLM_MODEL_RAG: str = "anthropic/claude-3.5-sonnet"
+    LLM_TEMPERATURE_RAG: float = 0.7
+
+    # ==========================================================================
+    # Layout Pipeline LLM — OpenRouter เสมอ (ไม่ขึ้นกับ LLM_PROVIDER)
+    # ==========================================================================
     LLM_MODEL_LAYOUT: str = "openai/gpt-4-turbo"
     LLM_MODEL_ROUTER: str = "openai/gpt-4o-mini"
-    LLM_TEMPERATURE_RAG: float = 0.7
-    LLM_TEMPERATURE_LAYOUT: float = 0.7
-
-    # Layout model can use a different base URL and API key (e.g. local Ollama)
-    LLM_LAYOUT_BASE_URL: str = ""
-    LLM_LAYOUT_API_KEY: str = ""
+    LLM_TEMPERATURE_LAYOUT: float = 0.4
 
     # ==========================================================================
     # Database Configuration
