@@ -171,10 +171,8 @@ async def main():
     print("\n  โหลด FengShuiRAGService...")
     svc = FengShuiRAGService()
 
-    # Check API key
     from src.config.settings import get_settings
     settings = get_settings()
-    has_api_key = bool(settings.OPENROUTER_API_KEY) and "xxxx" not in settings.OPENROUTER_API_KEY
 
     # Warm up vectorstore + show location
     import os
@@ -187,10 +185,25 @@ async def main():
 
     print(f"  📏 Threshold: L2 ≤ {svc.RELEVANCE_THRESHOLD}  |  TOP_K={settings.RAG_TOP_K}  |  Fuzzy≤{svc.FUZZY_MATCH_THRESHOLD}  |  Temp={settings.LLM_TEMPERATURE_RAG}")
 
-    if has_api_key:
-        print(f"  ✅ OpenRouter API Key พร้อม (model: {settings.LLM_MODEL_RAG})")
+    # แสดง LLM ที่ใช้จริง + ตรวจสอบความพร้อม
+    if settings.LLM_PROVIDER == "ollama":
+        import httpx as _httpx
+        try:
+            r = _httpx.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+            ollama_ok = r.status_code == 200
+        except Exception:
+            ollama_ok = False
+        if ollama_ok:
+            print(f"  ✅ LLM: Ollama ({settings.OLLAMA_MODEL_RAG}) — พร้อมใช้งาน")
+        else:
+            print(f"  ⚠️  LLM: Ollama ({settings.OLLAMA_MODEL_RAG}) — ไม่ได้รัน! ให้รัน: ollama serve")
+        has_api_key = ollama_ok
     else:
-        print("  ⚠️  ไม่มี OPENROUTER_API_KEY — /relevance และ /retrieve ใช้ได้ แต่ถามจริงไม่ได้")
+        has_api_key = bool(settings.OPENROUTER_API_KEY) and "xxxx" not in settings.OPENROUTER_API_KEY
+        if has_api_key:
+            print(f"  ✅ LLM: OpenRouter ({settings.LLM_MODEL_RAG}) — พร้อมใช้งาน")
+        else:
+            print(f"  ⚠️  LLM: OpenRouter — ไม่มี OPENROUTER_API_KEY, ถามจริงไม่ได้")
 
     # State
     mode = "buddy"
@@ -257,7 +270,10 @@ async def main():
             # --- Normal question ---
             else:
                 if not has_api_key:
-                    print("  ⚠️  ไม่มี API key — ใช้ /relevance หรือ /retrieve แทนครับ")
+                    if settings.LLM_PROVIDER == "ollama":
+                        print(f"  ⚠️  Ollama ไม่ได้รัน — รัน: ollama serve  แล้วลองใหม่")
+                    else:
+                        print("  ⚠️  ไม่มี OPENROUTER_API_KEY — ใช้ /relevance หรือ /retrieve แทนครับ")
                     continue
 
                 if show_debug:
