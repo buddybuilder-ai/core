@@ -130,18 +130,17 @@ class FengShuiRAGService:
                 return False
             print(f"  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
 
-        # Sub-layer 1: exact keyword match
-        for kw in DOMAIN_KEYWORDS:
-            if kw.lower() in q_lower:
-                matched_kw = kw
-                print(f"  [RAG] Layer 1 ✅  exact match: \"{matched_kw}\"")
-                return True
+        # Sub-layer 1: exact keyword match (collect all for debug visibility)
+        exact_matches = [kw for kw in DOMAIN_KEYWORDS if kw.lower() in q_lower]
+        if exact_matches:
+            print(f"  [RAG] Layer 1 ✅  exact match: {exact_matches}")
+            return True
 
         # Sub-layer 2: fuzzy match on long keywords
-        for kw in DOMAIN_KEYWORDS:
-            if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower()):
-                print(f"  [RAG] Layer 1 ✅  fuzzy match: \"{kw}\"")
-                return True
+        fuzzy_matches = [kw for kw in DOMAIN_KEYWORDS if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower())]
+        if fuzzy_matches:
+            print(f"  [RAG] Layer 1 ✅  fuzzy match: {fuzzy_matches}")
+            return True
 
         # Sub-layer 3: follow-up question via conversation history
         if conversation_history and len(question) < 15:
