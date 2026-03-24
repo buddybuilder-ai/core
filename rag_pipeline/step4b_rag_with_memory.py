@@ -12,14 +12,15 @@ from langchain_core.messages import HumanMessage, AIMessage
 # Import centralized config
 from config import (
     LLM_PROVIDER,
+    LLM_MODEL_NAME,
     TEMPERATURE,
     MAX_TOKENS,
     TOP_P,
     REPEAT_PENALTY,
-    OLLAMA_MODEL,
     OLLAMA_BASE_URL,
+    GROQ_API_KEY,
+    GROQ_BASE_URL,
     ANTHROPIC_API_KEY,
-    CLAUDE_MODEL,
     RELEVANCE_THRESHOLD as CONFIG_RELEVANCE_THRESHOLD,
     FUZZY_MATCH_THRESHOLD,
     MAX_HISTORY,
@@ -30,12 +31,12 @@ from rag_constants import SYSTEM_PROMPT, DOMAIN_KEYWORDS, OUT_OF_SCOPE_MSG
 
 
 def get_llm():
-    """สร้าง LLM ตาม provider ที่เลือก"""
+    """สร้าง LLM ตาม LLM_MODEL ใน .env (format: provider/model-name)"""
     if LLM_PROVIDER == "ollama":
         from langchain_ollama import ChatOllama
 
         return ChatOllama(
-            model=OLLAMA_MODEL,
+            model=LLM_MODEL_NAME,
             base_url=OLLAMA_BASE_URL,
             temperature=TEMPERATURE,
             top_p=TOP_P,
@@ -43,17 +44,28 @@ def get_llm():
             num_predict=MAX_TOKENS,
         )
 
-    elif LLM_PROVIDER == "claude":
-        from langchain_anthropic import ChatAnthropic
+    if LLM_PROVIDER == "groq":
+        from langchain_openai import ChatOpenAI
 
-        return ChatAnthropic(
-            anthropic_api_key=ANTHROPIC_API_KEY,
-            model=CLAUDE_MODEL,
+        return ChatOpenAI(
+            model=LLM_MODEL_NAME,
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL,
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
         )
 
-    raise ValueError(f"ไม่รองรับ LLM_PROVIDER: {LLM_PROVIDER}")
+    if LLM_PROVIDER == "claude":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            model=LLM_MODEL_NAME,
+            api_key=ANTHROPIC_API_KEY,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+        )
+
+    raise ValueError(f"ไม่รองรับ LLM_PROVIDER: {LLM_PROVIDER} (ตัวเลือก: ollama, groq, claude)")
 
 
 def format_documents(docs: List[Document]) -> str:

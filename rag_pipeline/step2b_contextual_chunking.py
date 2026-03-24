@@ -11,24 +11,45 @@ from langchain_core.prompts import ChatPromptTemplate
 from config import (
     CHUNK_CONFIG,
     LLM_PROVIDER,
+    LLM_MODEL_NAME,
     CONTEXTUAL_TEMPERATURE,
-    OLLAMA_MODEL,
     OLLAMA_BASE_URL,
+    GROQ_API_KEY,
+    GROQ_BASE_URL,
+    ANTHROPIC_API_KEY,
 )
 
 
 def get_contextual_llm():
-    """สร้าง LLM สำหรับเพิ่ม context"""
+    """สร้าง LLM สำหรับเพิ่ม context ตาม LLM_MODEL ใน .env"""
     if LLM_PROVIDER == "ollama":
         from langchain_ollama import ChatOllama
 
         return ChatOllama(
-            model=OLLAMA_MODEL,
+            model=LLM_MODEL_NAME,
             base_url=OLLAMA_BASE_URL,
-            temperature=CONTEXTUAL_TEMPERATURE,  # ใช้ต่ำเพื่อความแม่นยำ
+            temperature=CONTEXTUAL_TEMPERATURE,
         )
 
-    # เพิ่ม provider อื่นๆ ได้ที่นี่
+    if LLM_PROVIDER == "groq":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=LLM_MODEL_NAME,
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL,
+            temperature=CONTEXTUAL_TEMPERATURE,
+        )
+
+    if LLM_PROVIDER == "claude":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            model=LLM_MODEL_NAME,
+            api_key=ANTHROPIC_API_KEY,
+            temperature=CONTEXTUAL_TEMPERATURE,
+        )
+
     raise ValueError(f"LLM Provider not supported: {LLM_PROVIDER}")
 
 

@@ -3,10 +3,12 @@
 
 การโหลด config (priority สูง → ต่ำ):
   1. Environment variables (CLI / shell export)
-  2. core/.env            ← project-specific (LLM_PROVIDER, OLLAMA, paths)
-  3. Buddy Builder/.env   ← shared master config (embedding, RAG params)
+  2. core/.env            ← project-specific (LLM_MODEL, API keys, paths)
 
-แก้ค่าที่ใช้ร่วมกัน (embedding, RAG) ที่ Buddy Builder/.env เท่านั้น
+เลือก LLM ที่ใช้โดยตั้งค่าตัวแปรเดียว:
+  LLM_MODEL=ollama/qwen2.5:7b
+  LLM_MODEL=groq/llama-3.3-70b-versatile
+  LLM_MODEL=claude/claude-sonnet-4-20250514
 """
 import os
 from pathlib import Path
@@ -16,51 +18,48 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 # ==================== LLM Configuration ====================
-# ตั้งค่า LLM Provider และ Parameters ที่นี่เพียงจุดเดียว
-
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
-"""LLM Provider: ollama, claude, huggingface"""
+# แก้แค่บรรทัดเดียวใน .env: LLM_MODEL=provider/model-name
+_LLM_MODEL_RAW = os.getenv("LLM_MODEL", "ollama/qwen2.5:7b")
+LLM_PROVIDER, _, LLM_MODEL_NAME = _LLM_MODEL_RAW.partition("/")
+LLM_PROVIDER = LLM_PROVIDER.lower()
+"""Provider ที่ parse ได้อัตโนมัติ: ollama | groq | claude"""
 
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.3"))
-
+"""อุณหภูมิทั่วไป: 0.0 = ตอบตรง | 1.0 = สร้างสรรค์"""
 
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2000"))
 """จำนวน tokens สูงสุดในการตอบ"""
 
-# Temperature สำหรับงานเฉพาะ (override TEMPERATURE ถ้าต้องการ)
-CONTEXTUAL_TEMPERATURE = float(os.getenv("CONTEXTUAL_TEMPERATURE", "0.3"))
-"""Temperature สำหรับ Contextual Chunking (ต่ำ = แม่นยำกว่า)"""
+# Temperature สำหรับงานเฉพาะ
+CONTEXTUAL_TEMPERATURE = float(os.getenv("CONTEXTUAL_TEMPERATURE", "0.2"))
+"""Temperature สำหรับ Contextual Chunking (step2b) — ต่ำ = แม่นยำ"""
 
 QUESTION_GEN_TEMPERATURE = float(os.getenv("QUESTION_GEN_TEMPERATURE", "0.4"))
-"""Temperature สำหรับสร้างคำถาม (ปานกลาง = หลากหลายพอดี)"""
+"""Temperature สำหรับสร้างคำถาม (step2c) — ปานกลาง = หลากหลายพอดี"""
 
 # ==================== Relevance Filtering ====================
-# รับทั้ง RAG_RELEVANCE_THRESHOLD (shared) และ RELEVANCE_THRESHOLD (legacy)
 RELEVANCE_THRESHOLD = float(
     os.getenv("RAG_RELEVANCE_THRESHOLD") or os.getenv("RELEVANCE_THRESHOLD") or "0.35"
 )
 """L2 Distance Threshold สำหรับกรองคำถามนอก scope"""
 
 FUZZY_MATCH_THRESHOLD = int(os.getenv("FUZZY_MATCH_THRESHOLD", "3"))
-"""จำนวนตัวอักษรที่ต่างกันได้สำหรับ fuzzy matching (รองรับพิมพ์ผิด)
-- 1 = เข้มงวด (ผิดได้ 1 ตัวอักษร)
-- 2 = แนะนำ (ผิดได้ 2 ตัวอักษร)
-- 3 = ผ่อนปรน (ผิดได้ 3 ตัวอักษร)
+"""จำนวนตัวอักษรที่ต่างกันได้สำหรับ fuzzy matching
+- 1 = เข้มงวด | 2 = แนะนำ | 3 = ผ่อนปรน
 """
 
-# ==================== Ollama Configuration ====================
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
-"""Ollama model name (เช่น llama3.2:3b, qwen2.5:7b, typhoon:8b)"""
-
+# ==================== API Keys (ใส่เฉพาะ provider ที่ใช้) ====================
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-"""Ollama API base URL"""
+"""Ollama endpoint"""
 
-# ==================== Claude Configuration ====================
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+"""Groq API Key — https://console.groq.com/keys"""
+
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+"""Groq endpoint (OpenAI-compatible)"""
+
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-"""Anthropic API Key (สำหรับ Claude)"""
-
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
-"""Claude model name"""
+"""Anthropic API Key — https://console.anthropic.com"""
 
 # ==================== Embedding Configuration ====================
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
@@ -123,12 +122,15 @@ def print_config():
     print(f"Temperature:         {TEMPERATURE}")
     print(f"Max Tokens:          {MAX_TOKENS}")
 
+    print(f"LLM Model:           {_LLM_MODEL_RAW}")
+
     if LLM_PROVIDER == "ollama":
-        print(f"Ollama Model:        {OLLAMA_MODEL}")
         print(f"Ollama URL:          {OLLAMA_BASE_URL}")
     elif LLM_PROVIDER == "claude":
-        print(f"Claude Model:        {CLAUDE_MODEL}")
         print(f"API Key:             {'Set' if ANTHROPIC_API_KEY else 'Not Set'}")
+    elif LLM_PROVIDER == "groq":
+        print(f"Groq URL:            {GROQ_BASE_URL}")
+        print(f"API Key:             {'Set' if GROQ_API_KEY else 'Not Set'}")
 
     print(f"\nEmbedding Model:     {EMBEDDING_MODEL}")
     print(f"ChromaDB Path:       {CHROMA_DB_PATH}")
