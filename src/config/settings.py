@@ -34,10 +34,25 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # ==========================================================================
-    # LLM Provider — "openrouter" | "ollama"
+    # LLM Model — format: provider/model-name  (แก้แค่บรรทัดนี้ที่เดียว)
+    # ตัวอย่าง:
+    #   ollama/qwen2.5:7b
+    #   groq/llama-3.3-70b-versatile
+    #   groq/llama-3.1-8b-instant
+    #   openrouter/anthropic/claude-3.5-sonnet
     # ==========================================================================
-    LLM_PROVIDER: str = "openrouter"
-    """LLM backend สำหรับ RAG: openrouter (production) หรือ ollama (local)"""
+    LLM_MODEL: str = "openrouter/anthropic/claude-3.5-sonnet"
+    """LLM backend — parse provider จาก prefix ก่อน /"""
+
+    @property
+    def LLM_PROVIDER(self) -> str:
+        """Provider ที่ parse จาก LLM_MODEL (ollama | groq | openrouter | claude)"""
+        return self.LLM_MODEL.partition("/")[0].lower()
+
+    @property
+    def LLM_MODEL_NAME(self) -> str:
+        """Model name หลัง prefix provider/"""
+        return self.LLM_MODEL.partition("/")[2]
 
     # ==========================================================================
     # OpenRouter Configuration
@@ -46,16 +61,23 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # ==========================================================================
-    # Ollama Configuration (ใช้เมื่อ LLM_PROVIDER=ollama)
+    # Ollama Configuration (ใช้เมื่อ LLM_MODEL=ollama/...)
     # ==========================================================================
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL_RAG: str = "qwen2.5:7b"
-    """Ollama model สำหรับ RAG chat เท่านั้น (ไม่กระทบ Layout pipeline)"""
+    """legacy — ใช้เมื่อ LLM_PROVIDER=ollama (ค่าถูก override โดย LLM_MODEL)"""
 
     # ==========================================================================
-    # RAG LLM — ใช้เมื่อ LLM_PROVIDER=openrouter (fallback)
+    # Groq Configuration (ใช้เมื่อ LLM_MODEL=groq/...)
+    # ==========================================================================
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+
+    # ==========================================================================
+    # RAG LLM Temperature
     # ==========================================================================
     LLM_MODEL_RAG: str = "anthropic/claude-3.5-sonnet"
+    """legacy OpenRouter model (ใช้เมื่อ LLM_PROVIDER=openrouter)"""
     LLM_TEMPERATURE_RAG: float = 0.7
 
     # ==========================================================================

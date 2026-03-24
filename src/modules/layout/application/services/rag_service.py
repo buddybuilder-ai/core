@@ -395,12 +395,22 @@ class FengShuiRAGService:
 
         settings = get_settings()
 
-        if settings.LLM_PROVIDER == "ollama":
+        provider = settings.LLM_PROVIDER
+        model = settings.LLM_MODEL_NAME
+
+        if provider == "ollama":
             url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
             headers = {"Content-Type": "application/json"}
-            model = settings.OLLAMA_MODEL_RAG
             print(f"  [RAG] LLM: Ollama ({model})")
+        elif provider == "groq":
+            url = f"{settings.GROQ_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            print(f"  [RAG] LLM: Groq ({model})")
         else:
+            # openrouter หรือ provider อื่น
             url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
@@ -408,7 +418,6 @@ class FengShuiRAGService:
                 "HTTP-Referer": "https://buddybuilder.ai",
                 "X-Title": "BuddyBuilder AI",
             }
-            model = settings.LLM_MODEL_RAG
             print(f"  [RAG] LLM: OpenRouter ({model})")
 
         try:

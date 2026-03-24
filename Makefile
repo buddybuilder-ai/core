@@ -84,10 +84,10 @@ migrate-downgrade:
 # =============================================================================
 
 run:
-	uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+	.venv/bin/uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 run-prod:
-	uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+	.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 # =============================================================================
 # RAG / Vectorstore

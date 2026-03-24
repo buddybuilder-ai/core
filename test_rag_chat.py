@@ -186,7 +186,9 @@ async def main():
     print(f"  📏 Threshold: L2 ≤ {svc.RELEVANCE_THRESHOLD}  |  TOP_K={settings.RAG_TOP_K}  |  Fuzzy≤{svc.FUZZY_MATCH_THRESHOLD}  |  Temp={settings.LLM_TEMPERATURE_RAG}")
 
     # แสดง LLM ที่ใช้จริง + ตรวจสอบความพร้อม
-    if settings.LLM_PROVIDER == "ollama":
+    provider = settings.LLM_PROVIDER
+    model = settings.LLM_MODEL_NAME
+    if provider == "ollama":
         import httpx as _httpx
         try:
             r = _httpx.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3.0)
@@ -194,14 +196,27 @@ async def main():
         except Exception:
             ollama_ok = False
         if ollama_ok:
-            print(f"  ✅ LLM: Ollama ({settings.OLLAMA_MODEL_RAG}) — พร้อมใช้งาน")
+            print(f"  ✅ LLM: Ollama ({model}) — พร้อมใช้งาน")
         else:
-            print(f"  ⚠️  LLM: Ollama ({settings.OLLAMA_MODEL_RAG}) — ไม่ได้รัน! ให้รัน: ollama serve")
+            print(f"  ⚠️  LLM: Ollama ({model}) — ไม่ได้รัน! ให้รัน: ollama serve")
         has_api_key = ollama_ok
+    elif provider == "groq":
+        has_api_key = bool(settings.GROQ_API_KEY) and "xxxx" not in settings.GROQ_API_KEY
+        if has_api_key:
+            print(f"  ✅ LLM: Groq ({model}) — พร้อมใช้งาน")
+        else:
+            print(f"  ⚠️  LLM: Groq — ไม่มี GROQ_API_KEY, ถามจริงไม่ได้")
+    elif provider == "claude":
+        has_api_key = bool(getattr(settings, "ANTHROPIC_API_KEY", "")) and "xxxx" not in getattr(settings, "ANTHROPIC_API_KEY", "")
+        if has_api_key:
+            print(f"  ✅ LLM: Claude ({model}) — พร้อมใช้งาน")
+        else:
+            print(f"  ⚠️  LLM: Claude — ไม่มี ANTHROPIC_API_KEY, ถามจริงไม่ได้")
     else:
+        # openrouter หรือ provider อื่น
         has_api_key = bool(settings.OPENROUTER_API_KEY) and "xxxx" not in settings.OPENROUTER_API_KEY
         if has_api_key:
-            print(f"  ✅ LLM: OpenRouter ({settings.LLM_MODEL_RAG}) — พร้อมใช้งาน")
+            print(f"  ✅ LLM: OpenRouter ({model}) — พร้อมใช้งาน")
         else:
             print(f"  ⚠️  LLM: OpenRouter — ไม่มี OPENROUTER_API_KEY, ถามจริงไม่ได้")
 
