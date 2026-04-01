@@ -85,6 +85,8 @@ class SSEEventType(StrEnum):
     MODE_CHANGED = "mode_changed"
     # Clarification
     CLARIFICATION_NEEDED = "clarification_needed"
+    # Direct answer (question intent — no pipeline)
+    ANSWER = "answer"
 
 
 @dataclass

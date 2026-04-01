@@ -346,8 +346,8 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 request.conversation_history,
             )
             yield SSEEvent(
-                event_type=SSEEventType.PIPELINE_COMPLETED,
-                data={"intent": "question", "answer": answer},
+                event_type=SSEEventType.ANSWER,
+                data={"answer": answer},
             ).to_sse()
 
     return StreamingResponse(

@@ -76,8 +76,6 @@ class Settings(BaseSettings):
     # ==========================================================================
     # RAG LLM Temperature
     # ==========================================================================
-    LLM_MODEL_RAG: str = "anthropic/claude-3.5-sonnet"
-    """legacy OpenRouter model (ใช้เมื่อ LLM_PROVIDER=openrouter)"""
     LLM_TEMPERATURE_RAG: float = 0.7
 
     # ==========================================================================
