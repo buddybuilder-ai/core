@@ -34,7 +34,11 @@ def resolver() -> SpatialResolver:
 
 class TestSouthWallPlacement:
     def test_center_alignment_position(self, resolver: SpatialResolver, room: RoomSpec) -> None:
-        """Bed on south wall, centered: x should be (4 - 2) / 2 = 1.0, z should be gap."""
+        """Bed on south wall, centered: x=(4-2)/2=1.0, z bumped past door clearance (1.5+0.05).
+
+        Room has a south door at offset=1.5 with 1.5 m walking clearance, so the bed
+        overlaps the door zone at z=0.05 and is bumped out to z=1.55.
+        """
         bed = SemanticPlacement(
             furniture_id="bed_01",
             furniture_type="bed",
@@ -48,7 +52,7 @@ class TestSouthWallPlacement:
         p = results[0]
         assert p.furniture_id == "bed_01"
         assert p.x == pytest.approx(1.0)
-        assert p.z == pytest.approx(0.05)
+        assert p.z == pytest.approx(1.55)
         assert p.rotation == 180
         assert p.y == 0.0
 
