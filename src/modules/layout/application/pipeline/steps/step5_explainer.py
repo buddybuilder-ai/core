@@ -60,6 +60,12 @@ class ExplainerStep(BaseStep):
         logger.info(f"   kua_line = {summary['kua_line']!r}")
         try:
             llm_response = await self._llm_agent.explain_layout(
+                room_type=summary["room_type"],
+                width=summary["width"],
+                depth=summary["depth"],
+                items_summary=summary["items_summary"],
+                conflicts_summary=summary["conflicts_summary"],
+                repairs_summary=summary["repairs_summary"],
                 total_score=summary["total_score"],
                 grade=summary["grade"],
                 remaining_issues=summary["remaining_issues"],

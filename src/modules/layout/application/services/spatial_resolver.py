@@ -376,7 +376,7 @@ class SpatialResolver:
         # Build candidates: (x, z, rotation) for each side
         # Each candidate places the dependent with its front facing the anchor
         gap = rule.gap
-        candidates: list[tuple[float, float, int]] = []
+        candidates: list[tuple[float, float, int, float, float]] = []
 
         if rule.relation == "in_front":
             # Place dependent at each face of anchor, facing TOWARD the anchor.

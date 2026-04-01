@@ -531,6 +531,7 @@ class ModifierAgent:
             f"has_head={has_head} alignment_override={alignment_override!r}"
         )
 
+        result: tuple[str | None, str | None, str | None]
         if has_against and has_head:
             # "ชิดกำแพง X หันหัวไป X" — move to wall X + rotate headboard toward X.
             facing = cls._HEADBOARD_TO_FACING.get(direction, direction)
