@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from PIL import Image
-from ultralytics import YOLOWorld  # type: ignore
+from ultralytics import YOLOWorld
 
 # --- 1. CONFIGURATION & ARGUMENT HANDLING ---
 DEFAULT_HEIGHT = 2.5
