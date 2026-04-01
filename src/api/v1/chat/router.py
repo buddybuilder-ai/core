@@ -251,8 +251,6 @@ async def process_single_image(
 
     # 3. สั่งรัน AI Script (detect_objects_2.py)
     try:
-        # พาธของ Script: core/src/detect_objects_2.py
-        script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
 
         print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
 

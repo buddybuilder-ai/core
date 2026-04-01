@@ -105,7 +105,8 @@ def process_room_3d(img_path, output_json, user_h):
                 lim = STANDARD_LIMITS[label]
                 w_m = min(w_m, lim["max_w"])
                 h_m = min(h_m, lim["max_h"])
-                if elevation_m < 0.2 and lim["default_elevation"] == 0: elevation_m = 0.0
+                if elevation_m < 0.2 and lim["default_elevation"] == 0: 
+                    elevation_m = 0.0
 
             objects_3d.append({
                 "label": label,
