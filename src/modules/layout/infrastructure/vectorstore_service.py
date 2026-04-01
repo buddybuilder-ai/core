@@ -18,12 +18,13 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from langchain_community.vectorstores import Chroma
+    from langchain_core.embeddings import Embeddings
     from langchain_core.vectorstores import VectorStoreRetriever
 
 logger = logging.getLogger(__name__)
 
 
-def _get_embeddings(model_name: str) -> object:
+def _get_embeddings(model_name: str) -> "Embeddings":
     """Build a HuggingFaceEmbeddings instance, auto-selecting GPU/CPU.
 
     Args:

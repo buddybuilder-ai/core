@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     # ==========================================================================
     CHROMA_DB_PATH: str = "../feng-shui-rag/vectorstore/chroma_db"
     """Path to local ChromaDB persistence directory (feng-shui RAG vectorstore)."""
+    CHROMA_HOST: str = "localhost"
+    CHROMA_PORT: int = 8000
+    CHROMA_COLLECTION: str = "feng_shui_rag"
 
     # ==========================================================================
     # Embedding Model
