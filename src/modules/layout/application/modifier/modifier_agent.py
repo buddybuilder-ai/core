@@ -131,7 +131,8 @@ class ModifierAgent:
 
         # Non-target items: copy directly from current_layout without re-resolving
         enriched_others = [
-            item for item in current_layout
+            item
+            for item in current_layout
             if item.get("furniture_id", item.get("id", "")) in non_target_ids
         ]
 
@@ -160,9 +161,7 @@ class ModifierAgent:
             for c in collisions:
                 ids = c.get("furniture_ids", [])
                 # Only shift the target — never move bystanders
-                target_id = next(
-                    (fid for fid in ids if fid not in non_target_ids), None
-                )
+                target_id = next((fid for fid in ids if fid not in non_target_ids), None)
                 if not target_id:
                     continue
                 conflict = Conflict(
@@ -306,8 +305,8 @@ class ModifierAgent:
     _HEADBOARD_TO_FACING: dict[str, str] = {
         "north": "north",
         "south": "south",
-        "east": "west",   # headboard→E needs Y=270° which is _FACING_ROTATION["west"]
-        "west": "east",   # headboard→W needs Y=90°  which is _FACING_ROTATION["east"]
+        "east": "west",  # headboard→E needs Y=270° which is _FACING_ROTATION["west"]
+        "west": "east",  # headboard→W needs Y=90°  which is _FACING_ROTATION["east"]
     }
 
     # Direction keywords: keyword → compass direction name

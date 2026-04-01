@@ -310,6 +310,7 @@ class FengShuiLLMAgent:
         fid = old.get("furniture_id", "unknown_01")
         # Derive type from ID prefix: "bed-queen-123" → "bed", "sofa_bed_01" → "sofa_bed"
         import re
+
         _tokens = re.split(r"[-_\s]+", fid.lower())
         # Handle compound types like "sofa-bed", "tv-stand", "coffee-table"
         _COMPOUND_PREFIXES = {
@@ -783,8 +784,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
             f"(excluded: door walls={sorted(door_walls)} — back-to-door violates command position)"
         )
         lines.append(
-            f"- SOFA valid walls: {sofa_valid} "
-            f"(excluded: door walls={sorted(door_walls)})"
+            f"- SOFA valid walls: {sofa_valid} (excluded: door walls={sorted(door_walls)})"
         )
         lines.append(
             "- IMPORTANT: You MUST choose target_wall from the valid list above for each furniture type. "

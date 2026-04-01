@@ -135,25 +135,25 @@ _DOOR_ADJACENT_GAP = 0.1
 # Value = "inward" means: use opposite of target_wall as facing.
 _FORCE_INWARD_TYPES: frozenset[str] = frozenset(
     {
-        "bed",              # headboard against wall, occupant faces into room
+        "bed",  # headboard against wall, occupant faces into room
         "chair",
         "office_chair",
         "armchair",
         "dining_chair",
-        "dining_table",     # seats accessible from room side
+        "dining_table",  # seats accessible from room side
         "desk",
         "folding_desk",
         "sofa",
         "sofa_bed",
-        "tv_stand",         # screen must face into room
-        "wardrobe",         # door must open into room
+        "tv_stand",  # screen must face into room
+        "wardrobe",  # door must open into room
         "compact_wardrobe",
-        "bookshelf",        # books must be accessible
-        "nightstand",       # drawers face outward
+        "bookshelf",  # books must be accessible
+        "nightstand",  # drawers face outward
         "dresser",
         "shoe_cabinet",
         "kitchen_counter",  # work surface faces into room
-        "mini_fridge",      # door must open into room
+        "mini_fridge",  # door must open into room
     }
 )
 
@@ -174,17 +174,19 @@ _FACING_ROTATION: dict[str, int] = {
 # during the resolve loop itself (not as a post-process).
 # ---------------------------------------------------------------------------
 
+
 @_pair_dc(frozen=True)
 class _PairRule:
-    anchor_type: str    # e.g. "dining_table"
-    relation: str       # "in_front"
-    gap: float          # gap between anchor and dependent (m)
+    anchor_type: str  # e.g. "dining_table"
+    relation: str  # "in_front"
+    gap: float  # gap between anchor and dependent (m)
+
 
 _PAIR_RULES: dict[str, _PairRule] = {
-    "chair":        _PairRule(anchor_type="desk",          relation="in_front", gap=0.05),
-    "office_chair": _PairRule(anchor_type="desk",          relation="in_front", gap=0.05),
-    "dining_chair": _PairRule(anchor_type="dining_table",  relation="in_front", gap=0.05),
-    "coffee_table": _PairRule(anchor_type="sofa",          relation="in_front", gap=0.10),
+    "chair": _PairRule(anchor_type="desk", relation="in_front", gap=0.05),
+    "office_chair": _PairRule(anchor_type="desk", relation="in_front", gap=0.05),
+    "dining_chair": _PairRule(anchor_type="dining_table", relation="in_front", gap=0.05),
+    "coffee_table": _PairRule(anchor_type="sofa", relation="in_front", gap=0.10),
 }
 
 # Minimum gap between any two furniture pieces
@@ -209,39 +211,60 @@ class SpatialResolver:
         """
         zones: list[AABB] = []
         c = self._DOOR_CLEARANCE
-        _MIN_GAP = 0.0   # door opening starts at the wall itself
+        _MIN_GAP = 0.0  # door opening starts at the wall itself
         _CLEAR_GAP = 0.15  # walking clearance starts 15cm inside
         _SIDE_PAD = 0.5
         for door in room.doors:
             wall = str(getattr(door, "wall", "")).lower()
             offset = float(getattr(door, "offset", getattr(door, "offset_from_corner", 0.0)))
             door_w = float(getattr(door, "width", 0.9))
-            logger.info(f"_door_zones: door wall={wall} offset={offset:.3f}m width={door_w:.3f}m clearance={c}m")
+            logger.info(
+                f"_door_zones: door wall={wall} offset={offset:.3f}m width={door_w:.3f}m clearance={c}m"
+            )
             if wall == "south":
                 # Zone 1: door opening along south wall (x: door span, z: 0 → wall thickness ~0.15m)
-                zones.append(AABB(min_x=offset, max_x=offset + door_w, min_z=_MIN_GAP, max_z=_CLEAR_GAP))
+                zones.append(
+                    AABB(min_x=offset, max_x=offset + door_w, min_z=_MIN_GAP, max_z=_CLEAR_GAP)
+                )
                 # Zone 2: walking clearance in front of door
                 x0 = max(0.0, offset - _SIDE_PAD)
                 x1 = min(room.width, offset + door_w + _SIDE_PAD)
                 zones.append(AABB(min_x=x0, max_x=x1, min_z=_CLEAR_GAP, max_z=c))
             elif wall == "north":
-                zones.append(AABB(min_x=offset, max_x=offset + door_w,
-                                  min_z=room.depth - _CLEAR_GAP, max_z=room.depth))
+                zones.append(
+                    AABB(
+                        min_x=offset,
+                        max_x=offset + door_w,
+                        min_z=room.depth - _CLEAR_GAP,
+                        max_z=room.depth,
+                    )
+                )
                 x0 = max(0.0, offset - _SIDE_PAD)
                 x1 = min(room.width, offset + door_w + _SIDE_PAD)
-                zones.append(AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _CLEAR_GAP))
+                zones.append(
+                    AABB(min_x=x0, max_x=x1, min_z=room.depth - c, max_z=room.depth - _CLEAR_GAP)
+                )
             elif wall == "west":
-                zones.append(AABB(min_x=_MIN_GAP, max_x=_CLEAR_GAP,
-                                  min_z=offset, max_z=offset + door_w))
+                zones.append(
+                    AABB(min_x=_MIN_GAP, max_x=_CLEAR_GAP, min_z=offset, max_z=offset + door_w)
+                )
                 z0 = max(0.0, offset - _SIDE_PAD)
                 z1 = min(room.depth, offset + door_w + _SIDE_PAD)
                 zones.append(AABB(min_x=_CLEAR_GAP, max_x=c, min_z=z0, max_z=z1))
             elif wall == "east":
-                zones.append(AABB(min_x=room.width - _CLEAR_GAP, max_x=room.width,
-                                  min_z=offset, max_z=offset + door_w))
+                zones.append(
+                    AABB(
+                        min_x=room.width - _CLEAR_GAP,
+                        max_x=room.width,
+                        min_z=offset,
+                        max_z=offset + door_w,
+                    )
+                )
                 z0 = max(0.0, offset - _SIDE_PAD)
                 z1 = min(room.depth, offset + door_w + _SIDE_PAD)
-                zones.append(AABB(min_x=room.width - c, max_x=room.width - _CLEAR_GAP, min_z=z0, max_z=z1))
+                zones.append(
+                    AABB(min_x=room.width - c, max_x=room.width - _CLEAR_GAP, min_z=z0, max_z=z1)
+                )
         return zones
 
     def resolve(
@@ -299,7 +322,12 @@ class SpatialResolver:
             if rule and rule.anchor_type in anchor_phys:
                 # --- Pair-aware placement: place next to anchor directly ---
                 result = self._place_beside_anchor(
-                    p, anchor_phys[rule.anchor_type], rule, placed, room, door_zones,
+                    p,
+                    anchor_phys[rule.anchor_type],
+                    rule,
+                    placed,
+                    room,
+                    door_zones,
                 )
             else:
                 # --- Normal placement ---
@@ -447,9 +475,7 @@ class SpatialResolver:
 
         # Which walls have a door? Used to decide if a wall-hugging item
         # should still respect door clearance zones.
-        door_walls: set[str] = {
-            str(getattr(door, "wall", "")).lower() for door in room.doors
-        }
+        door_walls: set[str] = {str(getattr(door, "wall", "")).lower() for door in room.doors}
 
         # Door-adjacent items (shoe_cabinet, coat_rack) are intentionally placed
         # beside the door by _door_adjacent_x — exempt them from walking clearance
@@ -466,8 +492,10 @@ class SpatialResolver:
             box = AABB.from_position_and_size(x, z, w, d)
             # Expand check box by _GAP to enforce minimum spacing between items
             box_padded = AABB(
-                min_x=box.min_x - _GAP, max_x=box.max_x + _GAP,
-                min_z=box.min_z - _GAP, max_z=box.max_z + _GAP,
+                min_x=box.min_x - _GAP,
+                max_x=box.max_x + _GAP,
+                min_z=box.min_z - _GAP,
+                max_z=box.max_z + _GAP,
             )
             if any(box_padded.intersects(p.bbox) for p in placed):
                 return True
@@ -563,7 +591,9 @@ class SpatialResolver:
                             rotation=item.rotation,
                             bbox=new_bbox,
                         )
-            logger.warning(f"_bump_out door_adjacent: {item.furniture_id} cannot slide — placed as-is")
+            logger.warning(
+                f"_bump_out door_adjacent: {item.furniture_id} cannot slide — placed as-is"
+            )
             return item  # cannot move — place as-is beside door
 
         # For wall-hugging items: slide ALONG the wall first, then push inward.
@@ -850,7 +880,11 @@ class SpatialResolver:
         if alignment.lower() == "left":
             x = left_x if left_fits else (right_x if right_fits else max(0.0, left_x))
         else:
-            x = right_x if right_fits else (left_x if left_fits else min(axis_length - item_size, right_x))
+            x = (
+                right_x
+                if right_fits
+                else (left_x if left_fits else min(axis_length - item_size, right_x))
+            )
 
         logger.info(
             f"_door_adjacent_x: {alignment} of door(offset={door_offset}, w={door_width}) "

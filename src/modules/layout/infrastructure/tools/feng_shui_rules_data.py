@@ -487,7 +487,16 @@ FENG_SHUI_RULES: list[FengShuiRule] = [
         room_types=("bedroom",),
         furniture_types=("bed", "tv_stand", "monitor"),
         priority=80,
-        keywords=("bed", "screen", "monitor", "tv", "headboard", "electromagnetic", "yang", "sleep"),
+        keywords=(
+            "bed",
+            "screen",
+            "monitor",
+            "tv",
+            "headboard",
+            "electromagnetic",
+            "yang",
+            "sleep",
+        ),
     ),
     FengShuiRule(
         id="bed_010",

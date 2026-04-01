@@ -169,7 +169,9 @@ class ExplainerStep(BaseStep):
             try:
                 kua = calculate_kua(int(birth_year), gender)
                 info = kua_best_direction_info(kua)
-                kua_line = f"หัวเตียงหันทิศ{info['wall_th']}ตามเลขกัว {kua} เสริม{info['benefit']}ให้คุณโดยตรง"
+                kua_line = (
+                    f"หัวเตียงหันทิศ{info['wall_th']}ตามเลขกัว {kua} เสริม{info['benefit']}ให้คุณโดยตรง"
+                )
             except Exception:
                 pass
 
@@ -286,9 +288,7 @@ class ExplainerStep(BaseStep):
         """Quick geometric overlap count on final layout items."""
         boxes: list[AABB] = []
         for item in items:
-            fw, fd = self._footprint(
-                item.get("dimensions", {}), item.get("rotation", 0)
-            )
+            fw, fd = self._footprint(item.get("dimensions", {}), item.get("rotation", 0))
             boxes.append(
                 AABB.from_center_and_size(
                     item.get("pos_x", 0.0),

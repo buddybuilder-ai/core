@@ -188,26 +188,34 @@ class WallAssigner:
                 if w in bed_valid_kua_override:
                     bed_wall = w
                     if w in bed_soft_invalid:
-                        logger.info(f"WallAssigner: bed wall set by Kua → {w} (overrides window rule)")
+                        logger.info(
+                            f"WallAssigner: bed wall set by Kua → {w} (overrides window rule)"
+                        )
                     else:
                         logger.info(f"WallAssigner: bed wall set by Kua → {w}")
                     break
             else:
                 # All Kua walls unavailable — fall back to command wall
-                bed_wall = command_wall if command_wall in bed_valid_strict else (
-                    next(iter(bed_valid_strict)) if bed_valid_strict else command_wall
+                bed_wall = (
+                    command_wall
+                    if command_wall in bed_valid_strict
+                    else (next(iter(bed_valid_strict)) if bed_valid_strict else command_wall)
                 )
         else:
             # No Kua data — prefer no-door, no-window wall; command wall is best
-            bed_wall = command_wall if command_wall in bed_valid_strict else (
-                next(iter(bed_valid_strict)) if bed_valid_strict else command_wall
+            bed_wall = (
+                command_wall
+                if command_wall in bed_valid_strict
+                else (next(iter(bed_valid_strict)) if bed_valid_strict else command_wall)
             )
 
         # Sort by priority
         items = sorted(furniture_items, key=lambda x: x.get("priority", 99))
 
         # Pre-categorize
-        assignments: dict[str, dict[str, Any]] = {}  # furniture_id → {wall, alignment, offset, facing}
+        assignments: dict[
+            str, dict[str, Any]
+        ] = {}  # furniture_id → {wall, alignment, offset, facing}
 
         bed_assigned_wall: str | None = None
         sofa_assigned_wall: str | None = None
@@ -224,8 +232,7 @@ class WallAssigner:
                 # If bed shares a wall with a door, slide it away from the door
                 bed_align = "center"
                 doors_on_wall = [
-                    d for d in room_spec.get("doors", [])
-                    if str(d.get("wall", "")).lower() == wall
+                    d for d in room_spec.get("doors", []) if str(d.get("wall", "")).lower() == wall
                 ]
                 if doors_on_wall:
                     door = doors_on_wall[0]
@@ -252,8 +259,7 @@ class WallAssigner:
             elif ft in _SOFA_BED_TYPES:
                 # If no real bed, sofa_bed gets command position
                 if not any(
-                    _normalize_type(i.get("furniture_type", "")) in _REAL_BED_TYPES
-                    for i in items
+                    _normalize_type(i.get("furniture_type", "")) in _REAL_BED_TYPES for i in items
                 ):
                     wall = bed_wall
                     bed_assigned_wall = wall
@@ -262,8 +268,10 @@ class WallAssigner:
                     wall = self._pick_wall(
                         exclude=door_walls | {bed_wall} if bed_wall else door_walls,
                         prefer_side=True,
-                        room_w=room_w, room_d=room_d,
-                        wall_usage=wall_usage, item_width=fw,
+                        room_w=room_w,
+                        room_d=room_d,
+                        wall_usage=wall_usage,
+                        item_width=fw,
                     )
                 assignments[fid] = {
                     "target_wall": wall,
@@ -289,13 +297,17 @@ class WallAssigner:
                 wall = bed_assigned_wall
                 # Put nightstand beside bed: first one left, second one right
                 existing_ns = sum(
-                    1 for a in assignments.values()
+                    1
+                    for a in assignments.values()
                     if a["target_wall"] == wall
                     and any(
                         _normalize_type(i.get("furniture_type", "")) in _NIGHTSTAND_TYPES
                         for i in items
-                        if (i.get("furniture_id", i.get("id", "")) in assignments
-                            and assignments[i.get("furniture_id", i.get("id", ""))]["target_wall"] == wall)
+                        if (
+                            i.get("furniture_id", i.get("id", "")) in assignments
+                            and assignments[i.get("furniture_id", i.get("id", ""))]["target_wall"]
+                            == wall
+                        )
                     )
                 )
                 align = "left" if existing_ns == 0 else "right"
@@ -331,8 +343,11 @@ class WallAssigner:
                 wall_len = _wall_length(wall, room_w, room_d)
                 # Find primary door info to check available space on each side
                 primary_door = next(
-                    (d for d in room_spec.get("doors", [])
-                     if str(d.get("wall", "")).lower() == wall),
+                    (
+                        d
+                        for d in room_spec.get("doors", [])
+                        if str(d.get("wall", "")).lower() == wall
+                    ),
                     None,
                 )
                 _GAP = 0.15
@@ -343,8 +358,9 @@ class WallAssigner:
                     right_space = wall_len - (door_off + door_w + _GAP)
                     # Determine which side has been used already
                     existing_door_items = [
-                        a for a in assignments.values() if a["target_wall"] == wall
-                        and a.get("_door_side")
+                        a
+                        for a in assignments.values()
+                        if a["target_wall"] == wall and a.get("_door_side")
                     ]
                     used_left = any(a.get("_door_side") == "left" for a in existing_door_items)
                     used_right = any(a.get("_door_side") == "right" for a in existing_door_items)
@@ -358,9 +374,7 @@ class WallAssigner:
                     else:
                         align = "right"
                 else:
-                    existing_door = sum(
-                        1 for a in assignments.values() if a["target_wall"] == wall
-                    )
+                    existing_door = sum(1 for a in assignments.values() if a["target_wall"] == wall)
                     align = "left" if existing_door == 0 else "right"
                 assignments[fid] = {
                     "target_wall": wall,
@@ -380,9 +394,12 @@ class WallAssigner:
                 if sofa_assigned_wall:
                     exclude.add(sofa_assigned_wall)
                 wall = self._pick_wall(
-                    exclude=exclude, prefer_side=True,
-                    room_w=room_w, room_d=room_d,
-                    wall_usage=wall_usage, item_width=fw,
+                    exclude=exclude,
+                    prefer_side=True,
+                    room_w=room_w,
+                    room_d=room_d,
+                    wall_usage=wall_usage,
+                    item_width=fw,
                 )
                 sofa_assigned_wall = wall
                 assignments[fid] = {
@@ -400,9 +417,12 @@ class WallAssigner:
                 if bed_assigned_wall:
                     exclude.add(bed_assigned_wall)
                 wall = self._pick_wall(
-                    exclude=exclude, prefer_side=True,
-                    room_w=room_w, room_d=room_d,
-                    wall_usage=wall_usage, item_width=fw,
+                    exclude=exclude,
+                    prefer_side=True,
+                    room_w=room_w,
+                    room_d=room_d,
+                    wall_usage=wall_usage,
+                    item_width=fw,
                 )
                 assignments[fid] = {
                     "target_wall": wall,
@@ -411,14 +431,18 @@ class WallAssigner:
                     "facing": primary_door_wall,  # desk faces door
                 }
                 wall_usage[wall] += fw
-                logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (faces {primary_door_wall} door)")
+                logger.info(
+                    f"WallAssigner: {fid} ({ft}) → {wall} wall (faces {primary_door_wall} door)"
+                )
                 continue
 
             if ft in _TV_TYPES:
                 # TV goes opposite sofa (viewing direction); fallback to opposite bed
                 ref_wall = sofa_assigned_wall or bed_assigned_wall
                 # All walls already occupied by furniture — TV must not share these
-                occupied_walls = {a["target_wall"] for a in assignments.values() if a["target_wall"] != "center"}
+                occupied_walls = {
+                    a["target_wall"] for a in assignments.values() if a["target_wall"] != "center"
+                }
                 occupied = door_walls | occupied_walls
                 if ref_wall:
                     wall = _OPPOSITE_WALL.get(ref_wall, "north")
@@ -426,19 +450,26 @@ class WallAssigner:
                         wall = self._pick_wall(
                             exclude=occupied | ({ref_wall} if ref_wall else set()),
                             prefer_side=False,
-                            room_w=room_w, room_d=room_d,
-                            wall_usage=wall_usage, item_width=fw,
+                            room_w=room_w,
+                            room_d=room_d,
+                            wall_usage=wall_usage,
+                            item_width=fw,
                         )
                 else:
                     wall = self._pick_wall(
                         exclude=occupied,
                         prefer_side=False,
-                        room_w=room_w, room_d=room_d,
-                        wall_usage=wall_usage, item_width=fw,
+                        room_w=room_w,
+                        room_d=room_d,
+                        wall_usage=wall_usage,
+                        item_width=fw,
                     )
                 tv_align = (
-                    self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
-                    if wall in door_walls else "center"
+                    self._safe_alignment_for_door_wall(
+                        wall, fw, room_w, room_d, room_spec.get("doors", [])
+                    )
+                    if wall in door_walls
+                    else "center"
                 )
                 assignments[fid] = {
                     "target_wall": wall,
@@ -455,12 +486,17 @@ class WallAssigner:
                 if bed_assigned_wall:
                     exclude.add(bed_assigned_wall)
                 wall = self._pick_wall(
-                    exclude=exclude, prefer_side=False,
-                    room_w=room_w, room_d=room_d,
-                    wall_usage=wall_usage, item_width=fw,
+                    exclude=exclude,
+                    prefer_side=False,
+                    room_w=room_w,
+                    room_d=room_d,
+                    wall_usage=wall_usage,
+                    item_width=fw,
                 )
                 align = (
-                    self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
+                    self._safe_alignment_for_door_wall(
+                        wall, fw, room_w, room_d, room_spec.get("doors", [])
+                    )
                     if wall in door_walls
                     else self._pick_alignment(wall, wall_usage, fw, room_w, room_d)
                 )
@@ -477,12 +513,17 @@ class WallAssigner:
             # Default: small/misc items
             exclude = door_walls.copy()
             wall = self._pick_wall(
-                exclude=exclude, prefer_side=False,
-                room_w=room_w, room_d=room_d,
-                wall_usage=wall_usage, item_width=fw,
+                exclude=exclude,
+                prefer_side=False,
+                room_w=room_w,
+                room_d=room_d,
+                wall_usage=wall_usage,
+                item_width=fw,
             )
             align = (
-                self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
+                self._safe_alignment_for_door_wall(
+                    wall, fw, room_w, room_d, room_spec.get("doors", [])
+                )
                 if wall in door_walls
                 else self._pick_alignment(wall, wall_usage, fw, room_w, room_d)
             )

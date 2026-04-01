@@ -136,14 +136,22 @@ class LayoutResolver:
                 fid_lower = fid.lower()
                 current_ftype = raw.get("furniture_type", "")
                 import re as _re
+
                 _COMPOUND = {
-                    ("sofa", "bed"): "sofa_bed", ("tv", "stand"): "tv_stand",
-                    ("coffee", "table"): "coffee_table", ("office", "chair"): "office_chair",
-                    ("dining", "chair"): "dining_chair", ("dining", "table"): "dining_table",
-                    ("shoe", "cabinet"): "shoe_cabinet", ("coat", "rack"): "coat_rack",
-                    ("room", "divider"): "room_divider", ("compact", "wardrobe"): "compact_wardrobe",
-                    ("folding", "desk"): "folding_desk", ("area", "rug"): "area_rug",
-                    ("floor", "lamp"): "floor_lamp", ("mini", "fridge"): "mini_fridge",
+                    ("sofa", "bed"): "sofa_bed",
+                    ("tv", "stand"): "tv_stand",
+                    ("coffee", "table"): "coffee_table",
+                    ("office", "chair"): "office_chair",
+                    ("dining", "chair"): "dining_chair",
+                    ("dining", "table"): "dining_table",
+                    ("shoe", "cabinet"): "shoe_cabinet",
+                    ("coat", "rack"): "coat_rack",
+                    ("room", "divider"): "room_divider",
+                    ("compact", "wardrobe"): "compact_wardrobe",
+                    ("folding", "desk"): "folding_desk",
+                    ("area", "rug"): "area_rug",
+                    ("floor", "lamp"): "floor_lamp",
+                    ("mini", "fridge"): "mini_fridge",
                 }
                 _COMPOUND_PREFIXES = {k[0] for k in _COMPOUND}
                 # Always try compound type from ID tokens first
@@ -152,9 +160,13 @@ class LayoutResolver:
                     _derived_compound = None
                     if len(_id_tokens) >= 2 and (_id_tokens[0], _id_tokens[1]) in _COMPOUND:
                         _derived_compound = _COMPOUND[(_id_tokens[0], _id_tokens[1])]
-                    if _derived_compound and _derived_compound != current_ftype.lower().replace("-", "_"):
+                    if _derived_compound and _derived_compound != current_ftype.lower().replace(
+                        "-", "_"
+                    ):
                         raw = {**raw, "furniture_type": _derived_compound}
-                        logger.info(f"LayoutResolver: derived furniture_type={_derived_compound!r} from id={fid!r} (was {current_ftype!r})")
+                        logger.info(
+                            f"LayoutResolver: derived furniture_type={_derived_compound!r} from id={fid!r} (was {current_ftype!r})"
+                        )
                         current_ftype = _derived_compound
                 # Detect bad type: empty, contains digits, equals full ID,
                 # or is a single-token prefix of a known compound type
@@ -172,13 +184,17 @@ class LayoutResolver:
                         derived = _COMPOUND[(_id_tokens[0], _id_tokens[1])]
                     if derived:
                         raw = {**raw, "furniture_type": derived}
-                        logger.info(f"LayoutResolver: derived furniture_type={derived!r} from id={fid!r} (was {current_ftype!r})")
+                        logger.info(
+                            f"LayoutResolver: derived furniture_type={derived!r} from id={fid!r} (was {current_ftype!r})"
+                        )
                 # ID-based type correction: sofa-bed IDs must be typed as sofa-bed, not bed
                 if "sofa-bed" in fid_lower or "sofa_bed" in fid_lower:
                     current_type = raw.get("furniture_type", "")
                     if current_type.lower().replace("-", "_").replace(" ", "_") not in {"sofa_bed"}:
                         raw = {**raw, "furniture_type": "sofa-bed"}
-                        logger.info(f"LayoutResolver: corrected furniture_type to 'sofa-bed' for id={fid!r} (was {current_type!r})")
+                        logger.info(
+                            f"LayoutResolver: corrected furniture_type to 'sofa-bed' for id={fid!r} (was {current_type!r})"
+                        )
                 # Fill defaults for fields that may be missing
                 raw.setdefault("target_wall", "center")
                 raw.setdefault("alignment", "center")

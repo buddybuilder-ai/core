@@ -16,25 +16,97 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 
 _KUA_DIRECTIONS: dict[int, dict[str, str]] = {
-    1: {"sheng_chi": "SE", "tien_yi": "E",  "nien_yen": "S",  "fu_wei": "N",  "ho_hai": "W",  "wu_kwei": "NE", "liu_sha": "NW", "chueh_ming": "SW"},
-    2: {"sheng_chi": "NE", "tien_yi": "W",  "nien_yen": "NW", "fu_wei": "SW", "ho_hai": "E",  "wu_kwei": "SE", "liu_sha": "S",  "chueh_ming": "N"},
-    3: {"sheng_chi": "S",  "tien_yi": "N",  "nien_yen": "SE", "fu_wei": "E",  "ho_hai": "SW", "wu_kwei": "NW", "liu_sha": "NE", "chueh_ming": "W"},
-    4: {"sheng_chi": "N",  "tien_yi": "S",  "nien_yen": "E",  "fu_wei": "SE", "ho_hai": "NW", "wu_kwei": "SW", "liu_sha": "W",  "chueh_ming": "NE"},
-    6: {"sheng_chi": "W",  "tien_yi": "NE", "nien_yen": "SW", "fu_wei": "NW", "ho_hai": "SE", "wu_kwei": "E",  "liu_sha": "N",  "chueh_ming": "S"},
-    7: {"sheng_chi": "NW", "tien_yi": "SW", "nien_yen": "NE", "fu_wei": "W",  "ho_hai": "S",  "wu_kwei": "N",  "liu_sha": "SE", "chueh_ming": "E"},
-    8: {"sheng_chi": "SW", "tien_yi": "NW", "nien_yen": "W",  "fu_wei": "NE", "ho_hai": "N",  "wu_kwei": "S",  "liu_sha": "E",  "chueh_ming": "SE"},
-    9: {"sheng_chi": "E",  "tien_yi": "SE", "nien_yen": "N",  "fu_wei": "S",  "ho_hai": "NE", "wu_kwei": "W",  "liu_sha": "SW", "chueh_ming": "NW"},
+    1: {
+        "sheng_chi": "SE",
+        "tien_yi": "E",
+        "nien_yen": "S",
+        "fu_wei": "N",
+        "ho_hai": "W",
+        "wu_kwei": "NE",
+        "liu_sha": "NW",
+        "chueh_ming": "SW",
+    },
+    2: {
+        "sheng_chi": "NE",
+        "tien_yi": "W",
+        "nien_yen": "NW",
+        "fu_wei": "SW",
+        "ho_hai": "E",
+        "wu_kwei": "SE",
+        "liu_sha": "S",
+        "chueh_ming": "N",
+    },
+    3: {
+        "sheng_chi": "S",
+        "tien_yi": "N",
+        "nien_yen": "SE",
+        "fu_wei": "E",
+        "ho_hai": "SW",
+        "wu_kwei": "NW",
+        "liu_sha": "NE",
+        "chueh_ming": "W",
+    },
+    4: {
+        "sheng_chi": "N",
+        "tien_yi": "S",
+        "nien_yen": "E",
+        "fu_wei": "SE",
+        "ho_hai": "NW",
+        "wu_kwei": "SW",
+        "liu_sha": "W",
+        "chueh_ming": "NE",
+    },
+    6: {
+        "sheng_chi": "W",
+        "tien_yi": "NE",
+        "nien_yen": "SW",
+        "fu_wei": "NW",
+        "ho_hai": "SE",
+        "wu_kwei": "E",
+        "liu_sha": "N",
+        "chueh_ming": "S",
+    },
+    7: {
+        "sheng_chi": "NW",
+        "tien_yi": "SW",
+        "nien_yen": "NE",
+        "fu_wei": "W",
+        "ho_hai": "S",
+        "wu_kwei": "N",
+        "liu_sha": "SE",
+        "chueh_ming": "E",
+    },
+    8: {
+        "sheng_chi": "SW",
+        "tien_yi": "NW",
+        "nien_yen": "W",
+        "fu_wei": "NE",
+        "ho_hai": "N",
+        "wu_kwei": "S",
+        "liu_sha": "E",
+        "chueh_ming": "SE",
+    },
+    9: {
+        "sheng_chi": "E",
+        "tien_yi": "SE",
+        "nien_yen": "N",
+        "fu_wei": "S",
+        "ho_hai": "NE",
+        "wu_kwei": "W",
+        "liu_sha": "SW",
+        "chueh_ming": "NW",
+    },
 }
 
 # Map compass direction → cardinal wall (nearest)
 _DIR_TO_WALL: dict[str, str] = {
-    "N":  "north",
+    "N": "north",
     "NE": "north",  # diagonal → north or east; prefer north (headboard)
-    "E":  "east",
-    "SE": "east",   # diagonal → east or south; prefer east
-    "S":  "south",
+    "E": "east",
+    "SE": "east",  # diagonal → east or south; prefer east
+    "S": "south",
     "SW": "south",  # diagonal → south or west; prefer west (bed command)
-    "W":  "west",
+    "W": "west",
     "NW": "north",  # diagonal → north or west; prefer north
 }
 
@@ -44,18 +116,43 @@ _AUSPICIOUS_ORDER = ["sheng_chi", "tien_yi", "nien_yen", "fu_wei"]
 # Keywords that map user intent → kua direction key
 _INTENT_KEYWORDS: dict[str, list[str]] = {
     "tien_yi": [
-        "สุขภาพ", "health", "โรค", "ป่วย", "แข็งแรง", "ฟื้นตัว", "หาย",
+        "สุขภาพ",
+        "health",
+        "โรค",
+        "ป่วย",
+        "แข็งแรง",
+        "ฟื้นตัว",
+        "หาย",
     ],
     "nien_yen": [
-        "ความรัก", "love", "ความสัมพันธ์", "คู่รัก", "ครอบครัว", "แต่งงาน",
-        "relationship", "romance",
+        "ความรัก",
+        "love",
+        "ความสัมพันธ์",
+        "คู่รัก",
+        "ครอบครัว",
+        "แต่งงาน",
+        "relationship",
+        "romance",
     ],
     "fu_wei": [
-        "ความสงบ", "สมาธิ", "peace", "calm", "จิตใจ", "mental", "สงบ",
+        "ความสงบ",
+        "สมาธิ",
+        "peace",
+        "calm",
+        "จิตใจ",
+        "mental",
+        "สงบ",
     ],
     "sheng_chi": [
-        "โชค", "เงิน", "ความสำเร็จ", "การงาน", "luck", "wealth", "career",
-        "success", "money",
+        "โชค",
+        "เงิน",
+        "ความสำเร็จ",
+        "การงาน",
+        "luck",
+        "wealth",
+        "career",
+        "success",
+        "money",
     ],
 }
 
@@ -71,6 +168,7 @@ def detect_kua_priority(message: str) -> str:
         if any(kw in msg for kw in keywords):
             return direction_key
     return "sheng_chi"
+
 
 # Thai names and benefits for each auspicious direction
 _DIRECTION_INFO: dict[str, dict[str, str]] = {

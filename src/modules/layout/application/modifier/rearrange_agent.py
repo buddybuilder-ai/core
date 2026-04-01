@@ -116,7 +116,9 @@ class RearrangeAgent:
         room_w = float(room_spec.get("width") or dims.get("width") or 4.0)
         room_d = float(room_spec.get("depth") or dims.get("depth") or 4.0)
         room_type = room_spec.get("room_type", "bedroom")
-        logger.info(f"RearrangeAgent: room_spec keys={list(room_spec.keys())} room_w={room_w} room_d={room_d}")
+        logger.info(
+            f"RearrangeAgent: room_spec keys={list(room_spec.keys())} room_w={room_w} room_d={room_d}"
+        )
 
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,
@@ -294,10 +296,13 @@ class RearrangeAgent:
         )
 
         # --- 5. Enrich with metadata from current_layout ---
-        logger.info("RearrangeAgent: physical before enrich: " + ", ".join(
-            f"{p.get('furniture_id','?')}=({p.get('pos_x','?')},{p.get('pos_z','?')})"
-            for p in physical
-        ))
+        logger.info(
+            "RearrangeAgent: physical before enrich: "
+            + ", ".join(
+                f"{p.get('furniture_id', '?')}=({p.get('pos_x', '?')},{p.get('pos_z', '?')})"
+                for p in physical
+            )
+        )
         enriched = self._enrich_from_current(physical, current_layout)
 
         # Filter to only IDs that were in the original layout (LLM may hallucinate extras)
@@ -313,7 +318,11 @@ class RearrangeAgent:
                 logger.warning(
                     f"RearrangeAgent: LLM dropped {fid!r} — attempting to place collision-free"
                 )
-                ftype = original.get("furniture_type", original.get("category", "")).lower().replace("-", "_")
+                ftype = (
+                    original.get("furniture_type", original.get("category", ""))
+                    .lower()
+                    .replace("-", "_")
+                )
 
                 # For paired items (chair beside desk, etc.) re-run resolver so
                 # _place_beside_anchor can position and orient it correctly.
@@ -321,54 +330,64 @@ class RearrangeAgent:
                     # Build a minimal semantic placement for this item using the
                     # current wall assignment from the original item.
                     dims = original.get("dimensions", {})
-                    synthetic_plan = [{
-                        "furniture_id": fid,
-                        "furniture_type": ftype,
-                        "size": {
-                            "w": float(dims.get("width", 0.6)),
-                            "l": float(dims.get("depth", 0.6)),
-                            "h": float(dims.get("height", 1.0)),
-                        },
-                        "target_wall": original.get("wall", "south"),
-                        "alignment": "center",
-                        "offset_from_wall": 0.05,
-                        "priority": 99,
-                        "orientation": "",
-                        "facing": "",
-                    }]
+                    synthetic_plan = [
+                        {
+                            "furniture_id": fid,
+                            "furniture_type": ftype,
+                            "size": {
+                                "w": float(dims.get("width", 0.6)),
+                                "l": float(dims.get("depth", 0.6)),
+                                "h": float(dims.get("height", 1.0)),
+                            },
+                            "target_wall": original.get("wall", "south"),
+                            "alignment": "center",
+                            "offset_from_wall": 0.05,
+                            "priority": 99,
+                            "orientation": "",
+                            "facing": "",
+                        }
+                    ]
                     # Include anchor items already placed so resolver can pair them
                     anchor_plan = []
                     for e in enriched:
                         eid = e.get("furniture_id", e.get("id", ""))
-                        etype = e.get("furniture_type", e.get("category", "")).lower().replace("-", "_")
+                        etype = (
+                            e.get("furniture_type", e.get("category", "")).lower().replace("-", "_")
+                        )
                         edims = e.get("dimensions", {})
-                        anchor_plan.append({
-                            "furniture_id": eid,
-                            "furniture_type": etype,
-                            "size": {
-                                "w": float(edims.get("width", 1.0)),
-                                "l": float(edims.get("depth", 1.0)),
-                                "h": float(edims.get("height", 1.0)),
-                            },
-                            "target_wall": e.get("wall", "south"),
-                            "alignment": "center",
-                            "offset_from_wall": 0.05,
-                            "priority": 1,
-                            "orientation": "",
-                            "facing": "",
-                        })
+                        anchor_plan.append(
+                            {
+                                "furniture_id": eid,
+                                "furniture_type": etype,
+                                "size": {
+                                    "w": float(edims.get("width", 1.0)),
+                                    "l": float(edims.get("depth", 1.0)),
+                                    "h": float(edims.get("height", 1.0)),
+                                },
+                                "target_wall": e.get("wall", "south"),
+                                "alignment": "center",
+                                "offset_from_wall": 0.05,
+                                "priority": 1,
+                                "orientation": "",
+                                "facing": "",
+                            }
+                        )
                     try:
                         re_result = self._resolver.resolve(anchor_plan + synthetic_plan, room_spec)
                         for ph in re_result.physical_placements:
                             if ph.get("furniture_id", ph.get("id", "")) == fid:
                                 candidate = {**original, **ph}
                                 enriched.append(candidate)
-                                logger.info(f"RearrangeAgent: re-resolved {fid!r} via pairing at rot={ph.get('rotation')}")
+                                logger.info(
+                                    f"RearrangeAgent: re-resolved {fid!r} via pairing at rot={ph.get('rotation')}"
+                                )
                                 break
                         else:
                             enriched.append(dict(original))
                     except Exception as exc:
-                        logger.warning(f"RearrangeAgent: re-resolve failed for {fid!r}: {exc} — using original")
+                        logger.warning(
+                            f"RearrangeAgent: re-resolve failed for {fid!r}: {exc} — using original"
+                        )
                         enriched.append(dict(original))
                     continue
 
@@ -392,13 +411,16 @@ class RearrangeAgent:
                 orig_box = AABB.from_center_and_size(
                     original.get("pos_x", 0.0), original.get("pos_z", 0.0), fw, fd
                 )
+
                 def _other_box(e: dict[str, Any]) -> AABB:
                     ed = e.get("dimensions", {})
                     ew = float(ed.get("width", 1.0))
                     efd = float(ed.get("depth", 1.0))
                     if e.get("rotation", 0) % 360 in (90, 270):
                         ew, efd = efd, ew
-                    return AABB.from_center_and_size(e.get("pos_x", 0.0), e.get("pos_z", 0.0), ew, efd)
+                    return AABB.from_center_and_size(
+                        e.get("pos_x", 0.0), e.get("pos_z", 0.0), ew, efd
+                    )
 
                 has_collision = any(
                     orig_box.intersects(_other_box(e))
@@ -420,7 +442,7 @@ class RearrangeAgent:
         logger.info(
             "RearrangeAgent: enriched positions before _reanchor_pairs: "
             + ", ".join(
-                f"{e.get('furniture_id', e.get('id','?'))}=({e.get('pos_x',0):.3f},{e.get('pos_z',0):.3f})"
+                f"{e.get('furniture_id', e.get('id', '?'))}=({e.get('pos_x', 0):.3f},{e.get('pos_z', 0):.3f})"
                 for e in enriched
             )
         )
@@ -514,8 +536,8 @@ class RearrangeAgent:
             fid = item.get("furniture_id", item.get("id", ""))
             src = catalog.get(fid, {})
             logger.info(
-                f"_enrich_from_current: {fid} item.pos_x={item.get('pos_x','MISSING')} "
-                f"src.pos_x={src.get('pos_x','NONE')} src.keys={list(src.keys())[:8]}"
+                f"_enrich_from_current: {fid} item.pos_x={item.get('pos_x', 'MISSING')} "
+                f"src.pos_x={src.get('pos_x', 'NONE')} src.keys={list(src.keys())[:8]}"
             )
             # Use original dimensions from current_layout — Three.js needs pre-rotation
             # dims so that BoxGeometry(w, h, d) + group.rotation gives correct shape.
@@ -538,13 +560,18 @@ class RearrangeAgent:
             if model_url:
                 enriched["model_url"] = model_url
             # Look up model_rotation_offset from catalog by furniture_type
-            ftype = item.get("furniture_type") or src.get("furniture_type") or src.get("category") or ""
+            ftype = (
+                item.get("furniture_type") or src.get("furniture_type") or src.get("category") or ""
+            )
             ftype_norm = ftype.lower().replace("-", "_").replace(" ", "_")
             catalog_entry = next(
-                (c for c in FURNITURE_CATALOG
-                 if c.category.value == ftype_norm
-                 or c.id.startswith(ftype_norm)
-                 or ftype_norm.startswith(c.category.value)),
+                (
+                    c
+                    for c in FURNITURE_CATALOG
+                    if c.category.value == ftype_norm
+                    or c.id.startswith(ftype_norm)
+                    or ftype_norm.startswith(c.category.value)
+                ),
                 None,
             )
             mro = (
@@ -695,7 +722,9 @@ class RearrangeAgent:
         prompt = EXPLANATION_PROMPT.format(
             total_score=feng_shui_score,
             grade=grade,
-            remaining_issues="ไม่มี" if collisions_remaining == 0 else f"{collisions_remaining} จุดชนกัน",
+            remaining_issues="ไม่มี"
+            if collisions_remaining == 0
+            else f"{collisions_remaining} จุดชนกัน",
             kua_line=kua_line,
         )
 

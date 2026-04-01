@@ -339,16 +339,17 @@ class RepairStep(BaseStep):
     # Categories come from furniture_id prefix (e.g. "office-chair_01" → "office-chair")
     # so we split on [-_] and match token subsets for robustness.
     _ANCHOR_RULES: list[tuple[frozenset[str], frozenset[str], float]] = [
-        (frozenset({"office", "chair"}), frozenset({"desk"}),            0.05),
+        (frozenset({"office", "chair"}), frozenset({"desk"}), 0.05),
         (frozenset({"dining", "chair"}), frozenset({"dining", "table"}), 0.05),
-        (frozenset({"chair"}),           frozenset({"desk"}),            0.05),
-        (frozenset({"coffee", "table"}), frozenset({"sofa"}),            0.10),
+        (frozenset({"chair"}), frozenset({"desk"}), 0.05),
+        (frozenset({"coffee", "table"}), frozenset({"sofa"}), 0.10),
     ]
 
     @staticmethod
     def _item_tokens(item: dict[str, Any]) -> frozenset[str]:
         """Lowercase token set from category field (e.g. 'office-chair' → {'office','chair'})."""
         import re
+
         raw = item.get("category", "") or item.get("id", "")
         return frozenset(t for t in re.split(r"[-_\s]+", raw.lower()) if t)
 
@@ -381,7 +382,8 @@ class RepairStep(BaseStep):
 
             # Find anchor candidates by token match
             candidates = [
-                a for a in items
+                a
+                for a in items
                 if a.get("id") != item.get("id")
                 and matched_anchor_tokens.issubset(self._item_tokens(a))
             ]
@@ -394,12 +396,12 @@ class RepairStep(BaseStep):
             # Pick nearest anchor by centre distance
             anchor = min(
                 candidates,
-                key=lambda a: (a.get("pos_x", 0.0) - cur_x) ** 2 + (a.get("pos_z", 0.0) - cur_z) ** 2,
+                key=lambda a: (
+                    (a.get("pos_x", 0.0) - cur_x) ** 2 + (a.get("pos_z", 0.0) - cur_z) ** 2
+                ),
             )
 
-            a_fw, a_fd = self._footprint_wh(
-                anchor.get("dimensions", {}), anchor.get("rotation", 0)
-            )
+            a_fw, a_fd = self._footprint_wh(anchor.get("dimensions", {}), anchor.get("rotation", 0))
             ax = anchor.get("pos_x", 0.0)
             az = anchor.get("pos_z", 0.0)
             gap = matched_gap
@@ -445,10 +447,34 @@ class RepairStep(BaseStep):
             # Matches spatial_resolver.py _adj(target) where target is the desired facing stored rot.
             # frontend coords: south=higher z (+), north=lower z (-)
             _sides: list[tuple[int, float, float, float, float]] = [
-                (180, fw_orig, fd_orig, ax,                                   az + a_fd / 2 + gap + fd_orig / 2),  # south of anchor → faces north → stored=180
-                (0,   fw_orig, fd_orig, ax,                                   az - a_fd / 2 - gap - fd_orig / 2),  # north of anchor → faces south → stored=0
-                (270, fd_orig, fw_orig, ax + a_fw / 2 + gap + fd_orig / 2,   az),                                  # east of anchor  → faces west  → stored=270
-                (90,  fd_orig, fw_orig, ax - a_fw / 2 - gap - fd_orig / 2,   az),                                  # west of anchor  → faces east  → stored=90
+                (
+                    180,
+                    fw_orig,
+                    fd_orig,
+                    ax,
+                    az + a_fd / 2 + gap + fd_orig / 2,
+                ),  # south of anchor → faces north → stored=180
+                (
+                    0,
+                    fw_orig,
+                    fd_orig,
+                    ax,
+                    az - a_fd / 2 - gap - fd_orig / 2,
+                ),  # north of anchor → faces south → stored=0
+                (
+                    270,
+                    fd_orig,
+                    fw_orig,
+                    ax + a_fw / 2 + gap + fd_orig / 2,
+                    az,
+                ),  # east of anchor  → faces west  → stored=270
+                (
+                    90,
+                    fd_orig,
+                    fw_orig,
+                    ax - a_fw / 2 - gap - fd_orig / 2,
+                    az,
+                ),  # west of anchor  → faces east  → stored=90
             ]
             # Always snap to the primary front_side regardless of collision.
             # Placing the chair on a lateral/wrong side is worse than a slight overlap
