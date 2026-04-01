@@ -23,6 +23,11 @@ from src.modules.layout.application.pipeline.models import (
     SSEEvent,
 )
 from src.modules.layout.application.pipeline.steps.base import BaseStep
+from src.modules.layout.application.services.kua_calculator import (
+    calculate_kua,
+    kua_best_direction_info,
+)
+from src.modules.layout.infrastructure.geometry import AABB
 from src.modules.layout.infrastructure.llm.langchain_agent import FengShuiLLMAgent
 
 logger = logging.getLogger(__name__)
@@ -52,9 +57,19 @@ class ExplainerStep(BaseStep):
 
         yield self._emit_progress("Calling LLM for explanation...", 0.6)
 
+        logger.info(f"   kua_line = {summary['kua_line']!r}")
         try:
             llm_response = await self._llm_agent.explain_layout(
-                **summary,
+                room_type=summary["room_type"],
+                width=summary["width"],
+                depth=summary["depth"],
+                items_summary=summary["items_summary"],
+                conflicts_summary=summary["conflicts_summary"],
+                repairs_summary=summary["repairs_summary"],
+                total_score=summary["total_score"],
+                grade=summary["grade"],
+                remaining_issues=summary["remaining_issues"],
+                kua_line=summary["kua_line"],
                 personality_mode=state.personality_mode,
             )
             state.explanation = llm_response.content
@@ -62,6 +77,7 @@ class ExplainerStep(BaseStep):
                 f"   ✓ LLM explanation generated "
                 f"({len(state.explanation)} chars, mode={state.personality_mode!r})"
             )
+            logger.info(f"   LLM raw: {state.explanation[:300]!r}")
         except Exception as exc:
             logger.warning(f"   explain_layout LLM failed — using template fallback: {exc}")
             state.explanation = self._template_explanation(summary, state)
@@ -100,17 +116,37 @@ class ExplainerStep(BaseStep):
         names = [i.get("name", i.get("furniture_type", "item")) for i in items]
         items_summary = f"{len(items)} items: {', '.join(names)}" if names else "no items placed"
 
+        # Final geometric overlap safety-net: regardless of what the
+        # pipeline conflict list says, verify the actual AABB layout right
+        # now so the explanation never claims "no collisions" when furniture
+        # visually overlaps.
+        actual_overlaps = self._count_actual_overlaps(items)
+
         # Conflicts
         all_conflicts = state.conflicts
         resolved = [c for c in all_conflicts if c.resolved]
         unresolved = state.unresolved_conflicts
-        if all_conflicts:
+
+        if actual_overlaps > 0 and not unresolved:
+            # Pipeline thinks everything is resolved, but geometry says
+            # otherwise → override the summary so the LLM does NOT claim
+            # the layout is collision-free.
+            conflicts_summary = (
+                f"{actual_overlaps} furniture overlap(s) still present in final layout"
+            )
+            remaining_issues_override = (
+                f"{actual_overlaps} furniture overlap(s) remain — "
+                "some items are too close or overlapping"
+            )
+        elif all_conflicts:
             conflicts_summary = (
                 f"{len(all_conflicts)} conflicts found, "
                 f"{len(resolved)} resolved, {len(unresolved)} remaining"
             )
+            remaining_issues_override = None
         else:
             conflicts_summary = "no conflicts detected"
+            remaining_issues_override = None
 
         # Repairs
         repair_descs = [a.description for a in state.repair_actions if a.success]
@@ -122,11 +158,28 @@ class ExplainerStep(BaseStep):
         grade = self._get_grade(total_score)
 
         # Remaining issues
-        if unresolved:
+        if remaining_issues_override:
+            remaining_issues = remaining_issues_override
+        elif unresolved:
             issue_descs = [c.description for c in unresolved]
             remaining_issues = "; ".join(issue_descs)
         else:
             remaining_issues = "none"
+
+        # Kua line — pre-rendered Thai text
+        user_prefs = spec.get("user_preferences") or {}
+        birth_year = user_prefs.get("birth_year")
+        gender = user_prefs.get("gender", "")
+        kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"
+        if birth_year and gender:
+            try:
+                kua = calculate_kua(int(birth_year), gender)
+                info = kua_best_direction_info(kua)
+                kua_line = (
+                    f"หัวเตียงหันทิศ{info['wall_th']}ตามเลขกัว {kua} เสริม{info['benefit']}ให้คุณโดยตรง"
+                )
+            except Exception:
+                pass
 
         return {
             "room_type": room_type,
@@ -138,6 +191,7 @@ class ExplainerStep(BaseStep):
             "total_score": total_score,
             "grade": grade,
             "remaining_issues": remaining_issues,
+            "kua_line": kua_line,
         }
 
     # ------------------------------------------------------------------
@@ -226,6 +280,35 @@ class ExplainerStep(BaseStep):
             if c.suggestion:
                 lines.append(f"  → {c.suggestion}")
         return lines
+
+    @staticmethod
+    def _footprint(dims: dict[str, Any], rotation: int) -> tuple[float, float]:
+        """Return (fw, fd) footprint in room space — same logic as RuleCheckerStep."""
+        w = dims.get("width", 1.0)
+        d = dims.get("depth", 1.0)
+        if rotation % 360 in (90, 270):
+            return d, w
+        return w, d
+
+    def _count_actual_overlaps(self, items: list[dict[str, Any]]) -> int:
+        """Quick geometric overlap count on final layout items."""
+        boxes: list[AABB] = []
+        for item in items:
+            fw, fd = self._footprint(item.get("dimensions", {}), item.get("rotation", 0))
+            boxes.append(
+                AABB.from_center_and_size(
+                    item.get("pos_x", 0.0),
+                    item.get("pos_z", 0.0),
+                    fw,
+                    fd,
+                )
+            )
+        count = 0
+        for i, a in enumerate(boxes):
+            for b in boxes[i + 1 :]:
+                if a.intersects(b):
+                    count += 1
+        return count
 
     def _get_grade(self, total: int) -> str:
         if total >= GRADE_EXCELLENT:

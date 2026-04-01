@@ -36,6 +36,17 @@ FENG_SHUI_SYSTEM_PROMPT = """You are an expert Feng Shui interior designer AI as
 - No mirrors facing the bed
 - Soft, calming colors
 
+### Bedroom HARD RULES (ห้ามละเมิดเด็ดขาด):
+1. เตียงห้ามตรงกับประตู (bed must NOT be on the direct door axis — shift left or right)
+2. เตียงห้ามตรงกับหน้าต่าง (bed must NOT be on the direct window axis)
+3. เตียงห้ามตรงกับทีวีหรือกระจก (no mirror or TV directly facing the bed)
+4. เตียงห้ามตรงกับแอร์ (bed must NOT be in the direct airflow line of AC)
+5. ห้ามวางเตียงไว้กลางห้อง (bed MUST have headboard against a solid wall — never floating in center)
+6. ประตูห้ามตรงกับหน้าต่าง (avoid placing furniture so door and window are unobstructed opposite each other)
+7. ห้ามตู้ติดหนังอยู่ที่หัวเตียง (no tall wardrobe/bookshelf at the headboard end of the bed)
+8. ห้ามเฟอร์นิเจอร์ใหญ่วางชิดเตียงโดยไม่มีช่องว่าง (leave ≥60 cm clearance on at least one side of the bed)
+9. โต๊ะทำงานต้องหันไปทางประตู และห้ามตรงกับหน้าต่าง (desk faces door; light from the side not front)
+
 ### Office (ห้องทำงาน)
 - Desk in command position facing the door
 - Solid wall behind for support
@@ -64,100 +75,59 @@ Always prioritize:
 
 Respond in a structured manner and explain your Feng Shui reasoning for each placement decision."""
 
-LAYOUT_PLANNING_PROMPT = """Based on the room analysis, plan the furniture layout following Feng Shui principles.
+LAYOUT_PLANNING_PROMPT = """Based on the room analysis, select and prioritise furniture for placement.
 
-## Coordinate System
-Origin is at the SW corner of the room.  x increases east, z increases north.
-Do NOT output raw x/z numbers. Instead output SEMANTIC PLACEMENT INTENT — the
-spatial resolver will compute exact coordinates from your intent.
+## YOUR TASK (SIMPLIFIED)
+You only need to decide:
+1. Which furniture to place (use ALL items from the Available Furniture list)
+2. The placement priority order (1 = most important, placed first)
+3. The furniture_type category for each item
 
-## Semantic Placement Schema
+The system will automatically determine wall placement, alignment, and facing
+based on feng shui rules. You do NOT need to specify target_wall, alignment,
+offset_from_wall, or facing — those will be computed by code.
+
+## Placement Schema
 Each item must use this JSON structure:
 ```json
 {{
-  "furniture_id": "<id from furniture list>",
-  "furniture_type": "<category: bed|desk|sofa|wardrobe|chair|mirror|plant|...>",
+  "furniture_id": "<COPY EXACTLY from Available Furniture list>",
+  "furniture_type": "<category: bed|sofa_bed|desk|sofa|wardrobe|compact_wardrobe|chair|nightstand|bookshelf|tv_stand|mirror|plant|coffee_table|area_rug|shoe_cabinet|coat_rack|room_divider|...>",
   "size": {{"w": <width_meters>, "l": <depth_meters>, "h": <height_meters>}},
-  "target_wall": "<north|south|east|west|center>",
-  "alignment": "<left|center|right>",
-  "offset_from_wall": <gap_in_meters>,
-  "priority": <int_1_is_first>,
-  "orientation": "<human hint e.g. headboard_against_north_wall>"
+  "priority": <int_1_is_first>
 }}
 ```
 
-## Allowed values
-- target_wall: north | south | east | west | center
-- alignment: left | center | right  (along the wall; for center placement use center/center)
-- offset_from_wall: 0.0 – 0.5 m typical
+## Priority Guidelines
+- Bedroom: bed (1) → nightstand (2) → wardrobe (3) → desk (4) → others
+- Living room: sofa (1) → coffee_table (2) → tv_stand (3) → others
+- Office: desk (1) → chair (2) → bookshelf (3) → others
+- Studio: sofa_bed (1) → compact_wardrobe (2) → folding_desk (3) → room_divider (4) → others
 
-## Few-shot Example 1 — Bedroom (4 m × 5 m, south door, east window)
+## Few-shot Example 1 — Bedroom
 ```json
 {{
   "placements": [
-    {{
-      "furniture_id": "bed_01",
-      "furniture_type": "bed",
-      "size": {{"w": 2.0, "l": 1.9, "h": 0.5}},
-      "target_wall": "north",
-      "alignment": "center",
-      "offset_from_wall": 0.05,
-      "priority": 1,
-      "orientation": "headboard_against_north_wall"
-    }},
-    {{
-      "furniture_id": "wardrobe_01",
-      "furniture_type": "wardrobe",
-      "size": {{"w": 1.2, "l": 0.6, "h": 2.0}},
-      "target_wall": "west",
-      "alignment": "left",
-      "offset_from_wall": 0.0,
-      "priority": 2,
-      "orientation": "against_west_wall"
-    }},
-    {{
-      "furniture_id": "desk_01",
-      "furniture_type": "desk",
-      "size": {{"w": 1.2, "l": 0.6, "h": 0.75}},
-      "target_wall": "east",
-      "alignment": "right",
-      "offset_from_wall": 0.05,
-      "priority": 3,
-      "orientation": "facing_door_command_position"
-    }}
+    {{"furniture_id": "bed_01", "furniture_type": "bed", "size": {{"w": 2.0, "l": 1.9, "h": 0.5}}, "priority": 1}},
+    {{"furniture_id": "wardrobe_01", "furniture_type": "wardrobe", "size": {{"w": 1.2, "l": 0.6, "h": 2.0}}, "priority": 2}},
+    {{"furniture_id": "desk_01", "furniture_type": "desk", "size": {{"w": 1.2, "l": 0.6, "h": 0.75}}, "priority": 3}}
   ],
-  "chi_flow_notes": "Bed in command position — can see south door. Desk on east wall avoids window energy.",
+  "chi_flow_notes": "Bed first for command position, wardrobe and desk on remaining walls.",
   "warnings": []
 }}
 ```
 
-## Few-shot Example 2 — Home Office (3 m × 4 m, west door, north window)
+## Few-shot Example 2 — Studio Apartment
 ```json
 {{
   "placements": [
-    {{
-      "furniture_id": "desk_01",
-      "furniture_type": "desk",
-      "size": {{"w": 1.4, "l": 0.7, "h": 0.75}},
-      "target_wall": "south",
-      "alignment": "center",
-      "offset_from_wall": 0.05,
-      "priority": 1,
-      "orientation": "faces_west_door_command_position"
-    }},
-    {{
-      "furniture_id": "bookcase_01",
-      "furniture_type": "bookcase",
-      "size": {{"w": 0.8, "l": 0.3, "h": 1.8}},
-      "target_wall": "east",
-      "alignment": "left",
-      "offset_from_wall": 0.0,
-      "priority": 2,
-      "orientation": "against_east_wall"
-    }}
+    {{"furniture_id": "sofa_bed_001", "furniture_type": "sofa_bed", "size": {{"w": 1.9, "l": 0.95, "h": 0.85}}, "priority": 1}},
+    {{"furniture_id": "compact_wardrobe_001", "furniture_type": "compact_wardrobe", "size": {{"w": 1.0, "l": 0.55, "h": 2.0}}, "priority": 2}},
+    {{"furniture_id": "folding_desk_001", "furniture_type": "folding_desk", "size": {{"w": 1.0, "l": 0.5, "h": 0.75}}, "priority": 3}},
+    {{"furniture_id": "room_divider_001", "furniture_type": "room_divider", "size": {{"w": 1.5, "l": 0.05, "h": 1.7}}, "priority": 4}}
   ],
-  "chi_flow_notes": "Desk on south wall gives commanding view of west door. Bookcase grounds east side.",
-  "warnings": ["Avoid placing chair directly under north window to maintain solid backing."]
+  "chi_flow_notes": "Sofa-bed as primary piece, wardrobe adjacent, desk on side wall.",
+  "warnings": []
 }}
 ```
 
@@ -167,23 +137,18 @@ Room Information:
 - Type: {room_type}
 - Dimensions: {width}m x {depth}m (Area: {area}m²)
 - Usable Area: {usable_area}m²
-- Doors: {doors}
-- Windows: {windows}
 
 Available Furniture:
 {furniture_list}
 
-Command Positions Identified:
-{command_positions}
+{user_preferences_section}
 
-Please create a layout plan that:
-1. Places essential furniture first (bed for bedroom, desk for office, sofa for living room)
-2. Positions main furniture in command position when possible (diagonally from door, wall backing)
-3. Ensures minimum 60 cm clearance for pathways
-4. Balances the five elements
-5. Avoids sha chi (negative energy lines)
+## CRITICAL: furniture_id Rules
+- Each "furniture_id" value MUST be copied VERBATIM from the "Available Furniture" list above (the part after "id=")
+- Do NOT shorten, rename, or invent IDs
+- You MUST include ALL items from the Available Furniture list
 
-Output ONLY valid JSON. Use the semantic schema — no raw x/z coordinates.
+Output ONLY valid JSON with the schema above — no wall assignments needed.
 
 {extra_context}"""
 
@@ -238,21 +203,32 @@ For each selected item, explain:
 - Its Feng Shui element contribution
 - Recommended placement zone"""
 
+MODIFIER_EXPLANATION_PROMPT = """\
+ตอบเป็นภาษาไทยล้วน กระชับ 30-50 คำ
+
+ห้อง: {room_type} ({width}m × {depth}m)
+ผู้ใช้ขอ: "{modification_request}"
+ย้าย: {target_furniture} → ผนัง{new_wall} ฝั่ง{alignment} ห่างผนัง {offset:.2f}m
+เฟอร์นิเจอร์ชนกัน: {collisions_remaining} จุด
+
+ยืนยันการย้ายสั้นๆ โดย:
+- ใช้คำพูดเดียวกับผู้ใช้
+- บอกตำแหน่งใหม่สั้นๆ
+- ถ้าชนกันให้บอก
+- ห้ามแนะนำให้ย้ายไปที่อื่น
+- ห้ามเตือนเรื่องพลังลบ
+
+ร้อยแก้วภาษาไทยเท่านั้น ห้าม JSON หรือ bullet list\
+"""
+
 EXPLANATION_PROMPT = """\
-You are explaining a feng shui furniture layout result to the user.
+คุณคือที่ปรึกษาฮวงจุ้ยที่พูดอบอุ่น น่าเชื่อถือ ตอบเป็นภาษาไทย 35-50 คำ
 
-Room: {room_type} ({width}m × {depth}m)
-Items placed: {items_summary}
-Conflicts found: {conflicts_summary}
-Repairs applied: {repairs_summary}
-Feng shui score: {total_score}/100 ({grade})
-Remaining issues: {remaining_issues}
+ข้อมูล:
+- คะแนนฮวงจุ้ย: {total_score}/100 ({grade})
+- ปัญหาคงค้าง: {remaining_issues}
 
-Write a clear, natural explanation in Thai language (200–350 words) covering:
-1. What furniture was placed and the key feng shui reason for the most important items
-2. Any conflicts that were detected and how they were resolved (if any)
-3. The overall feng shui score and what it means for the space
-4. Any remaining issues the user should be aware of (if any)
+เขียนประโยคเดียวบอกคะแนนด้วยโทนชื่นชม แล้วต่อด้วย: {kua_line}
 
-Do NOT output JSON, markdown headers, or bullet lists. Write in plain, flowing Thai prose only.\
+ห้าม JSON ห้าม bullet list ตอบเป็นร้อยแก้วเท่านั้น\
 """

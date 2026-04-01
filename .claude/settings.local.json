@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruff check:*)",
+      "Bash(python -m ruff check --fix src/ tests/)",
+      "Bash(pip install:*)",
+      "Bash(python -m ruff check src/ tests/)",
+      "Bash(python -m pytest tests/unit/api/v1/layout/test_router.py::TestGenerateLayoutStream::test_stream_endpoint_returns_streaming_response tests/unit/api/v1/layout/test_router.py::TestGenerateLayoutStream::test_stream_endpoint_with_mode_param -x)"
+    ]
+  }
+}
