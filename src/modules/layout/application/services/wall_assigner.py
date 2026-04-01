@@ -138,7 +138,7 @@ class WallAssigner:
         window_walls = self._extract_walls(room_spec.get("windows", []))
 
         # Track wall usage: wall → total width consumed
-        wall_usage: dict[str, float] = {w: 0.0 for w in _ALL_WALLS}
+        wall_usage: dict[str, float] = dict.fromkeys(_ALL_WALLS, 0.0)
 
         # Determine command wall (opposite primary door)
         primary_door_wall = next(iter(door_walls), "south")
@@ -149,7 +149,6 @@ class WallAssigner:
         # as long as it's offset. WallAssigner works at wall level, not coordinate level,
         # so we treat door wall as soft-invalid (prefer to avoid, but Kua can override).
         # The spatial_resolver and clearance checker enforce the actual axis constraint.
-        bed_hard_invalid: set[str] = set()  # nothing is truly hard-blocked at wall level
         bed_soft_invalid = window_walls | door_walls  # prefer to avoid, but overridable
         bed_valid_strict = _ALL_WALLS - bed_soft_invalid
         bed_valid_kua_override = _ALL_WALLS  # Kua can place on any wall
@@ -212,8 +211,6 @@ class WallAssigner:
 
         bed_assigned_wall: str | None = None
         sofa_assigned_wall: str | None = None
-        desk_assigned_wall: str | None = None
-        tv_assigned_wall: str | None = None
 
         # Pass 1: assign high-priority items
         for item in items:
@@ -407,7 +404,6 @@ class WallAssigner:
                     room_w=room_w, room_d=room_d,
                     wall_usage=wall_usage, item_width=fw,
                 )
-                desk_assigned_wall = wall
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": "center",
@@ -440,7 +436,6 @@ class WallAssigner:
                         room_w=room_w, room_d=room_d,
                         wall_usage=wall_usage, item_width=fw,
                     )
-                tv_assigned_wall = wall
                 tv_align = (
                     self._safe_alignment_for_door_wall(wall, fw, room_w, room_d, room_spec.get("doors", []))
                     if wall in door_walls else "center"

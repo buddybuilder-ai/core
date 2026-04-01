@@ -25,7 +25,6 @@ from src.modules.layout.application.pipeline.models import (
 from src.modules.layout.application.pipeline.steps.base import BaseStep
 from src.modules.layout.application.services.kua_calculator import (
     calculate_kua,
-    kua_auspicious_walls,
     kua_best_direction_info,
 )
 from src.modules.layout.infrastructure.geometry import AABB

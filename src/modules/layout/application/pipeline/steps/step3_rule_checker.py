@@ -263,9 +263,6 @@ class RuleCheckerStep(BaseStep):
         ]
 
         # Index items by category for relationship checks
-        beds = [i for i in items if i.get("category") == "bed"]
-        mirrors = [i for i in items if i.get("category") in ("mirror",)]
-        tv_stands = [i for i in items if i.get("category") in ("tv_stand", "tv")]
         large_types = {"wardrobe", "bookshelf", "dresser", "compact_wardrobe"}
         large_items = [i for i in items if i.get("category") in large_types]
         screen_types = {"tv_stand", "tv", "monitor", "mirror"}
@@ -391,15 +388,12 @@ class RuleCheckerStep(BaseStep):
                         lrot = large.get("rotation", 0)
                         lfw, lfd = self._footprint(large.get("dimensions", {}), lrot)
                         # Check if large item is on same wall as bed headboard
-                        large_on_same_wall = False
-                        if bed_headboard_wall == "north" and abs(lz + half_d) < (lfd / 2 + wall_tol):
-                            large_on_same_wall = True
-                        elif bed_headboard_wall == "south" and abs(lz - half_d) < (lfd / 2 + wall_tol):
-                            large_on_same_wall = True
-                        elif bed_headboard_wall == "west" and abs(lx + half_w) < (lfw / 2 + wall_tol):
-                            large_on_same_wall = True
-                        elif bed_headboard_wall == "east" and abs(lx - half_w) < (lfw / 2 + wall_tol):
-                            large_on_same_wall = True
+                        large_on_same_wall = (
+                            (bed_headboard_wall == "north" and abs(lz + half_d) < (lfd / 2 + wall_tol))
+                            or (bed_headboard_wall == "south" and abs(lz - half_d) < (lfd / 2 + wall_tol))
+                            or (bed_headboard_wall == "west" and abs(lx + half_w) < (lfw / 2 + wall_tol))
+                            or (bed_headboard_wall == "east" and abs(lx - half_w) < (lfw / 2 + wall_tol))
+                        )
                         if large_on_same_wall:
                             conflicts.append(Conflict(
                                 conflict_type=ConflictType.SHA_CHI_ALIGNMENT,

@@ -24,6 +24,7 @@ from src.modules.layout.application.pipeline.models import (
 )
 from src.modules.layout.application.pipeline.steps.base import BaseStep
 from src.modules.layout.application.services import FurnitureSelector
+
 # furniture_relationships hints are no longer injected into LLM prompt;
 # WallAssigner handles spatial logic deterministically.
 from src.modules.layout.application.services.layout_resolver import LayoutResolver

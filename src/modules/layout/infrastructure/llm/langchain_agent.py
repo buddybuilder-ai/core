@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.config.settings import get_settings
+from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.infrastructure.llm.prompts import (
     EXPLANATION_PROMPT,
     FENG_SHUI_SYSTEM_PROMPT,
@@ -18,7 +19,6 @@ from src.modules.layout.infrastructure.llm.prompts import (
     LAYOUT_PLANNING_PROMPT,
     SCORING_PROMPT,
 )
-from src.modules.layout.application.services.wall_assigner import WallAssigner
 
 logger = logging.getLogger(__name__)
 

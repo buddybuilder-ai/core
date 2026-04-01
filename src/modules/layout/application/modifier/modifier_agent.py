@@ -146,7 +146,6 @@ class ModifierAgent:
         from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
         from src.modules.layout.application.pipeline.models import Conflict, ConflictType
         from src.modules.layout.application.pipeline.steps.step4_repair import RepairStep
-        from src.modules.layout.infrastructure.geometry import AABB
 
         room_obj = RearrangeAgent._build_room(room_spec)
         collisions = RearrangeAgent._recheck_collisions(enriched, room_obj)
@@ -173,8 +172,6 @@ class ModifierAgent:
                 )
                 repair._try_shift(conflict, enriched, room_obj)
             collisions = RearrangeAgent._recheck_collisions(enriched, room_obj)
-
-        physical = physical_target
 
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,

@@ -21,16 +21,15 @@ from src.modules.layout.application.pipeline.models import (
     SSEEventType,
 )
 from src.modules.layout.application.pipeline.steps.step4_repair import RepairStep
-from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
+from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
-from src.modules.layout.infrastructure.tools.furniture_catalog_data import FURNITURE_CATALOG
 from src.modules.layout.infrastructure.llm.langchain_agent import (
     FengShuiLLMAgent,
     LLMConfig,
 )
-from src.modules.layout.infrastructure.llm.prompts import FENG_SHUI_SYSTEM_PROMPT
+from src.modules.layout.infrastructure.tools.furniture_catalog_data import FURNITURE_CATALOG
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +294,7 @@ class RearrangeAgent:
         )
 
         # --- 5. Enrich with metadata from current_layout ---
-        logger.info(f"RearrangeAgent: physical before enrich: " + ", ".join(
+        logger.info("RearrangeAgent: physical before enrich: " + ", ".join(
             f"{p.get('furniture_id','?')}=({p.get('pos_x','?')},{p.get('pos_z','?')})"
             for p in physical
         ))
@@ -643,14 +642,15 @@ class RearrangeAgent:
         enriched_layout: list[dict[str, Any]] | None = None,
     ) -> str:
         """Generate a Thai explanation of the rearranged layout."""
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        from src.modules.layout.application.agent.personality import get_system_prompt
         from src.modules.layout.application.services.kua_calculator import (
             calculate_kua,
             detect_kua_priority,
             kua_best_direction_info,
         )
         from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT
-        from src.modules.layout.application.agent.personality import get_system_prompt
-        from langchain_core.messages import HumanMessage, SystemMessage
 
         # Build kua_line — pre-rendered Thai text, no LLM logic needed
         kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"

@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-
-logger = logging.getLogger(__name__)
+from dataclasses import dataclass as _pair_dc
 
 from src.modules.layout.domain.entities.room import DoorPosition, WindowPosition
 from src.modules.layout.infrastructure.geometry.collision import AABB
 from src.modules.layout.infrastructure.tools.furniture_catalog_data import FURNITURE_CATALOG
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,6 @@ _FACING_ROTATION: dict[str, int] = {
 # Furniture pairing rules — dependent items are placed next to their anchor
 # during the resolve loop itself (not as a post-process).
 # ---------------------------------------------------------------------------
-from dataclasses import dataclass as _pair_dc
 
 @_pair_dc(frozen=True)
 class _PairRule:
