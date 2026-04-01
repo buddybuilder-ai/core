@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from PIL import Image
-from ultralytics import YOLOWorld
+from ultralytics import YOLOWorld # type: ignore
 
 # --- 1. CONFIGURATION & ARGUMENT HANDLING ---
 DEFAULT_HEIGHT = 2.5
@@ -56,7 +56,7 @@ print(f"🚀 Loading AI Engine | Project Root: {BASE_DIR}")
 print(f"📸 Target Image: {INPUT_IMAGE_PATH}")
 
 repo = "isl-org/ZoeDepth"
-zoe_model = torch.hub.load(repo, "ZoeD_N", pretrained=False, trust_repo=True)
+zoe_model = torch.hub.load(repo, "ZoeD_N", pretrained=False, trust_repo=True) # type: ignore
 checkpoint_path = os.path.expanduser("~/.cache/torch/hub/checkpoints/ZoeD_M12_N.pt")
 
 if os.path.exists(checkpoint_path):
@@ -121,7 +121,7 @@ yolo_model.set_classes(
 
 
 # --- 3. PROCESSING FUNCTION ---
-def process_with_elevation(img_path, output_json, user_h):
+def process_with_elevation(img_path: str, output_json: str, user_h: float) -> None:
     if not os.path.exists(img_path):
         print(f"❌ Error: Image not found at {img_path}")
         sys.exit(1)

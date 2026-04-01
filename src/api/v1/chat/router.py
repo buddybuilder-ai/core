@@ -5,7 +5,11 @@ import os
 import subprocess
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any , cast
+
+import anyio
+import sys
+import asyncio
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -231,34 +235,60 @@ def _get_default_system_prompt(mode: str) -> str:
 
 
 @router.post("/process-single-image")
-async def process_single_image(image: UploadFile = File(...), target_height: str = Form("2.5")):
+async def process_single_image(
+    image: UploadFile = File(...), 
+    target_height: str = Form("2.5")
+) -> dict[str, Any]:
     """API for processing a single image with AI to detect 3D objects."""
-    # 1. ระบุพาธ Root ของโปรเจกต์
     base_dir = os.path.abspath(os.getcwd())
     assets_dir = os.path.join(base_dir, "assets")
     os.makedirs(assets_dir, exist_ok=True)
 
-    # 2. บันทึกรูปภาพที่อัปโหลดมาลงใน assets
     file_id = uuid.uuid4().hex
     temp_image_path = os.path.join(assets_dir, f"{file_id}.jpg")
-    with open(temp_image_path, "wb") as buffer:
-        buffer.write(await image.read())
+    json_path = os.path.join(assets_dir, "my_room_2_data.json")
+    script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
 
-    # 3. สั่งรัน AI Script (detect_objects_2.py)
     try:
+        # 1. บันทึกรูปภาพแบบ Async (ใช้ anyio ตามมาตรฐาน Python 3.14)
+        async with await anyio.open_file(temp_image_path, "wb") as buffer:
+            await buffer.write(await image.read())
+
         print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
 
-        # 4. อ่านไฟล์ JSON ที่ AI สร้างขึ้นใน assets
-        json_path = os.path.join(assets_dir, "my_room_2_data.json")
+        # 2. รัน AI Script แบบ Async Subprocess (ไม่ทำให้ Server ค้าง)
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, script_path, target_height, temp_image_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=base_dir
+        )
+        
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode('utf-8', errors='ignore')
+            print(f"❌ AI Script Error: {error_msg}")
+            return {"status": "error", "message": f"AI Error: {error_msg}"}
+
+        # 3. อ่านไฟล์ JSON แบบ Async และใช้ cast เพื่อให้ Mypy ผ่าน
         if os.path.exists(json_path):
-            with open(json_path, encoding="utf-8") as f:
-                return json.load(f)
+            async with await anyio.open_file(json_path, encoding="utf-8") as f:
+                content = await f.read()
+                # ✅ ใช้ cast เพื่อบอก Mypy ว่านี่คือ dict[str, Any] แน่นอน
+                data = cast(dict[str, Any], json.loads(content))
+                return data
 
         return {"status": "error", "message": "AI completed but JSON output was not found"}
 
-    except subprocess.CalledProcessError as e:
-        print(f"❌ AI Script Error (Stderr): {e.stderr}")
-        return {"status": "error", "message": f"AI Error: {e.stderr}"}
     except Exception as e:
         print(f"❌ Server Exception: {str(e)}")
         return {"status": "error", "message": str(e)}
+    
+    finally:
+        # ลบไฟล์รูปชั่วคราวทิ้งเสมอ (ถ้ามี)
+        if os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+            except Exception:
+                pass
