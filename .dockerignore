@@ -1,0 +1,28 @@
+.git
+.github
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+dist
+build
+.env
+.env.*
+!.env.example
+
+# rag_pipeline — copy only rag_constants.py (no data/vectorstore/exports)
+rag_pipeline/data
+rag_pipeline/vectorstore
+rag_pipeline/exports
+rag_pipeline/__pycache__
+
+# tests not needed in image
+tests
+
+# local dev files
+*.log
+.DS_Store

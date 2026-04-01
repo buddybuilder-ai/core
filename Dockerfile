@@ -49,13 +49,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy wheels from builder and install
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir /wheels/* && \
+    pip install --no-cache-dir --find-links /wheels buddybuilder-ai && \
     rm -rf /wheels
 
 # Copy application code
 COPY --chown=appuser:appgroup src/ ./src/
 COPY --chown=appuser:appgroup alembic.ini ./
 COPY --chown=appuser:appgroup migrations/ ./migrations/
+
+# Copy rag_constants so rag_service.py can import it at runtime
+# (rag_service.py does sys.path.insert to /app/rag_pipeline/)
+COPY --chown=appuser:appgroup rag_pipeline/rag_constants.py ./rag_pipeline/
 
 # Switch to non-root user
 USER appuser
