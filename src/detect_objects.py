@@ -1,24 +1,23 @@
-import torch
-import torch.nn as nn
-import cv2
-import numpy as np
-from ultralytics import YOLOWorld, YOLO
-from PIL import Image
 import json
 import os
 import sys
 
+import cv2
+import numpy as np
+import torch
+from ultralytics import YOLO
+
 # --- 1. CONFIGURATION ---
 DEFAULT_HEIGHT = 2.5
-current_dir = os.path.dirname(os.path.abspath(__file__)) 
-BASE_DIR = os.path.dirname(current_dir) 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(current_dir)
 assets_dir = os.path.join(BASE_DIR, "assets")
 os.makedirs(assets_dir, exist_ok=True)
 
 try:
     TARGET_HEIGHT = float(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_HEIGHT
     INPUT_IMAGE_PATH = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(assets_dir, "my_room_2.jpg")
-except Exception as e:
+except Exception:
     TARGET_HEIGHT = DEFAULT_HEIGHT
     INPUT_IMAGE_PATH = os.path.join(assets_dir, "my_room_2.jpg")
 
@@ -40,12 +39,12 @@ depth_model = torch.hub.load("depth-anything/Depth-Anything-V2", "depth_anything
 depth_model.to("cpu").eval()
 
 # B. Load YOLOv11 (แทนที่ v8-world เพื่อความเป๊ะของ Box ในงาน Indoor)
-yolo_model = YOLO('yolov8s-world.pt') 
+yolo_model = YOLO('yolov8s-world.pt')
 
 # --- 3. PROCESSING FUNCTION ---
 def process_room_3d(img_path, output_json, user_h):
     if not os.path.exists(img_path):
-        print(f"❌ Error: Image not found")
+        print("❌ Error: Image not found")
         return
 
     # อ่านภาพด้วย OpenCV (รองรับโมเดลใหม่ๆ ได้ดีกว่า)
@@ -57,8 +56,8 @@ def process_room_3d(img_path, output_json, user_h):
     print("🌀 Estimating Depth with Depth Anything V2...")
     with torch.no_grad():
         # Depth Anything ให้ผลลัพธ์เป็น Relative Depth ที่ละเอียดสูง
-        depth_map = depth_model.infer_image(img_rgb) 
-    
+        depth_map = depth_model.infer_image(img_rgb)
+
     # 2. Inference Objects
     print("🔍 Detecting Objects with YOLOv11...")
     results = yolo_model.predict(img_path, conf=0.25)
@@ -67,10 +66,10 @@ def process_room_3d(img_path, output_json, user_h):
     # ใช้ค่าเฉลี่ยของส่วนล่าง (พื้น) และส่วนบน (เพดาน) ของภาพ
     floor_region = depth_map[int(h_img*0.9):, :]
     ceiling_region = depth_map[:int(h_img*0.1), :]
-    
+
     avg_floor_depth = np.median(floor_region)
     avg_ceiling_depth = np.median(ceiling_region)
-    
+
     # คำนวณ Scale Factor เพื่อเปลี่ยน Relative Depth เป็น Metric (เมตร)
     # ใช้วิธี Ratio mapping จาก User Height
     raw_range = abs(avg_floor_depth - avg_ceiling_depth)
@@ -82,7 +81,7 @@ def process_room_3d(img_path, output_json, user_h):
         for box in result.boxes:
             label = yolo_model.names[int(box.cls[0])]
             conf = float(box.conf[0])
-            
+
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
 

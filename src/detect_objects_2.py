@@ -1,19 +1,19 @@
-import torch
-import torch.nn as nn
-from ultralytics import YOLOWorld
-from PIL import Image
 import json
 import os
 import sys
+
 import numpy as np
+import torch
+from PIL import Image
+from ultralytics import YOLOWorld
 
 # --- 1. CONFIGURATION & ARGUMENT HANDLING ---
 DEFAULT_HEIGHT = 2.5
 # หาตำแหน่ง Root ของโปรเจกต์ (ย้อนกลับจาก core/src ไป 3 ชั้น)
 # หาตำแหน่งโฟลเดอร์ src (ที่ไฟล์นี้อยู่)
-current_dir = os.path.dirname(os.path.abspath(__file__)) 
+current_dir = os.path.dirname(os.path.abspath(__file__))
 # ย้อนกลับ 1 ชั้นไปที่โฟลเดอร์ core
-BASE_DIR = os.path.dirname(current_dir) 
+BASE_DIR = os.path.dirname(current_dir)
 
 # กำหนด Path ไปที่ assets (จะกลายเป็น core/assets)
 assets_dir = os.path.join(BASE_DIR, "assets")
@@ -29,13 +29,13 @@ DEFAULT_IMAGE = os.path.join(assets_dir, "my_room_2.jpg")
 try:
     # Argument 1: ความสูงห้อง (e.g., 2.5)
     TARGET_HEIGHT = float(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_HEIGHT
-    
+
     # Argument 2: Path ของรูปภาพที่อัปโหลด (ส่งมาจาก FastAPI)
     if len(sys.argv) > 2:
         INPUT_IMAGE_PATH = os.path.abspath(sys.argv[2])
     else:
         INPUT_IMAGE_PATH = DEFAULT_IMAGE
-        
+
 except Exception as e:
     print(f"⚠️ Argument Error: {e}")
     TARGET_HEIGHT = DEFAULT_HEIGHT
@@ -64,32 +64,32 @@ if os.path.exists(checkpoint_path):
 else:
     print("❌ Warning: ZoeDepth checkpoint not found. Model might not work correctly.")
 
-for name, module in zoe_model.named_modules():
+for _, module in zoe_model.named_modules():
     if module.__class__.__name__ == 'Block' and not hasattr(module, 'drop_path'):
         module.drop_path = getattr(module, 'drop_path1', nn.Identity())
 
 zoe_model.to("cpu").eval()
-yolo_model = YOLOWorld('yolov8s-world.pt') 
+yolo_model = YOLOWorld('yolov8s-world.pt')
 # --- แก้ไขส่วน set_classes ใน detect_objects_2.py ---
 yolo_model.set_classes([
     # โซนนอน (Sleeping Zone)
     "bed", "bunk bed", "bed frame", "sofa bed", "nightstand", "dresser",
-    
+
     # โซนนั่งเล่น (Living Zone)
     "sofa", "armchair", "coffee table", "tv stand", "room divider",
-    
+
     # โซนทำงาน & ออฟฟิศ (Working/Office Zone)
     "desk", "computer desk", "folding desk", "chair", "office chair", "filing cabinet",
-    
+
     # โซนทานอาหาร (Dining Zone)
     "dining table", "compact dining", "dining chair", "sideboard",
-    
+
     # โซนครัว (Kitchen Zone)
     "kitchen counter", "mini fridge", "microwave stand",
-    
+
     # เก็บของ (Storage)
     "wardrobe", "compact wardrobe", "bookshelf", "shelf", "shoe cabinet", "coat rack",
-    
+
     # เครื่องตกแต่ง & ทั่วไป (Decor/General)
     "plant", "lamp", "rug", "door", "monitor"
 ])
@@ -102,14 +102,14 @@ def process_with_elevation(img_path, output_json, user_h):
 
     img_pil = Image.open(img_path).convert("RGB")
     w_img, h_img = img_pil.size
-    
+
     yolo_results = yolo_model(img_path)
     with torch.no_grad():
         depth_map = zoe_model.infer_pil(img_pil)
-    
+
     # Get depth map dimensions
     h_depth, w_depth = depth_map.shape
-    
+
     # Calculate scaling factors
     x_scale = w_depth / w_img
     y_scale = h_depth / h_img
@@ -118,7 +118,7 @@ def process_with_elevation(img_path, output_json, user_h):
     dist_to_ceiling = float(np.median(depth_map[:20, w_depth//2]))
     raw_ai_height = dist_to_floor + dist_to_ceiling
     scale_factor = user_h / raw_ai_height if raw_ai_height > 0 else 1.0
-    cam_height = user_h / 2 
+    cam_height = user_h / 2
 
     objects_3d = []
     for result in yolo_results:
@@ -126,7 +126,7 @@ def process_with_elevation(img_path, output_json, user_h):
             label = yolo_model.names[int(box.cls[0])]
             conf = float(box.conf[0])
             if conf < 0.1: continue
-            
+
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             cx_orig, cy_orig = int((x1 + x2) / 2), int((y1 + y2) / 2)
 
@@ -137,11 +137,11 @@ def process_with_elevation(img_path, output_json, user_h):
             # Clamp values to be within the bounds of the depth map
             scaled_cx = max(0, min(w_depth - 1, scaled_cx))
             scaled_cy = max(0, min(h_depth - 1, scaled_cy))
-            
+
             real_dist = float(depth_map[scaled_cy, scaled_cx]) * scale_factor
             w_m = ((x2 - x1) / w_img) * (2 * np.pi * real_dist)
             h_m = ((y2 - y1) / h_img) * (np.pi * real_dist)
-            
+
             angle_rad = (0.5 - (y2 / h_img)) * np.pi
             elevation_m = cam_height + (real_dist * np.sin(angle_rad))
             elevation_m = max(0, elevation_m)

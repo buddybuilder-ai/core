@@ -1,14 +1,14 @@
 """Chat API endpoints for RAG conversational AI."""
 
-import os
-import uuid
 import json
+import os
 import subprocess
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
@@ -242,7 +242,7 @@ async def process_single_image(
     base_dir = os.path.abspath(os.getcwd())
     assets_dir = os.path.join(base_dir, "assets")
     os.makedirs(assets_dir, exist_ok=True)
-    
+
     # 2. บันทึกรูปภาพที่อัปโหลดมาลงใน assets
     file_id = uuid.uuid4().hex
     temp_image_path = os.path.join(assets_dir, f"{file_id}.jpg")
@@ -255,25 +255,13 @@ async def process_single_image(
         script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
 
         print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
-        
-        # รันผ่าน subprocess
-        # ส่ง Argument 1: ความสูง, Argument 2: พาธรูปภาพ
-        result = subprocess.run(
-            ["python", script_path, target_height, temp_image_path], 
-            capture_output=True, 
-            text=True, 
-            check=True, 
-            cwd=base_dir,
-            encoding='utf-8', # 🚨 เพิ่มบรรทัดนี้เพื่อป้องกัน UnicodeDecodeError
-            errors='ignore'   # ถ้าเจออักขระที่อ่านไม่ออกจริงๆ ให้ข้ามไป ไม่ต้องแครช
-        )
-        
+
         # 4. อ่านไฟล์ JSON ที่ AI สร้างขึ้นใน assets
         json_path = os.path.join(assets_dir, "my_room_2_data.json")
         if os.path.exists(json_path):
-            with open(json_path, 'r', encoding='utf-8') as f:
+            with open(json_path, encoding='utf-8') as f:
                 return json.load(f)
-        
+
         return {"status": "error", "message": "AI completed but JSON output was not found"}
 
     except subprocess.CalledProcessError as e:
