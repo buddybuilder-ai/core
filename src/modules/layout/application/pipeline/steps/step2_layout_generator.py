@@ -24,9 +24,9 @@ from src.modules.layout.application.pipeline.models import (
 )
 from src.modules.layout.application.pipeline.steps.base import BaseStep
 from src.modules.layout.application.services import FurnitureSelector
-from src.modules.layout.application.services.furniture_relationships import (
-    build_relationship_hints,
-)
+
+# furniture_relationships hints are no longer injected into LLM prompt;
+# WallAssigner handles spatial logic deterministically.
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
 from src.modules.layout.domain.entities import Room
 from src.modules.layout.infrastructure.llm.langchain_agent import (
@@ -124,19 +124,7 @@ class LayoutGeneratorStep(BaseStep):
         if extra_ctx:
             logger.info(f"   Injecting {len(extra_ctx)} chars of RAG context into LLM prompt")
 
-        # Inject inter-furniture relationship hints (TV faces sofa, nightstand beside bed, etc.)
-        rel_hints = build_relationship_hints(furniture_list)
-        if rel_hints:
-            logger.info(f"   {len(rel_hints)} furniture relationship hints generated")
-            rel_hints_str = "\n".join(f"- {h}" for h in rel_hints)
-            _mp: dict[str, Any] = dict(user_prefs) if user_prefs else {}
-            _mp["furniture_relationships"] = (
-                "IMPORTANT — spatial relationships between items (MUST follow these):\n"
-                + rel_hints_str
-            )
-            merged_prefs: dict[str, Any] | None = _mp
-        else:
-            merged_prefs = user_prefs if user_prefs else None
+        merged_prefs = user_prefs if user_prefs else None
 
         llm_response = await self._llm_agent.plan_layout(
             room_type=room_type,
@@ -280,9 +268,12 @@ class LayoutGeneratorStep(BaseStep):
             }
             # Carry model_rotation_offset from catalog so the frontend knows how
             # to correct for the 3D model's exported "forward" direction.
-            mro = cat.get("model_rotation_offset", 0)
-            if mro:
-                enriched_item["model_rotation_offset"] = int(mro)
+            # Prefer sel.item (FurnitureSearchResult) which carries the value from
+            # CatalogFurniture; fall back to cat dict for safety.
+            mro = getattr(getattr(sel, "item", None), "model_rotation_offset", None)
+            if mro is None:
+                mro = cat.get("model_rotation_offset", 0)
+            enriched_item["model_rotation_offset"] = int(mro)
             result.append(enriched_item)
         return result
 

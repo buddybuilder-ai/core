@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.config.settings import get_settings
+from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.infrastructure.llm.prompts import (
     EXPLANATION_PROMPT,
     FENG_SHUI_SYSTEM_PROMPT,
@@ -83,14 +84,17 @@ class FengShuiLLMAgent:
         self.config = config or LLMConfig()
         settings = get_settings()
 
-        # Initialize LangChain ChatOpenAI with OpenRouter
+        # Use Ollama/local base URL if configured, otherwise fall back to OpenRouter
+        api_base = settings.LLM_LAYOUT_BASE_URL or settings.OPENROUTER_BASE_URL
+        api_key = settings.LLM_LAYOUT_API_KEY or settings.OPENROUTER_API_KEY
+
         self._llm = ChatOpenAI(
             model=self.config.model,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             timeout=self.config.timeout,
-            openai_api_key=settings.OPENROUTER_API_KEY,
-            openai_api_base=settings.OPENROUTER_BASE_URL,
+            openai_api_key=api_key,
+            openai_api_base=api_base,
         )
 
         self._system_message = SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT)
@@ -231,25 +235,15 @@ class FengShuiLLMAgent:
                     lines.append(f"- {k}: {v}")
             user_preferences_section = "\n".join(lines) + "\n"
 
-        command_position_hint = self._build_command_position_hint(doors, room_type)
-        wall_capacity_section = self._build_wall_capacity_section(
-            width, depth, doors, furniture_list
-        )
-
         prompt = LAYOUT_PLANNING_PROMPT.format(
             room_type=room_type,
             width=width,
             depth=depth,
             area=width * depth,
             usable_area=usable_area,
-            doors=json.dumps(doors, indent=2) if doors else "None",
-            windows=json.dumps(windows, indent=2) if windows else "None",
             furniture_list=self._format_furniture_list(furniture_list),
-            command_positions=json.dumps(command_positions, indent=2),
             extra_context=extra_context,
             user_preferences_section=user_preferences_section,
-            command_position_hint=command_position_hint,
-            wall_capacity_section=wall_capacity_section,
         )
 
         output_schema = {
@@ -258,12 +252,7 @@ class FengShuiLLMAgent:
                     "furniture_id": "string",
                     "furniture_type": "string - bed|desk|sofa|wardrobe|chair|...",
                     "size": {"w": "float", "l": "float", "h": "float"},
-                    "target_wall": "north|south|east|west|center",
-                    "alignment": "left|center|right",
-                    "offset_from_wall": "float (meters)",
                     "priority": "int (1=first)",
-                    "orientation": "string - human readable hint",
-                    "facing": "string - north|south|east|west| (direction front/seat faces, empty=auto)",
                 }
             ],
             "chi_flow_notes": "string - notes about energy flow",
@@ -287,11 +276,26 @@ class FengShuiLLMAgent:
         valid: list[dict[str, Any]] = []
         for raw in raw_placements:
             try:
+                # Fill defaults for fields the LLM no longer provides
+                raw.setdefault("target_wall", "center")
+                raw.setdefault("alignment", "center")
+                raw.setdefault("offset_from_wall", 0.05)
                 schema = SemanticPlacementSchema.model_validate(raw)
                 valid.append(schema.model_dump())
             except Exception as exc:
                 fid = raw.get("furniture_id", "<unknown>")
                 logger.warning(f"plan_layout: skipping invalid placement {fid!r}: {exc}")
+
+        # Let WallAssigner determine walls deterministically
+        room_spec = {
+            "width": width,
+            "depth": depth,
+            "doors": doors,
+            "windows": windows,
+        }
+        wall_assigner = WallAssigner()
+        valid = wall_assigner.assign(valid, room_spec)
+        logger.info(f"plan_layout: WallAssigner assigned walls for {len(valid)} items")
 
         response.content["placements"] = valid
         return response
@@ -304,7 +308,28 @@ class FengShuiLLMAgent:
         Uses position heuristics to guess target_wall/alignment.
         """
         fid = old.get("furniture_id", "unknown_01")
-        ftype = fid.split("_")[0]
+        # Derive type from ID prefix: "bed-queen-123" → "bed", "sofa_bed_01" → "sofa_bed"
+        import re
+
+        _tokens = re.split(r"[-_\s]+", fid.lower())
+        # Handle compound types like "sofa-bed", "tv-stand", "coffee-table"
+        _COMPOUND_PREFIXES = {
+            ("sofa", "bed"): "sofa_bed",
+            ("tv", "stand"): "tv_stand",
+            ("coffee", "table"): "coffee_table",
+            ("office", "chair"): "office_chair",
+            ("shoe", "cabinet"): "shoe_cabinet",
+            ("coat", "rack"): "coat_rack",
+            ("room", "divider"): "room_divider",
+            ("compact", "wardrobe"): "compact_wardrobe",
+            ("folding", "desk"): "folding_desk",
+            ("area", "rug"): "area_rug",
+        }
+        ftype = _tokens[0] if _tokens else "unknown"
+        if len(_tokens) >= 2:
+            pair = (_tokens[0], _tokens[1])
+            if pair in _COMPOUND_PREFIXES:
+                ftype = _COMPOUND_PREFIXES[pair]
         pos_x = float(old.get("pos_x", room_width / 2))
         pos_z = float(old.get("pos_z", room_depth / 2))
         w = float(old.get("width", 1.0))
@@ -536,6 +561,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         total_score: int,
         grade: str,
         remaining_issues: str,
+        kua_line: str = "",
         personality_mode: str = "buddy",
     ) -> LLMResponse:
         """Generate a Thai natural-language explanation of the layout result.
@@ -559,15 +585,10 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         system_prompt = get_system_prompt(personality_mode)
         prompt = EXPLANATION_PROMPT.format(
-            room_type=room_type,
-            width=width,
-            depth=depth,
-            items_summary=items_summary,
-            conflicts_summary=conflicts_summary,
-            repairs_summary=repairs_summary,
             total_score=total_score,
             grade=grade,
             remaining_issues=remaining_issues,
+            kua_line=kua_line,
         )
         messages = [
             SystemMessage(content=system_prompt),
@@ -604,10 +625,11 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         for item in furniture:
             fid = item.get("id", "")
             name = item.get("name", fid)
+            category = item.get("category", fid.split("-")[0] if fid else "")
             clearance = item.get("clearance_front", 0.0)
             clearance_str = f", needs {clearance}m clear in front" if clearance > 0 else ""
             lines.append(
-                f'- furniture_id="{fid}" ({name}): '
+                f'- furniture_id="{fid}" type="{category}" ({name}): '
                 f"{item.get('width')}x{item.get('depth')}m, "
                 f"essential: {item.get('is_essential', False)}"
                 f"{clearance_str}"
@@ -683,19 +705,28 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
         depth: float,
         doors: list[dict[str, Any]],
         furniture_list: list[dict[str, Any]],
+        windows: list[dict[str, Any]] | None = None,
     ) -> str:
         """Build a wall-capacity summary so LLM knows how much space each wall has.
 
         Shows usable length per wall (after subtracting door/window openings) and
         the total furniture width to be distributed. This prevents the LLM from
         stacking multiple large items on the same short wall.
+        Also shows feng shui pre-filtered valid walls for bed/desk/sofa.
         """
-        # Door walls lose ~1.0 m of usable space (door + swing clearance)
+        windows = windows or []
+
         door_walls: set[str] = set()
         for d in doors:
             w = str(d.get("wall", "")).lower()
             if w:
                 door_walls.add(w)
+
+        window_walls: set[str] = set()
+        for win in windows:
+            w = str(win.get("wall", "")).lower()
+            if w:
+                window_walls.add(w)
 
         wall_lengths = {
             "north": width,
@@ -715,12 +746,72 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         lines = ["## Wall Capacity (usable length after doors/windows):"]
         for wall, length in wall_lengths.items():
-            note = " ← DOOR WALL: keep entry area clear" if wall in door_walls else ""
+            tags = []
+            if wall in door_walls:
+                tags.append("DOOR WALL — keep entry area clear")
+            if wall in window_walls:
+                tags.append("WINDOW WALL")
+            note = f" ← {', '.join(tags)}" if tags else ""
             lines.append(f"- {wall.upper()} wall: {length:.1f} m usable{note}")
         lines.append(f"- Total furniture width to distribute: {total_fw:.1f} m across all walls")
         lines.append(
             "- Rule: do NOT assign items to a wall whose combined widths would exceed that wall's usable length."
         )
+        lines.append("")
+
+        # --- Feng shui pre-filter: valid walls per furniture type ---
+        all_walls = {"north", "south", "east", "west"}
+
+        # Bed: must NOT be on door wall or window wall
+        bed_invalid = door_walls | window_walls
+        bed_valid = sorted(all_walls - bed_invalid)
+
+        # Desk: must NOT be on door wall (back to door = bad command position)
+        # prefer walls where occupant faces door when seated
+        desk_invalid = door_walls
+        desk_valid = sorted(all_walls - desk_invalid)
+
+        # Sofa: must NOT be on door wall
+        sofa_valid = sorted(all_walls - door_walls)
+
+        lines.append("## Feng Shui Pre-filtered Valid Walls (MUST follow these constraints):")
+        lines.append(
+            f"- BED valid walls: {bed_valid} "
+            f"(excluded: door walls={sorted(door_walls)}, window walls={sorted(window_walls)})"
+        )
+        lines.append(
+            f"- DESK valid walls: {desk_valid} "
+            f"(excluded: door walls={sorted(door_walls)} — back-to-door violates command position)"
+        )
+        lines.append(
+            f"- SOFA valid walls: {sofa_valid} (excluded: door walls={sorted(door_walls)})"
+        )
+        lines.append(
+            "- IMPORTANT: You MUST choose target_wall from the valid list above for each furniture type. "
+            "Choosing an invalid wall violates feng shui hard rules."
+        )
+        # Predict which wall the bed will actually end up on (command position = opposite door)
+        opp_door = {"north": "south", "south": "north", "east": "west", "west": "east"}
+        primary_door_wall = next(iter(door_walls), "south") if door_walls else "south"
+        bed_target_wall = opp_door.get(primary_door_wall, "north")
+        if bed_target_wall not in all_walls - bed_invalid:
+            # fallback: pick first valid wall
+            bed_target_wall = bed_valid[0] if bed_valid else "north"
+
+        lines.append(
+            f"- BED PLACEMENT HINT: The bed will be placed on the '{bed_target_wall}' wall "
+            f"(command position, opposite the door). "
+            f"Do NOT place desk, sofa, wardrobe, or other large furniture on '{bed_target_wall}' wall "
+            f"— that wall is reserved for the bed."
+        )
+        # Distribute: bed and wardrobe should be on different walls if possible
+        if len(bed_valid) >= 2:
+            other_walls = [w for w in bed_valid if w != bed_target_wall]
+            lines.append(
+                f"- DISTRIBUTION RULE: bed and wardrobe MUST be on DIFFERENT walls. "
+                f"Put wardrobe on '{other_walls[0] if other_walls else bed_valid[-1]}' or another wall. "
+                f"Spread furniture across ALL available walls — do NOT stack multiple large items on the same wall."
+            )
         lines.append("")
         return "\n".join(lines)
 

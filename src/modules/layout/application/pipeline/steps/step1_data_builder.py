@@ -84,6 +84,15 @@ class StructuredDataBuilderStep(BaseStep):
         doors = self._parse_doors(raw.get("doors", []))
         windows = self._parse_windows(raw.get("windows", []))
 
+        for d in doors:
+            logger.info(
+                f"   Door: wall={d.wall.value} offset={d.offset}m width={d.width}m swing_inward={d.swing_inward}"
+            )
+        for w in windows:
+            logger.info(
+                f"   Window: wall={w.wall.value} offset={w.offset}m width={w.width}m height={w.height}m sill={w.sill_height}m"
+            )
+
         room = Room(
             width=dims.get("width", raw.get("width", 4.0)),
             depth=dims.get("depth", raw.get("depth", 3.0)),

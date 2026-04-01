@@ -30,13 +30,17 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # ==========================================================================
-    # LLM Models (via OpenRouter)
+    # LLM Models
     # ==========================================================================
     LLM_MODEL_RAG: str = "anthropic/claude-3.5-sonnet"
     LLM_MODEL_LAYOUT: str = "openai/gpt-4-turbo"
     LLM_MODEL_ROUTER: str = "openai/gpt-4o-mini"
     LLM_TEMPERATURE_RAG: float = 0.7
-    LLM_TEMPERATURE_LAYOUT: float = 0.4
+    LLM_TEMPERATURE_LAYOUT: float = 0.7
+
+    # Layout model can use a different base URL and API key (e.g. local Ollama)
+    LLM_LAYOUT_BASE_URL: str = ""
+    LLM_LAYOUT_API_KEY: str = ""
 
     # ==========================================================================
     # Database Configuration

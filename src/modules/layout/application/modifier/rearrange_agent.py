@@ -21,17 +21,15 @@ from src.modules.layout.application.pipeline.models import (
     SSEEventType,
 )
 from src.modules.layout.application.pipeline.steps.step4_repair import RepairStep
-from src.modules.layout.application.services.furniture_relationships import (
-    build_relationship_hints,
-)
 from src.modules.layout.application.services.layout_resolver import LayoutResolver
+from src.modules.layout.application.services.wall_assigner import WallAssigner
 from src.modules.layout.domain.entities import Room, RoomType
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide, WindowPosition
 from src.modules.layout.infrastructure.llm.langchain_agent import (
     FengShuiLLMAgent,
     LLMConfig,
 )
-from src.modules.layout.infrastructure.llm.prompts import FENG_SHUI_SYSTEM_PROMPT
+from src.modules.layout.infrastructure.tools.furniture_catalog_data import FURNITURE_CATALOG
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +116,9 @@ class RearrangeAgent:
         room_w = float(room_spec.get("width") or dims.get("width") or 4.0)
         room_d = float(room_spec.get("depth") or dims.get("depth") or 4.0)
         room_type = room_spec.get("room_type", "bedroom")
+        logger.info(
+            f"RearrangeAgent: room_spec keys={list(room_spec.keys())} room_w={room_w} room_d={room_d}"
+        )
 
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,
@@ -142,7 +143,7 @@ class RearrangeAgent:
         # Track the exact set of furniture IDs that should appear in the output
         allowed_ids: set[str] = {f["id"] for f in furniture_list}
 
-        # --- 2. Build room feature dicts for LLM ---
+        # --- 2. Build room feature dicts ---
         raw_doors = room_spec.get("doors") or []
         raw_windows = room_spec.get("windows") or []
         doors = [
@@ -168,46 +169,24 @@ class RearrangeAgent:
             data={"step": "rearrange", "message": "Planning feng shui layout...", "progress": 0.40},
         )
 
-        # --- 3. Call LLM to re-plan ---
+        # --- 3. Call LLM to re-plan (simplified: LLM only assigns priority + type) ---
         owned_ids_str = ", ".join(sorted(allowed_ids))
-
-        # Build inter-furniture relationship hints so the LLM knows
-        # TV should face sofa, nightstand beside bed, etc.
-        rel_hints = build_relationship_hints(furniture_list)
-        rel_hints_str = "\n".join(f"- {h}" for h in rel_hints) if rel_hints else ""
-        logger.info(f"RearrangeAgent: {len(rel_hints)} relationship hints generated")
 
         # Detect explicit wall direction in user message (e.g. "ไปฝั่งเหนือทั้งหมด")
         wall_dir = _parse_wall_direction(modification_request)
         logger.info(f"RearrangeAgent: parsed wall_dir={wall_dir!r} from {modification_request!r}")
 
-        wall_constraint = ""
-        if wall_dir:
-            dir_th = _DIR_TH.get(wall_dir, wall_dir)
-            wall_constraint = (
-                f"CRITICAL USER INSTRUCTION: Place ALL furniture against the {wall_dir.upper()} wall. "
-                f'Every item must have target_wall="{wall_dir}" and offset_from_wall=0.05. '
-                f"(User said: place everything toward the {dir_th} side.)"
-            )
-            logger.info(f"RearrangeAgent: injecting wall_constraint={wall_constraint!r}")
-
         hard_constraints = (
-            f"Place ONLY these exact furniture IDs: [{owned_ids_str}]. "
-            "Do NOT add, rename, or invent any furniture not in this list."
+            f"You MUST place ALL {len(furniture_list)} of these furniture IDs — every single one: [{owned_ids_str}]. "
+            "Do NOT skip, drop, or omit any item from the list. "
+            f"Your response MUST contain exactly {len(furniture_list)} placements."
         )
-        if wall_constraint:
-            hard_constraints += f"\n{wall_constraint}"
 
         user_prefs: dict[str, Any] = {
             "user_message": modification_request,
             "owned_furniture": owned_ids_str,
             "placement_constraints": hard_constraints,
         }
-        if rel_hints_str:
-            user_prefs["furniture_relationships"] = (
-                "IMPORTANT — spatial relationships between items (MUST follow these):\n"
-                + rel_hints_str
-            )
 
         llm_response = await self._llm_agent.plan_layout(
             room_type=room_type,
@@ -251,9 +230,7 @@ class RearrangeAgent:
             for item in current_layout
         }
         corrected_placements = []
-        # Alignments to distribute items along the wall when packing everything there
-        _pack_alignments = ["left", "center", "right", "left", "center", "right"]
-        for idx, p in enumerate(placements):
+        for p in placements:
             fid = p.get("furniture_id", "")
             real_dims = dims_by_id.get(fid) or {}
             w = real_dims.get("width") or real_dims.get("w")
@@ -267,14 +244,27 @@ class RearrangeAgent:
                     "l": float(d or w),
                     "h": float(h or 1.0),
                 }
-            # If user explicitly requested a wall direction, force it on every item
-            if wall_dir:
+            # Fill defaults for fields the simplified LLM no longer provides
+            p = dict(p)
+            p.setdefault("target_wall", "center")
+            p.setdefault("alignment", "center")
+            p.setdefault("offset_from_wall", 0.05)
+            corrected_placements.append(p)
+
+        # WallAssigner handles wall placement deterministically
+        # If user explicitly requested a wall direction, override after assignment
+        wall_assigner = WallAssigner()
+        corrected_placements = wall_assigner.assign(corrected_placements, room_spec)
+
+        if wall_dir:
+            _pack_alignments = ["left", "center", "right", "left", "center", "right"]
+            for idx, p in enumerate(corrected_placements):
                 p = dict(p)
                 p["target_wall"] = wall_dir
-                p["offset_from_wall"] = 0.05
-                # Distribute alignments to avoid LLM putting everything at "center"
+                p["offset_from_wall"] = 0.0
                 p["alignment"] = _pack_alignments[idx % len(_pack_alignments)]
-            corrected_placements.append(p)
+                corrected_placements[idx] = p
+
         resolution = self._resolver.resolve(corrected_placements, room_spec)
 
         # --- 4b. Repair collisions with RepairStep shift logic ---
@@ -306,20 +296,160 @@ class RearrangeAgent:
         )
 
         # --- 5. Enrich with metadata from current_layout ---
+        logger.info(
+            "RearrangeAgent: physical before enrich: "
+            + ", ".join(
+                f"{p.get('furniture_id', '?')}=({p.get('pos_x', '?')},{p.get('pos_z', '?')})"
+                for p in physical
+            )
+        )
         enriched = self._enrich_from_current(physical, current_layout)
 
         # Filter to only IDs that were in the original layout (LLM may hallucinate extras)
         enriched = [e for e in enriched if e.get("furniture_id", e.get("id", "")) in allowed_ids]
 
-        # Backfill any items the LLM dropped — keep them at their original position
+        # Backfill any items the LLM dropped — re-resolve paired items so they get
+        # placed beside their anchor; fall back to collision-free shift for others.
+        _DEPENDENT_TYPES = {"chair", "office_chair", "dining_chair", "coffee_table"}
         placed_ids = {e.get("furniture_id", e.get("id", "")) for e in enriched}
         for original in current_layout:
             fid = original.get("furniture_id", original.get("id", ""))
             if fid and fid not in placed_ids:
                 logger.warning(
-                    f"RearrangeAgent: LLM dropped {fid!r} — restoring to original position"
+                    f"RearrangeAgent: LLM dropped {fid!r} — attempting to place collision-free"
                 )
-                enriched.append(original)
+                ftype = (
+                    original.get("furniture_type", original.get("category", ""))
+                    .lower()
+                    .replace("-", "_")
+                )
+
+                # For paired items (chair beside desk, etc.) re-run resolver so
+                # _place_beside_anchor can position and orient it correctly.
+                if ftype in _DEPENDENT_TYPES:
+                    # Build a minimal semantic placement for this item using the
+                    # current wall assignment from the original item.
+                    dims = original.get("dimensions", {})
+                    synthetic_plan = [
+                        {
+                            "furniture_id": fid,
+                            "furniture_type": ftype,
+                            "size": {
+                                "w": float(dims.get("width", 0.6)),
+                                "l": float(dims.get("depth", 0.6)),
+                                "h": float(dims.get("height", 1.0)),
+                            },
+                            "target_wall": original.get("wall", "south"),
+                            "alignment": "center",
+                            "offset_from_wall": 0.05,
+                            "priority": 99,
+                            "orientation": "",
+                            "facing": "",
+                        }
+                    ]
+                    # Include anchor items already placed so resolver can pair them
+                    anchor_plan = []
+                    for e in enriched:
+                        eid = e.get("furniture_id", e.get("id", ""))
+                        etype = (
+                            e.get("furniture_type", e.get("category", "")).lower().replace("-", "_")
+                        )
+                        edims = e.get("dimensions", {})
+                        anchor_plan.append(
+                            {
+                                "furniture_id": eid,
+                                "furniture_type": etype,
+                                "size": {
+                                    "w": float(edims.get("width", 1.0)),
+                                    "l": float(edims.get("depth", 1.0)),
+                                    "h": float(edims.get("height", 1.0)),
+                                },
+                                "target_wall": e.get("wall", "south"),
+                                "alignment": "center",
+                                "offset_from_wall": 0.05,
+                                "priority": 1,
+                                "orientation": "",
+                                "facing": "",
+                            }
+                        )
+                    try:
+                        re_result = self._resolver.resolve(anchor_plan + synthetic_plan, room_spec)
+                        for ph in re_result.physical_placements:
+                            if ph.get("furniture_id", ph.get("id", "")) == fid:
+                                candidate = {**original, **ph}
+                                enriched.append(candidate)
+                                logger.info(
+                                    f"RearrangeAgent: re-resolved {fid!r} via pairing at rot={ph.get('rotation')}"
+                                )
+                                break
+                        else:
+                            enriched.append(dict(original))
+                    except Exception as exc:
+                        logger.warning(
+                            f"RearrangeAgent: re-resolve failed for {fid!r}: {exc} — using original"
+                        )
+                        enriched.append(dict(original))
+                    continue
+
+                # Non-paired items: try original position; shift if colliding
+                room_obj = self._build_room(room_spec)
+                candidate = dict(original)
+                conflict = Conflict(
+                    conflict_type=ConflictType.OVERLAP,
+                    description=f"backfill {fid}",
+                    items_involved=[fid],
+                )
+                repair = RepairStep.__new__(RepairStep)
+                from src.modules.layout.infrastructure.geometry import AABB
+
+                dims = original.get("dimensions", {})
+                rot = original.get("rotation", 0)
+                fw = float(dims.get("width", 1.0))
+                fd = float(dims.get("depth", 1.0))
+                if rot % 360 in (90, 270):
+                    fw, fd = fd, fw
+                orig_box = AABB.from_center_and_size(
+                    original.get("pos_x", 0.0), original.get("pos_z", 0.0), fw, fd
+                )
+
+                def _other_box(e: dict[str, Any]) -> AABB:
+                    ed = e.get("dimensions", {})
+                    ew = float(ed.get("width", 1.0))
+                    efd = float(ed.get("depth", 1.0))
+                    if e.get("rotation", 0) % 360 in (90, 270):
+                        ew, efd = efd, ew
+                    return AABB.from_center_and_size(
+                        e.get("pos_x", 0.0), e.get("pos_z", 0.0), ew, efd
+                    )
+
+                has_collision = any(
+                    orig_box.intersects(_other_box(e))
+                    for e in enriched
+                    if e.get("furniture_id", e.get("id", "")) != fid
+                )
+                if has_collision:
+                    enriched.append(candidate)
+                    action = repair._try_shift(conflict, enriched, room_obj)
+                    if not (action and action.success):
+                        logger.warning(
+                            f"RearrangeAgent: could not find free spot for {fid!r} — using original"
+                        )
+                else:
+                    enriched.append(candidate)
+
+        # Re-center chairs/dependent items on their anchors.
+        # Done after enrich so model_rotation_offset is available for rotation correction.
+        logger.info(
+            "RearrangeAgent: enriched positions before _reanchor_pairs: "
+            + ", ".join(
+                f"{e.get('furniture_id', e.get('id', '?'))}=({e.get('pos_x', 0):.3f},{e.get('pos_z', 0):.3f})"
+                for e in enriched
+            )
+        )
+        _reanchor_repair = RepairStep.__new__(RepairStep)
+        _reanchored = _reanchor_repair._reanchor_pairs(enriched, self._build_room(room_spec))
+        if _reanchored:
+            logger.info(f"RearrangeAgent: re-anchored {_reanchored} dependent item(s)")
 
         yield SSEEvent(
             event_type=SSEEventType.MODIFIER_UPDATED,
@@ -335,6 +465,8 @@ class RearrangeAgent:
             modification_request=modification_request,
             collisions_remaining=len(collisions),
             feng_shui_score=resolution.deterministic_score,
+            room_spec=room_spec,
+            enriched_layout=enriched,
         )
 
         yield SSEEvent(
@@ -403,6 +535,10 @@ class RearrangeAgent:
         for item in physical:
             fid = item.get("furniture_id", item.get("id", ""))
             src = catalog.get(fid, {})
+            logger.info(
+                f"_enrich_from_current: {fid} item.pos_x={item.get('pos_x', 'MISSING')} "
+                f"src.pos_x={src.get('pos_x', 'NONE')} src.keys={list(src.keys())[:8]}"
+            )
             # Use original dimensions from current_layout — Three.js needs pre-rotation
             # dims so that BoxGeometry(w, h, d) + group.rotation gives correct shape.
             # The resolved item's dimensions are post-rotation footprint sizes which
@@ -423,10 +559,27 @@ class RearrangeAgent:
             model_url = src.get("model_url") or item.get("model_url")
             if model_url:
                 enriched["model_url"] = model_url
-            # Preserve model_rotation_offset so renderer knows model's forward direction
-            mro = src.get("model_rotation_offset") or item.get("model_rotation_offset")
-            if mro:
-                enriched["model_rotation_offset"] = int(mro)
+            # Look up model_rotation_offset from catalog by furniture_type
+            ftype = (
+                item.get("furniture_type") or src.get("furniture_type") or src.get("category") or ""
+            )
+            ftype_norm = ftype.lower().replace("-", "_").replace(" ", "_")
+            catalog_entry = next(
+                (
+                    c
+                    for c in FURNITURE_CATALOG
+                    if c.category.value == ftype_norm
+                    or c.id.startswith(ftype_norm)
+                    or ftype_norm.startswith(c.category.value)
+                ),
+                None,
+            )
+            mro = (
+                catalog_entry.model_rotation_offset
+                if catalog_entry is not None
+                else src.get("model_rotation_offset") or item.get("model_rotation_offset", 0)
+            )
+            enriched["model_rotation_offset"] = int(mro) if mro is not None else 0
             result.append(enriched)
         return result
 
@@ -512,27 +665,74 @@ class RearrangeAgent:
         modification_request: str,
         collisions_remaining: int,
         feng_shui_score: int,
+        room_spec: dict[str, Any] | None = None,
+        enriched_layout: list[dict[str, Any]] | None = None,
     ) -> str:
         """Generate a Thai explanation of the rearranged layout."""
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        prompt = (
-            f"You just rearranged ALL {item_count} furniture pieces in a {room_type} "
-            f"({width}m × {depth}m) for feng shui.\n"
-            f'User request: "{modification_request}"\n'
-            f"Feng shui score: {feng_shui_score}/70\n"
-            f"Remaining collisions: {collisions_remaining}\n\n"
-            "Write a short confirmation in Thai (60–100 words) that:\n"
-            "1. Confirms ALL furniture has been rearranged for feng shui\n"
-            "2. Mentions the key feng shui principle applied (command position, chi flow, etc.)\n"
-            "3. States the feng shui score briefly\n"
-            "4. If collisions remain, mention it\n"
-            "Write in plain, warm Thai prose only. No JSON, no bullet lists."
+        from src.modules.layout.application.agent.personality import get_system_prompt
+        from src.modules.layout.application.services.kua_calculator import (
+            calculate_kua,
+            detect_kua_priority,
+            kua_best_direction_info,
         )
+        from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT
+
+        # Build kua_line — pre-rendered Thai text, no LLM logic needed
+        kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"
+        if room_spec:
+            user_prefs = room_spec.get("user_preferences") or {}
+            birth_year = user_prefs.get("birth_year")
+            gender = user_prefs.get("gender", "")
+            logger.info(f"RearrangeAgent: _generate_explanation user_prefs={user_prefs!r}")
+            if birth_year and gender:
+                try:
+                    kua = calculate_kua(int(birth_year), gender)
+                    priority = detect_kua_priority(modification_request)
+                    info = kua_best_direction_info(kua, priority)
+                    # Find actual bed wall from enriched layout
+                    actual_bed_wall = None
+                    if enriched_layout:
+                        actual_bed_wall = next(
+                            (
+                                e.get("wall") or e.get("target_wall")
+                                for e in enriched_layout
+                                if (e.get("category") or "").lower() in ("bed", "sofa_bed")
+                                or "bed" in (e.get("furniture_id") or "").lower()
+                            ),
+                            None,
+                        )
+                    _wall_th = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก"}
+                    if actual_bed_wall and actual_bed_wall != info["wall"]:
+                        actual_wall_th = _wall_th.get(actual_bed_wall, actual_bed_wall)
+                        kua_line = (
+                            f"อยากเสริม{info['benefit']} แต่ทิศ{info['wall_th']}ติดประตู "
+                            f"จึงจัดหัวเตียงไว้ทิศ{actual_wall_th}ซึ่งเป็นทิศมงคลรองของเลขกัว {kua} แทน"
+                        )
+                    else:
+                        kua_line = f"หัวเตียงหันทิศ{info['wall_th']}ตามเลขกัว {kua} เสริม{info['benefit']}ให้คุณโดยตรง"
+                except Exception as e:
+                    logger.warning(f"RearrangeAgent: kua_line build failed: {e}")
+
+        logger.info(f"RearrangeAgent: kua_line={kua_line!r}")
+
+        grade = "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
+
+        prompt = EXPLANATION_PROMPT.format(
+            total_score=feng_shui_score,
+            grade=grade,
+            remaining_issues="ไม่มี"
+            if collisions_remaining == 0
+            else f"{collisions_remaining} จุดชนกัน",
+            kua_line=kua_line,
+        )
+
         try:
+            system_prompt = get_system_prompt("buddy")
             response = await self._llm_agent._llm.ainvoke(
                 [
-                    SystemMessage(content=FENG_SHUI_SYSTEM_PROMPT),
+                    SystemMessage(content=system_prompt),
                     HumanMessage(content=prompt),
                 ]
             )

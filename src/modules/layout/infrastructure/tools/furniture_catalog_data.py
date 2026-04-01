@@ -437,6 +437,7 @@ OFFICE_FURNITURE: list[CatalogFurniture] = [
         is_essential=True,
         feng_shui_element="metal",
         placement_notes="Pair with desk, back should face wall",
+        model_rotation_offset=180,
     ),
     # Filing Cabinets
     CatalogFurniture(

@@ -141,9 +141,11 @@ class PipelineOrchestrator:
                 async for event in steps["repair"].execute(state):
                     yield event
 
-                # If all conflicts resolved after repair, no need to re-check
-                if not state.unresolved_conflicts:
-                    break
+                # Always re-run Step 3 after repair to catch NEW collisions
+                # introduced by shifting furniture (e.g., item A shifted onto
+                # item C that was not involved in the original conflict).
+                # The loop naturally breaks at the top if Step 3 finds zero
+                # unresolved conflicts.
 
             # Step 5: Explainer
             async for event in steps["explainer"].execute(state):
