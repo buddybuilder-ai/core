@@ -25,14 +25,12 @@ _RAG_PIPELINE = Path(__file__).resolve().parents[5] / "rag_pipeline"
 if str(_RAG_PIPELINE) not in sys.path:
     sys.path.insert(0, str(_RAG_PIPELINE))
 
-from rag_constants import (  # noqa: E402
-    BEDROOM_KEYWORDS,
-    DOMAIN_KEYWORDS,
-    EXCLUDE_KEYWORDS,
-    MODE_ADDITIONS as _MODE_ADDITIONS,
-    OUT_OF_SCOPE_MSG,
-    SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE,
-)
+from rag_constants import BEDROOM_KEYWORDS  # noqa: E402, I001
+from rag_constants import DOMAIN_KEYWORDS  # noqa: E402
+from rag_constants import EXCLUDE_KEYWORDS  # noqa: E402
+from rag_constants import MODE_ADDITIONS as _MODE_ADDITIONS  # noqa: E402
+from rag_constants import OUT_OF_SCOPE_MSG  # noqa: E402
+from rag_constants import SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE  # noqa: E402
 
 
 class FengShuiRAGService:
@@ -128,7 +126,7 @@ class FengShuiRAGService:
                 matched_exclude = next(kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower)
                 print(f"  [RAG] Layer 0 ❌  non-bedroom room: \"{matched_exclude}\" (no bedroom keyword)")
                 return False
-            print(f"  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
+            print("  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
 
         # Sub-layer 1: exact keyword match (collect all for debug visibility)
         exact_matches = [kw for kw in DOMAIN_KEYWORDS if kw.lower() in q_lower]
@@ -152,7 +150,7 @@ class FengShuiRAGService:
                         print(f"  [RAG] Layer 1 ✅  history context match: \"{kw}\"")
                         return True
 
-        print(f"  [RAG] Layer 1 ❌  no domain keywords found")
+        print("  [RAG] Layer 1 ❌  no domain keywords found")
         return False
 
     # ------------------------------------------------------------------
@@ -188,7 +186,7 @@ class FengShuiRAGService:
         # Layer 2
         vs = self._ensure_vectorstore()
         if vs is None:
-            print(f"  [RAG] Layer 2 ⚠️  vectorstore unavailable — allowing query")
+            print("  [RAG] Layer 2 ⚠️  vectorstore unavailable — allowing query")
             return True
 
         try:
@@ -365,7 +363,7 @@ class FengShuiRAGService:
         # --- Relevance guard (mirrors ConversationRAGChain._check_relevance) ---
         if not self._check_relevance(question, history):
             logger.info("FengShuiRAGService: out-of-scope → %r", question[:60])
-            print(f"  [RAG] OUT_OF_SCOPE — returning default message")
+            print("  [RAG] OUT_OF_SCOPE — returning default message")
             return OUT_OF_SCOPE_MSG, []
 
         # --- Detect mixed-room question: inject hard constraint into user message ---

@@ -396,7 +396,7 @@ class ChromaDbRagSearchTool(BaseRagSearchTool):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _ensure_vectorstore(self) -> "Chroma":
+    def _ensure_vectorstore(self) -> Chroma:
         """Load the vectorstore on first use (lazy initialisation)."""
         if self._vectorstore is None:
             from src.modules.layout.infrastructure.vectorstore_service import (
@@ -428,7 +428,7 @@ class ChromaDbRagSearchTool(BaseRagSearchTool):
             return True
 
     @staticmethod
-    def _doc_to_result(doc: "object", score: float, index: int) -> RuleSearchResult:
+    def _doc_to_result(doc: object, score: float, index: int) -> RuleSearchResult:
         """Convert a LangChain Document to a RuleSearchResult.
 
         Because ChromaDB documents come from raw text chunks (not structured
