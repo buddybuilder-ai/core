@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _get_embeddings(model_name: str) -> "Embeddings":
+def _get_embeddings(model_name: str) -> Embeddings:
     """Build a HuggingFaceEmbeddings instance, auto-selecting GPU/CPU.
 
     Args:

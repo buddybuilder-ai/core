@@ -133,9 +133,6 @@ class Settings(BaseSettings):
     # ==========================================================================
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
 
-    def __init__(self, **data: object) -> None:
-        super().__init__(**data)
-
 
 @lru_cache
 def get_settings() -> Settings:
