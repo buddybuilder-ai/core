@@ -126,7 +126,7 @@ def process_with_elevation(img_path, output_json, user_h):
         for box in result.boxes:
             label = yolo_model.names[int(box.cls[0])]
             conf = float(box.conf[0])
-            if conf < 0.1: 
+            if conf < 0.1:
                 continue
 
             x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -150,9 +150,9 @@ def process_with_elevation(img_path, output_json, user_h):
 
             if label in STANDARD_LIMITS:
                 limits = STANDARD_LIMITS[label]
-                if w_m > limits["max_w"]: 
+                if w_m > limits["max_w"]:
                     w_m = limits["max_w"]
-                if h_m > limits["max_h"]: 
+                if h_m > limits["max_h"]:
                     h_m = limits["max_h"]
                 if limits["default_elevation"] == 0 and elevation_m < 0.3:
                     elevation_m = 0.0
