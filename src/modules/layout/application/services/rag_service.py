@@ -53,6 +53,7 @@ class FengShuiRAGService:
         self._vectorstore: Any = None
         self._retriever: Any = None
         from src.config.settings import get_settings
+
         s = get_settings()
         # อ่านจาก RAG_RELEVANCE_THRESHOLD ใน .env (default 1.0 = รับทุกคำถามใน domain)
         self.RELEVANCE_THRESHOLD: float = s.RAG_RELEVANCE_THRESHOLD
@@ -78,7 +79,9 @@ class FengShuiRAGService:
                     search_type=settings.RAG_SEARCH_TYPE,
                     search_kwargs={"k": settings.RAG_TOP_K},
                 )
-                logger.info("FengShuiRAGService: vectorstore loaded from %s", settings.CHROMA_DB_PATH)
+                logger.info(
+                    "FengShuiRAGService: vectorstore loaded from %s", settings.CHROMA_DB_PATH
+                )
             except Exception as exc:
                 logger.warning("FengShuiRAGService: could not load vectorstore (%s)", exc)
         return self._vectorstore
@@ -124,7 +127,9 @@ class FengShuiRAGService:
             has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
             if not has_bedroom:
                 matched_exclude = next(kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower)
-                print(f"  [RAG] Layer 0 ❌  non-bedroom room: \"{matched_exclude}\" (no bedroom keyword)")
+                print(
+                    f'  [RAG] Layer 0 ❌  non-bedroom room: "{matched_exclude}" (no bedroom keyword)'
+                )
                 return False
             print("  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
 
@@ -135,7 +140,9 @@ class FengShuiRAGService:
             return True
 
         # Sub-layer 2: fuzzy match on long keywords
-        fuzzy_matches = [kw for kw in DOMAIN_KEYWORDS if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower())]
+        fuzzy_matches = [
+            kw for kw in DOMAIN_KEYWORDS if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower())
+        ]
         if fuzzy_matches:
             print(f"  [RAG] Layer 1 ✅  fuzzy match: {fuzzy_matches}")
             return True
@@ -147,7 +154,7 @@ class FengShuiRAGService:
                 combined = turn.get("content", "").lower()
                 for kw in DOMAIN_KEYWORDS:
                     if kw.lower() in combined:
-                        print(f"  [RAG] Layer 1 ✅  history context match: \"{kw}\"")
+                        print(f'  [RAG] Layer 1 ✅  history context match: "{kw}"')
                         return True
 
         print("  [RAG] Layer 1 ❌  no domain keywords found")
@@ -171,16 +178,19 @@ class FengShuiRAGService:
         Returns True if question is in scope, False to skip LLM.
         """
         from src.config.settings import get_settings
+
         settings = get_settings()
         top_k = settings.RAG_TOP_K
 
-        print(f"\n{'─'*60}")
-        print(f"  [RAG] Question: \"{question[:80]}\"")
-        print(f"  [RAG] Threshold={self.RELEVANCE_THRESHOLD}  TOP_K={top_k}  Fuzzy≤{self.FUZZY_MATCH_THRESHOLD}")
+        print(f"\n{'─' * 60}")
+        print(f'  [RAG] Question: "{question[:80]}"')
+        print(
+            f"  [RAG] Threshold={self.RELEVANCE_THRESHOLD}  TOP_K={top_k}  Fuzzy≤{self.FUZZY_MATCH_THRESHOLD}"
+        )
 
         # Layer 1
         if not self._has_domain_keywords(question, conversation_history):
-            print(f"  [RAG] → BLOCKED (Layer 1 failed)\n{'─'*60}")
+            print(f"  [RAG] → BLOCKED (Layer 1 failed)\n{'─' * 60}")
             return False
 
         # Layer 2
@@ -192,22 +202,24 @@ class FengShuiRAGService:
         try:
             docs_with_scores = vs.similarity_search_with_score(question, k=top_k)
             if not docs_with_scores:
-                print(f"  [RAG] Layer 2 ❌  no documents found\n{'─'*60}")
+                print(f"  [RAG] Layer 2 ❌  no documents found\n{'─' * 60}")
                 return False
 
-            print(f"  [RAG] Layer 2 — L2 Similarity Scores (threshold ≤ {self.RELEVANCE_THRESHOLD}):")
+            print(
+                f"  [RAG] Layer 2 — L2 Similarity Scores (threshold ≤ {self.RELEVANCE_THRESHOLD}):"
+            )
             for i, (doc, score) in enumerate(docs_with_scores, 1):
                 status = "✅" if score <= self.RELEVANCE_THRESHOLD else "❌"
                 src = doc.metadata.get("source", "?").split("/")[-1]
                 preview = doc.page_content[:60].replace("\n", " ")
                 print(f"    [{i}] L2={score:.4f} {status}  src={src}")
-                print(f"        \"{preview}...\"")
+                print(f'        "{preview}..."')
 
             best_score: float = docs_with_scores[0][1]
             is_relevant = best_score <= self.RELEVANCE_THRESHOLD
             verdict = "✅ PASS → ส่ง LLM" if is_relevant else "❌ BLOCKED"
             print(f"  [RAG] Best={best_score:.4f} → {verdict}")
-            print(f"{'─'*60}")
+            print(f"{'─' * 60}")
             return is_relevant
         except Exception as exc:
             logger.warning("RAG L2 relevance check failed (%s) — allowing query", exc)
@@ -248,9 +260,7 @@ class FengShuiRAGService:
                 content = doc.page_content.strip()
                 # Format matches feng-shui-rag format_documents() style
                 formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
-                source_docs.append(
-                    {"content": content[:400], "metadata": dict(doc.metadata)}
-                )
+                source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
 
             context = "\n\n---\n\n".join(formatted_parts)
             return context, source_docs
@@ -291,9 +301,7 @@ class FengShuiRAGService:
                     i += 2
                 else:
                     i += 1
-                formatted.append(
-                    f"รอบที่ {turn_num}:\nคุณถาม: {human_msg}\nผมตอบ: {ai_msg}"
-                )
+                formatted.append(f"รอบที่ {turn_num}:\nคุณถาม: {human_msg}\nผมตอบ: {ai_msg}")
                 turn_num += 1
             else:
                 i += 1
@@ -320,9 +328,7 @@ class FengShuiRAGService:
         context_text = context if context else "[ไม่มีข้อมูลเพิ่มเติมจากฐานความรู้]"
 
         user_content = (
-            f"[บทสนทนาก่อนหน้า]\n{history_text}\n\n"
-            f"[ข้อมูลอ้างอิง]\n{context_text}\n\n"
-            f"[คำถาม]\n{question}"
+            f"[บทสนทนาก่อนหน้า]\n{history_text}\n\n[ข้อมูลอ้างอิง]\n{context_text}\n\n[คำถาม]\n{question}"
         )
 
         return [
