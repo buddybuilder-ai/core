@@ -48,7 +48,7 @@ STANDARD_LIMITS = {
     "chair": {"max_w": 0.8, "max_h": 1.1, "default_elevation": 0.0},
     "wardrobe": {"max_w": 2.5, "max_h": 2.2, "default_elevation": 0.0},
     "air conditioner": {"max_w": 1.2, "max_h": 0.5, "default_elevation": 2.0},
-    "table": {"max_w": 2.0, "max_h": 0.8, "default_elevation": 0.0}
+    "table": {"max_w": 2.0, "max_h": 0.8, "default_elevation": 0.0},
 }
 
 # --- 2. LOAD MODELS ---
@@ -60,40 +60,65 @@ zoe_model = torch.hub.load(repo, "ZoeD_N", pretrained=False, trust_repo=True)
 checkpoint_path = os.path.expanduser("~/.cache/torch/hub/checkpoints/ZoeD_M12_N.pt")
 
 if os.path.exists(checkpoint_path):
-    state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     zoe_model.load_state_dict(state_dict, strict=False)
 else:
     print("❌ Warning: ZoeDepth checkpoint not found. Model might not work correctly.")
 
 for _, module in zoe_model.named_modules():
-    if module.__class__.__name__ == 'Block' and not hasattr(module, 'drop_path'):
-        module.drop_path = getattr(module, 'drop_path1', nn.Identity())
+    if module.__class__.__name__ == "Block" and not hasattr(module, "drop_path"):
+        module.drop_path = getattr(module, "drop_path1", nn.Identity())
 
 zoe_model.to("cpu").eval()
-yolo_model = YOLOWorld('yolov8s-world.pt')
+yolo_model = YOLOWorld("yolov8s-world.pt")
 # --- แก้ไขส่วน set_classes ใน detect_objects_2.py ---
-yolo_model.set_classes([
-    # โซนนอน (Sleeping Zone)
-    "bed", "bunk bed", "bed frame", "sofa bed", "nightstand", "dresser",
+yolo_model.set_classes(
+    [
+        # โซนนอน (Sleeping Zone)
+        "bed",
+        "bunk bed",
+        "bed frame",
+        "sofa bed",
+        "nightstand",
+        "dresser",
+        # โซนนั่งเล่น (Living Zone)
+        "sofa",
+        "armchair",
+        "coffee table",
+        "tv stand",
+        "room divider",
+        # โซนทำงาน & ออฟฟิศ (Working/Office Zone)
+        "desk",
+        "computer desk",
+        "folding desk",
+        "chair",
+        "office chair",
+        "filing cabinet",
+        # โซนทานอาหาร (Dining Zone)
+        "dining table",
+        "compact dining",
+        "dining chair",
+        "sideboard",
+        # โซนครัว (Kitchen Zone)
+        "kitchen counter",
+        "mini fridge",
+        "microwave stand",
+        # เก็บของ (Storage)
+        "wardrobe",
+        "compact wardrobe",
+        "bookshelf",
+        "shelf",
+        "shoe cabinet",
+        "coat rack",
+        # เครื่องตกแต่ง & ทั่วไป (Decor/General)
+        "plant",
+        "lamp",
+        "rug",
+        "door",
+        "monitor",
+    ]
+)
 
-    # โซนนั่งเล่น (Living Zone)
-    "sofa", "armchair", "coffee table", "tv stand", "room divider",
-
-    # โซนทำงาน & ออฟฟิศ (Working/Office Zone)
-    "desk", "computer desk", "folding desk", "chair", "office chair", "filing cabinet",
-
-    # โซนทานอาหาร (Dining Zone)
-    "dining table", "compact dining", "dining chair", "sideboard",
-
-    # โซนครัว (Kitchen Zone)
-    "kitchen counter", "mini fridge", "microwave stand",
-
-    # เก็บของ (Storage)
-    "wardrobe", "compact wardrobe", "bookshelf", "shelf", "shoe cabinet", "coat rack",
-
-    # เครื่องตกแต่ง & ทั่วไป (Decor/General)
-    "plant", "lamp", "rug", "door", "monitor"
-])
 
 # --- 3. PROCESSING FUNCTION ---
 def process_with_elevation(img_path, output_json, user_h):
@@ -115,8 +140,8 @@ def process_with_elevation(img_path, output_json, user_h):
     x_scale = w_depth / w_img
     y_scale = h_depth / h_img
 
-    dist_to_floor = float(np.median(depth_map[-20:, w_depth//2]))
-    dist_to_ceiling = float(np.median(depth_map[:20, w_depth//2]))
+    dist_to_floor = float(np.median(depth_map[-20:, w_depth // 2]))
+    dist_to_ceiling = float(np.median(depth_map[:20, w_depth // 2]))
     raw_ai_height = dist_to_floor + dist_to_ceiling
     scale_factor = user_h / raw_ai_height if raw_ai_height > 0 else 1.0
     cam_height = user_h / 2
@@ -157,15 +182,17 @@ def process_with_elevation(img_path, output_json, user_h):
                 if limits["default_elevation"] == 0 and elevation_m < 0.3:
                     elevation_m = 0.0
 
-            objects_3d.append({
-                "label": label,
-                "confidence": round(conf, 2),
-                "width_m": round(w_m, 2),
-                "height_m": round(h_m, 2),
-                "elevation_m": round(elevation_m, 2),
-                "distance_m": round(real_dist, 2),
-                "center_pixel": [cx_orig, cy_orig]
-            })
+            objects_3d.append(
+                {
+                    "label": label,
+                    "confidence": round(conf, 2),
+                    "width_m": round(w_m, 2),
+                    "height_m": round(h_m, 2),
+                    "elevation_m": round(elevation_m, 2),
+                    "distance_m": round(real_dist, 2),
+                    "center_pixel": [cx_orig, cy_orig],
+                }
+            )
             print(f"✅ Found {label:15}: {w_m:.2f}x{h_m:.2f}m at {elevation_m:.2f}m")
 
     final_data = {
@@ -174,13 +201,13 @@ def process_with_elevation(img_path, output_json, user_h):
         "room_summary": {
             "applied_height_m": user_h,
             "scale_factor": round(scale_factor, 2),
-            "total_objects": len(objects_3d)
+            "total_objects": len(objects_3d),
         },
         "objects": objects_3d,
-        "status": "success"
+        "status": "success",
     }
 
-    with open(output_json, 'w', encoding='utf-8') as f:
+    with open(output_json, "w", encoding="utf-8") as f:
         json.dump(final_data, f, indent=4)
     print(f"\n✨ DONE! Data saved to: {output_json}")
 

@@ -16,7 +16,11 @@ os.makedirs(assets_dir, exist_ok=True)
 
 try:
     TARGET_HEIGHT = float(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_HEIGHT
-    INPUT_IMAGE_PATH = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(assets_dir, "my_room_2.jpg")
+    INPUT_IMAGE_PATH = (
+        os.path.abspath(sys.argv[2])
+        if len(sys.argv) > 2
+        else os.path.join(assets_dir, "my_room_2.jpg")
+    )
 except Exception:
     TARGET_HEIGHT = DEFAULT_HEIGHT
     INPUT_IMAGE_PATH = os.path.join(assets_dir, "my_room_2.jpg")
@@ -27,7 +31,7 @@ STANDARD_LIMITS = {
     "chair": {"max_w": 0.9, "max_h": 1.2, "default_elevation": 0.0},
     "sofa": {"max_w": 3.0, "max_h": 1.0, "default_elevation": 0.0},
     "wardrobe": {"max_w": 2.5, "max_h": 2.4, "default_elevation": 0.0},
-    "monitor": {"max_w": 1.2, "max_h": 0.8, "default_elevation": 0.7}
+    "monitor": {"max_w": 1.2, "max_h": 0.8, "default_elevation": 0.7},
 }
 
 # --- 2. LOAD SOTA MODELS ---
@@ -35,11 +39,14 @@ print(f"🚀 Upgrading Engine to SOTA | Root: {BASE_DIR}")
 
 # A. Load Depth Anything V2 (แทนที่ ZoeDepth)
 # หมายเหตุ: ในปี 2026 เราใช้รุ่น v2 ที่เล็กและแม่นยำกว่า
-depth_model = torch.hub.load("depth-anything/Depth-Anything-V2", "depth_anything_v2_vits", pretrained=True, trust_repo=True)
+depth_model = torch.hub.load(
+    "depth-anything/Depth-Anything-V2", "depth_anything_v2_vits", pretrained=True, trust_repo=True
+)
 depth_model.to("cpu").eval()
 
 # B. Load YOLOv11 (แทนที่ v8-world เพื่อความเป๊ะของ Box ในงาน Indoor)
-yolo_model = YOLO('yolov8s-world.pt')
+yolo_model = YOLO("yolov8s-world.pt")
+
 
 # --- 3. PROCESSING FUNCTION ---
 def process_room_3d(img_path, output_json, user_h):
@@ -64,8 +71,8 @@ def process_room_3d(img_path, output_json, user_h):
 
     # 3. Calibration (คำนวณ Scale Factor จากพื้นและเพดาน)
     # ใช้ค่าเฉลี่ยของส่วนล่าง (พื้น) และส่วนบน (เพดาน) ของภาพ
-    floor_region = depth_map[int(h_img*0.9):, :]
-    ceiling_region = depth_map[:int(h_img*0.1), :]
+    floor_region = depth_map[int(h_img * 0.9) :, :]
+    ceiling_region = depth_map[: int(h_img * 0.1), :]
 
     avg_floor_depth = np.median(floor_region)
     avg_ceiling_depth = np.median(ceiling_region)
@@ -86,12 +93,12 @@ def process_room_3d(img_path, output_json, user_h):
             cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
 
             # ดึงค่าความลึกตรงจุดกึ่งกลางวัตถุ
-            rel_depth = depth_map[min(cy, h_img-1), min(cx, w_img-1)]
+            rel_depth = depth_map[min(cy, h_img - 1), min(cx, w_img - 1)]
             real_dist = rel_depth * scale_factor
 
             # คำนวณขนาดวัตถุโดยใช้ Field of View (FOV) ประมาณการ
             # สูตร: Width = (Pixel_Width / Image_Width) * 2 * Distance * tan(FOV/2)
-            fov_h_rad = np.deg2rad(60) # สมมติ FOV กล้องมือถือทั่วไปที่ 60 องศา
+            fov_h_rad = np.deg2rad(60)  # สมมติ FOV กล้องมือถือทั่วไปที่ 60 องศา
             w_m = ((x2 - x1) / w_img) * 2 * real_dist * np.tan(fov_h_rad / 2)
             h_m = ((y2 - y1) / h_img) * 2 * real_dist * np.tan(fov_h_rad / 2)
 
@@ -108,15 +115,17 @@ def process_room_3d(img_path, output_json, user_h):
                 if elevation_m < 0.2 and lim["default_elevation"] == 0:
                     elevation_m = 0.0
 
-            objects_3d.append({
-                "label": label,
-                "confidence": round(conf, 2),
-                "width_m": round(w_m, 2),
-                "height_m": round(h_m, 2),
-                "elevation_m": round(elevation_m, 2),
-                "distance_m": round(real_dist, 2),
-                "position_px": [cx, cy]
-            })
+            objects_3d.append(
+                {
+                    "label": label,
+                    "confidence": round(conf, 2),
+                    "width_m": round(w_m, 2),
+                    "height_m": round(h_m, 2),
+                    "elevation_m": round(elevation_m, 2),
+                    "distance_m": round(real_dist, 2),
+                    "position_px": [cx, cy],
+                }
+            )
             print(f"📦 {label:15} | Size: {w_m:.2f}x{h_m:.2f}m | Elev: {elevation_m:.2f}m")
 
     # --- 4. SAVE OUTPUT ---
@@ -125,12 +134,13 @@ def process_room_3d(img_path, output_json, user_h):
         "student_id": "66073169",
         "metadata": {"engine": "DepthAnythingV2+YOLO11", "room_h": user_h},
         "objects": objects_3d,
-        "status": "success"
+        "status": "success",
     }
 
-    with open(output_json, 'w', encoding='utf-8') as f:
+    with open(output_json, "w", encoding="utf-8") as f:
         json.dump(final_output, f, indent=4)
     print(f"\n✨ Processed {len(objects_3d)} objects. Saved to {output_json}")
+
 
 # RUN
 output_json_path = os.path.join(assets_dir, "my_room_2_data.json")

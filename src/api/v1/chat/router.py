@@ -111,7 +111,11 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
         ).to_sse()
 
         if result.intent == "set_mode":
-            new_mode = result.extracted_params.get("mode") or detect_mode_switch(request.message) or "buddy"
+            new_mode = (
+                result.extracted_params.get("mode")
+                or detect_mode_switch(request.message)
+                or "buddy"
+            )
             yield SSEEvent(
                 event_type=SSEEventType.MODE_CHANGED,
                 data={"mode": new_mode},
@@ -219,24 +223,15 @@ async def _answer_question(message: str, mode: str, mood: str = "neutral") -> st
 def _get_default_system_prompt(mode: str) -> str:
     """Get default system prompt based on chat mode."""
     prompts = {
-        "mentor": (
-            "You are a professional feng shui master and interior designer. Thai tone."
-        ),
-        "buddy": (
-            "You are a friendly interior design assistant. Thai tone."
-        ),
-        "fun": (
-            "You are an energetic, fun design buddy. Thai tone."
-        ),
+        "mentor": ("You are a professional feng shui master and interior designer. Thai tone."),
+        "buddy": ("You are a friendly interior design assistant. Thai tone."),
+        "fun": ("You are an energetic, fun design buddy. Thai tone."),
     }
     return prompts.get(mode, prompts["buddy"])
 
 
 @router.post("/process-single-image")
-async def process_single_image(
-    image: UploadFile = File(...),
-    target_height: str = Form("2.5")
-):
+async def process_single_image(image: UploadFile = File(...), target_height: str = Form("2.5")):
     """API for processing a single image with AI to detect 3D objects."""
     # 1. ระบุพาธ Root ของโปรเจกต์
     base_dir = os.path.abspath(os.getcwd())
@@ -251,13 +246,12 @@ async def process_single_image(
 
     # 3. สั่งรัน AI Script (detect_objects_2.py)
     try:
-
         print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
 
         # 4. อ่านไฟล์ JSON ที่ AI สร้างขึ้นใน assets
         json_path = os.path.join(assets_dir, "my_room_2_data.json")
         if os.path.exists(json_path):
-            with open(json_path, encoding='utf-8') as f:
+            with open(json_path, encoding="utf-8") as f:
                 return json.load(f)
 
         return {"status": "error", "message": "AI completed but JSON output was not found"}
