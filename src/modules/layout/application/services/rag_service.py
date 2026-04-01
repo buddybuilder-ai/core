@@ -405,16 +405,15 @@ class FengShuiRAGService:
         if provider == "ollama":
             url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
             headers = {"Content-Type": "application/json"}
-            print(f"  [RAG] LLM: Ollama ({model})")
+            provider_label = f"Ollama ({model})"
         elif provider == "groq":
             url = f"{settings.GROQ_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.GROQ_API_KEY}",
                 "Content-Type": "application/json",
             }
-            print(f"  [RAG] LLM: Groq ({model})")
+            provider_label = f"Groq ({model})"
         else:
-            # openrouter หรือ provider อื่น
             url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
@@ -422,7 +421,15 @@ class FengShuiRAGService:
                 "HTTP-Referer": "https://buddybuilder.ai",
                 "X-Title": "BuddyBuilder AI",
             }
-            print(f"  [RAG] LLM: OpenRouter ({model})")
+            provider_label = f"OpenRouter ({model})"
+
+        print(
+            f"\n  ┌─ RAG → LLM Call ───────────────────────────────────\n"
+            f"  │  Model      : {provider_label}\n"
+            f"  │  Temperature: {settings.LLM_TEMPERATURE_RAG}\n"
+            f"  │  Threshold  : {self.RELEVANCE_THRESHOLD} (L2)  TOP_K={settings.RAG_TOP_K}\n"
+            f"  └────────────────────────────────────────────────────"
+        )
 
         try:
             async with httpx.AsyncClient() as client:
