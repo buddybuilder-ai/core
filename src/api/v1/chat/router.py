@@ -361,6 +361,36 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     )
 
 
+@router.post("/rag")
+async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
+    """RAG-only chat endpoint — ตอบคำถามฮวงจุ้ยโดยตรง ไม่ผ่าน router agent และไม่สร้าง layout.
+
+    ใช้สำหรับหน้า Chatbot โดยเฉพาะ.
+    """
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        answer = await _answer_question(
+            request.message,
+            request.mode,
+            "neutral",
+            request.conversation_history,
+        )
+        yield SSEEvent(
+            event_type=SSEEventType.ANSWER,
+            data={"answer": answer},
+        ).to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 async def _answer_question(
     message: str,
     mode: str,
