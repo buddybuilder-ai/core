@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     LLM_MODEL_ROUTER: str = "openai/gpt-4o-mini"
     LLM_TEMPERATURE_LAYOUT: float = 0.4
     LLM_LAYOUT_BASE_URL: str = ""
+    LLM_LAYOUT_API_KEY: str = ""
 
     # ==========================================================================
     # Database Configuration
