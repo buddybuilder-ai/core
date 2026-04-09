@@ -465,7 +465,6 @@ class RearrangeAgent:
             item_count=len(enriched),
             modification_request=modification_request,
             collisions_remaining=len(collisions),
-            feng_shui_score=resolution.deterministic_score,
             room_spec=room_spec,
             enriched_layout=enriched,
         )
@@ -665,7 +664,6 @@ class RearrangeAgent:
         item_count: int,
         modification_request: str,
         collisions_remaining: int,
-        feng_shui_score: int,
         room_spec: dict[str, Any] | None = None,
         enriched_layout: list[dict[str, Any]] | None = None,
     ) -> str:
@@ -718,11 +716,31 @@ class RearrangeAgent:
 
         logger.info(f"RearrangeAgent: kua_line={kua_line!r}")
 
-        grade = "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
+        # Build layout summary so LLM knows what was placed where
+        _wall_th = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก"}
+        _name_th: dict[str, str] = {
+            "bed": "เตียง", "sofa_bed": "โซฟาเบด", "sofa": "โซฟา",
+            "nightstand": "โต๊ะข้างเตียง", "wardrobe": "ตู้เสื้อผ้า",
+            "compact_wardrobe": "ตู้เสื้อผ้า", "desk": "โต๊ะทำงาน",
+            "office_chair": "เก้าอี้", "dining_table": "โต๊ะอาหาร",
+            "dining_chair": "เก้าอี้กินข้าว", "coat_rack": "ราวแขวนเสื้อ",
+            "shoe_cabinet": "ตู้รองเท้า", "tv_stand": "ตู้ทีวี",
+            "bookshelf": "ชั้นหนังสือ", "coffee_table": "โต๊ะกลาง",
+        }
+        layout_summary = ""
+        if enriched_layout:
+            lines = []
+            for e in enriched_layout:
+                ftype = (e.get("furniture_type") or e.get("category") or "").lower().replace("-", "_")
+                name = _name_th.get(ftype) or e.get("name") or ftype
+                wall = e.get("wall") or e.get("target_wall") or ""
+                wall_th = _wall_th.get(wall, wall)
+                if wall_th:
+                    lines.append(f"- {name}: ผนัง{wall_th}")
+            layout_summary = "\n".join(lines) if lines else "ไม่มีข้อมูล"
 
         prompt = EXPLANATION_PROMPT.format(
-            total_score=feng_shui_score,
-            grade=grade,
+            layout_summary=layout_summary,
             remaining_issues="ไม่มี"
             if collisions_remaining == 0
             else f"{collisions_remaining} จุดชนกัน",
@@ -740,10 +758,4 @@ class RearrangeAgent:
             return str(response.content).strip()
         except Exception as exc:
             logger.warning(f"RearrangeAgent: explanation LLM call failed: {exc}")
-            score_label = (
-                "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
-            )
-            return (
-                f"จัดวางเฟอร์นิเจอร์ทั้งหมดใหม่ตามหลักฮวงจุ้ยเรียบร้อยแล้วค่ะ "
-                f"คะแนนฮวงจุ้ย {feng_shui_score}/70 ({score_label})"
-            )
+            return f"จัดวางเฟอร์นิเจอร์ทั้งหมดใหม่ตามหลักฮวงจุ้ยเรียบร้อยแล้วค่ะ {kua_line}"
