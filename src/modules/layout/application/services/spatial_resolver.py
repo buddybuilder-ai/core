@@ -516,17 +516,9 @@ class SpatialResolver:
                     return False  # truly flush — OK
                 # Not flush: apply full door zone check
                 return any(box.intersects(dz) for dz in _door_zones)
-            # Wall-hugging items on a wall that has NO door may skip door-zone
-            # checks (they can't block a door that isn't on their wall).
-            # Items on the SAME wall as a door must still respect clearance.
-            if on_south and "south" not in door_walls:
-                return False
-            if on_north and "north" not in door_walls:
-                return False
-            if on_west and "west" not in door_walls:
-                return False
-            if on_east and "east" not in door_walls:
-                return False
+            # All items must respect door clearance zones regardless of which wall
+            # they are on — a large item on the opposite wall can still protrude
+            # into the clearance zone in front of a door.
             return any(box.intersects(dz) for dz in _door_zones)
 
         if not overlaps_any(item.x, item.z):

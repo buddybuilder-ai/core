@@ -445,6 +445,10 @@ class WallAssigner:
                 exclude = door_walls.copy()
                 if bed_assigned_wall:
                     exclude.add(bed_assigned_wall)
+                if sofa_assigned_wall:
+                    exclude.add(sofa_assigned_wall)
+                if storage_assigned_wall:
+                    exclude.add(storage_assigned_wall)
                 if dining_table_wall:
                     exclude.add(dining_table_wall)
                 if exclude >= _ALL_WALLS:
