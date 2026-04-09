@@ -58,7 +58,7 @@ def check_collisions(
     results.extend(_check_out_of_bounds(placements, room))
     results.extend(_check_overlaps(placements))
     results.extend(_check_door_clearances(placements, room))
-    results.extend(_check_walkway_clearances(placements))
+    results.extend(_check_walkway_clearances(placements, room))
     return results
 
 
@@ -143,7 +143,25 @@ def _check_door_clearances(placements: list[PhysicalPlacement], room: RoomSpec) 
     return collisions
 
 
-def _check_walkway_clearances(placements: list[PhysicalPlacement]) -> list[Collision]:
+_WALL_TOL = 0.15  # tolerance to consider an item "hugging" a wall
+
+
+def _wall_side(bbox: AABB, room: RoomSpec) -> str | None:
+    """Return which wall an item is hugging, or None if floating."""
+    if bbox.min_x <= _WALL_TOL:
+        return "west"
+    if bbox.max_x >= room.width - _WALL_TOL:
+        return "east"
+    if bbox.min_z <= _WALL_TOL:
+        return "south"
+    if bbox.max_z >= room.depth - _WALL_TOL:
+        return "north"
+    return None
+
+
+def _check_walkway_clearances(
+    placements: list[PhysicalPlacement], room: RoomSpec | None = None
+) -> list[Collision]:
     collisions: list[Collision] = []
     for i, a in enumerate(placements):
         for b in placements[i + 1 :]:
@@ -151,6 +169,14 @@ def _check_walkway_clearances(placements: list[PhysicalPlacement]) -> list[Colli
                 continue  # already reported as overlap
             dist = a.bbox.distance_to(b.bbox)
             if 0.0 < dist < WALKWAY_CLEARANCE:
+                # Skip pairs where both items hug the SAME wall — the gap
+                # between them is along the wall surface, not a walkway that
+                # people need to pass through, so the clearance rule does not apply.
+                if room is not None:
+                    wall_a = _wall_side(a.bbox, room)
+                    wall_b = _wall_side(b.bbox, room)
+                    if wall_a is not None and wall_a == wall_b:
+                        continue
                 collisions.append(
                     Collision(
                         type="insufficient_clearance",

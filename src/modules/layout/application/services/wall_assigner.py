@@ -43,9 +43,10 @@ _STORAGE_TYPES = _WARDROBE_TYPES | _SHELF_TYPES
 
 _NIGHTSTAND_TYPES = {"nightstand", "bedside_table", "lamp"}
 _CENTER_TYPES = {"area_rug", "rug", "coffee_table", "ottoman", "pouffe", "room_divider"}
-_DOOR_ADJACENT_TYPES = {"shoe_cabinet"}
+_DOOR_ADJACENT_TYPES = {"shoe_cabinet", "coat_rack"}
 _TV_TYPES = {"tv_stand", "tv", "media_console"}
 _SMALL_TYPES = {"plant", "mirror", "floor_lamp", "mini_fridge"}
+_DINING_CHAIR_TYPES = {"dining_chair"}
 
 
 _COMPOUND_TYPES: dict[tuple[str, str], str] = {
@@ -219,6 +220,8 @@ class WallAssigner:
 
         bed_assigned_wall: str | None = None
         sofa_assigned_wall: str | None = None
+        dining_table_wall: str | None = None
+        storage_assigned_wall: str | None = None
 
         # Pass 1: assign high-priority items
         for item in items:
@@ -295,30 +298,56 @@ class WallAssigner:
 
             if ft in _NIGHTSTAND_TYPES and bed_assigned_wall:
                 wall = bed_assigned_wall
-                # Put nightstand beside bed: first one left, second one right
-                existing_ns = sum(
-                    1
-                    for a in assignments.values()
-                    if a["target_wall"] == wall
-                    and any(
-                        _normalize_type(i.get("furniture_type", "")) in _NIGHTSTAND_TYPES
-                        for i in items
-                        if (
-                            i.get("furniture_id", i.get("id", "")) in assignments
-                            and assignments[i.get("furniture_id", i.get("id", ""))]["target_wall"]
-                            == wall
-                        )
-                    )
+                # Nightstand goes beside bed on the same wall.
+                # Find the bed item to figure out which side has more room.
+                bed_item = next(
+                    (i for i in items if _normalize_type(i.get("furniture_type", ""), i.get("furniture_id", i.get("id", ""))) in _REAL_BED_TYPES),
+                    None,
                 )
-                align = "left" if existing_ns == 0 else "right"
+                bed_w = float(bed_item.get("size", {}).get("w", 1.6)) if bed_item else 1.6
+                bed_l = float(bed_item.get("size", {}).get("l", 2.0)) if bed_item else 2.0
+                wall_len = _wall_length(wall, room_w, room_d)
+                # Axis size of bed along the wall (west/east → z axis = bed_l; north/south → x axis = bed_w)
+                bed_axis = bed_l if wall in ("west", "east") else bed_w
+                bed_start = (wall_len - bed_axis) / 2.0  # bed is center-aligned
+
+                existing_ns = [a for a in assignments.values() if a["target_wall"] == wall and a.get("_is_nightstand")]
+
+                # Compute exact z position along wall so nightstand sits beside bed.
+                # bed is center-aligned → bed occupies z=[bed_start, bed_start+bed_axis]
+                bed_end = bed_start + bed_axis
+                if not existing_ns:
+                    # First nightstand: place on the side with more room
+                    left_room = bed_start
+                    right_room = wall_len - bed_end
+                    if left_room >= fw:
+                        align = "left"
+                        ns_z = max(0.0, bed_start - fw)
+                    elif right_room >= fw:
+                        align = "right"
+                        ns_z = min(wall_len - fw, bed_end)
+                    else:
+                        align = "left"
+                        ns_z = max(0.0, bed_start - fw)
+                else:
+                    prev_align = existing_ns[0]["alignment"]
+                    if prev_align == "left":
+                        align = "right"
+                        ns_z = min(wall_len - fw, bed_end)
+                    else:
+                        align = "left"
+                        ns_z = max(0.0, bed_start - fw)
+
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": align,
                     "offset_from_wall": 0.0,
                     "facing": "",
+                    "_is_nightstand": True,
+                    "along_wall_z": ns_z,
                 }
                 wall_usage[wall] += fw
-                logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (beside bed, {align})")
+                logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (beside bed, {align}, z={ns_z:.2f})")
 
         # Pass 3: sofa, desk, tv, wardrobe, etc.
         for item in items:
@@ -416,6 +445,10 @@ class WallAssigner:
                 exclude = door_walls.copy()
                 if bed_assigned_wall:
                     exclude.add(bed_assigned_wall)
+                if dining_table_wall:
+                    exclude.add(dining_table_wall)
+                if exclude >= _ALL_WALLS:
+                    exclude = door_walls.copy()  # fallback
                 wall = self._pick_wall(
                     exclude=exclude,
                     prefer_side=True,
@@ -485,8 +518,23 @@ class WallAssigner:
                 exclude = door_walls.copy()
                 if bed_assigned_wall:
                     exclude.add(bed_assigned_wall)
+                if sofa_assigned_wall:
+                    exclude.add(sofa_assigned_wall)
+                # Exclude crowded walls (usage > 60% of wall length)
+                _CROWDED_THRESHOLD = 0.6
+                crowded_walls = {
+                    w for w in _ALL_WALLS
+                    if wall_usage.get(w, 0.0) > _wall_length(w, room_w, room_d) * _CROWDED_THRESHOLD
+                }
+                exclude_storage = exclude | crowded_walls
+                # If all non-door walls are crowded, allow door wall (spatial_resolver
+                # will use _safe_alignment to place beside the door, not in front of it)
+                if exclude_storage >= _ALL_WALLS:
+                    exclude_storage = exclude | crowded_walls - door_walls
+                if exclude_storage >= _ALL_WALLS:
+                    exclude_storage = exclude  # absolute fallback
                 wall = self._pick_wall(
-                    exclude=exclude,
+                    exclude=exclude_storage,
                     prefer_side=False,
                     room_w=room_w,
                     room_d=room_d,
@@ -507,13 +555,105 @@ class WallAssigner:
                     "facing": "",
                 }
                 wall_usage[wall] += fw
+                if ft == "dining_table":
+                    dining_table_wall = wall
+                elif ft in _WARDROBE_TYPES | _SHELF_TYPES:
+                    if storage_assigned_wall is None:
+                        storage_assigned_wall = wall
                 logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (storage)")
                 continue
 
-            # Default: small/misc items
-            exclude = door_walls.copy()
+            if ft in _DINING_CHAIR_TYPES:
+                if dining_table_wall:
+                    wall = dining_table_wall
+                    assignments[fid] = {
+                        "target_wall": wall,
+                        "alignment": "center",
+                        "offset_from_wall": 0.05,
+                        "facing": "",
+                    }
+                    wall_usage[wall] += fw
+                    logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (beside dining table)")
+                    continue
+
+            if ft == "dining_table":
+                # dining_table: always center-aligned against a wall.
+                # Must NOT share a wall with wardrobe/storage — they compete for the
+                # same wall space and bump each other out.
+                logger.info(
+                    f"WallAssigner: dining_table exclude: bed={bed_assigned_wall} "
+                    f"sofa={sofa_assigned_wall} storage={storage_assigned_wall} door={door_walls}"
+                )
+                # Try progressively relaxed constraints until a free wall is found:
+                # 1. Ideal: avoid door, bed, sofa, storage
+                # 2. Allow door wall (placed beside door, not in front)
+                # 3. Allow storage wall (share wall, _bump_out slides apart)
+                # 4. Any wall (absolute fallback)
+                _dt_hard = set()
+                if bed_assigned_wall:
+                    _dt_hard.add(bed_assigned_wall)
+                if sofa_assigned_wall:
+                    _dt_hard.add(sofa_assigned_wall)
+
+                exclude_dt: set[str]
+                if _dt_hard | door_walls | {storage_assigned_wall} - {None} < _ALL_WALLS:
+                    exclude_dt = door_walls | _dt_hard
+                    if storage_assigned_wall:
+                        exclude_dt.add(storage_assigned_wall)
+                elif _dt_hard | {storage_assigned_wall} - {None} < _ALL_WALLS:
+                    # Allow door wall
+                    exclude_dt = _dt_hard.copy()
+                    if storage_assigned_wall:
+                        exclude_dt.add(storage_assigned_wall)
+                elif _dt_hard < _ALL_WALLS:
+                    # Allow door wall + storage wall (share with wardrobe)
+                    exclude_dt = _dt_hard.copy()
+                else:
+                    exclude_dt = set()  # all walls taken — pick best by capacity
+                wall = self._pick_wall(
+                    exclude=exclude_dt,
+                    prefer_side=False,
+                    room_w=room_w,
+                    room_d=room_d,
+                    wall_usage=wall_usage,
+                    item_width=fw,
+                )
+                # Always center on its wall so it doesn't end up stuck in a corner
+                align = (
+                    self._safe_alignment_for_door_wall(
+                        wall, fw, room_w, room_d, room_spec.get("doors", [])
+                    )
+                    if wall in door_walls
+                    else "center"
+                )
+                assignments[fid] = {
+                    "target_wall": wall,
+                    "alignment": align,
+                    "offset_from_wall": 0.05,
+                    "facing": "",
+                }
+                wall_usage[wall] += fw
+                dining_table_wall = wall
+                logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (center, dining_table)")
+                continue
+
+            # Default: small/misc items — prefer non-door walls but allow door wall
+            # if all other walls are too crowded, spatial_resolver will place beside door
+            exclude_default = door_walls.copy()
+            # Also exclude walls already occupied by key furniture (bed, sofa)
+            if bed_assigned_wall:
+                exclude_default.add(bed_assigned_wall)
+            if sofa_assigned_wall:
+                exclude_default.add(sofa_assigned_wall)
+            crowded_non_door = {
+                w for w in (_ALL_WALLS - door_walls)
+                if wall_usage.get(w, 0.0) > _wall_length(w, room_w, room_d) * 0.6
+            }
+            if exclude_default >= _ALL_WALLS or crowded_non_door >= (_ALL_WALLS - door_walls):
+                # All preferred walls taken — allow door wall as last resort
+                exclude_default = door_walls.copy()
             wall = self._pick_wall(
-                exclude=exclude,
+                exclude=exclude_default,
                 prefer_side=False,
                 room_w=room_w,
                 room_d=room_d,

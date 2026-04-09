@@ -290,19 +290,20 @@ class RearrangeAgent:
                 # Re-check by re-resolving (use same semantics, just update positions)
                 collisions = self._recheck_collisions(physical, room_obj)
 
+        # Take a fully independent snapshot before yield — use this as authoritative
+        # physical list after yield, regardless of any mutation that may occur.
+        import copy as _copy
+        physical_snapshot = _copy.deepcopy(physical)
+
         yield SSEEvent(
             event_type=SSEEventType.STEP_PROGRESS,
             data={"step": "rearrange", "message": "Finalising...", "progress": 0.90},
         )
 
+        # Replace physical with the pre-yield snapshot (immune to any async mutation)
+        physical = physical_snapshot
+
         # --- 5. Enrich with metadata from current_layout ---
-        logger.info(
-            "RearrangeAgent: physical before enrich: "
-            + ", ".join(
-                f"{p.get('furniture_id', '?')}=({p.get('pos_x', '?')},{p.get('pos_z', '?')})"
-                for p in physical
-            )
-        )
         enriched = self._enrich_from_current(physical, current_layout)
 
         # Filter to only IDs that were in the original layout (LLM may hallucinate extras)
