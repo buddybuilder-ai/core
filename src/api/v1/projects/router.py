@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from sqlmodel import col, select
 
 from src.api.v1.auth.service import get_current_user
 from src.api.v1.projects.schemas import (
@@ -28,7 +28,7 @@ async def _get_project_or_404(project_id: UUID, user: User, db: AsyncSession) ->
         select(Project).where(
             Project.id == project_id,
             Project.user_id == user.id,
-            Project.is_active.is_(True),  # type: ignore[union-attr]
+            col(Project.is_active).is_(True),
         )
     )
     project = result.scalar_one_or_none()
@@ -50,7 +50,7 @@ async def list_projects(
     result = await db.execute(
         select(Project).where(
             Project.user_id == current_user.id,
-            Project.is_active.is_(True),  # type: ignore[union-attr]
+            col(Project.is_active).is_(True),
         )
     )
     return list(result.scalars().all())
@@ -134,7 +134,7 @@ async def list_messages(
     result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.project_id == project_id)
-        .order_by(ChatMessage.created_at)
+        .order_by(col(ChatMessage.created_at))
     )
     return list(result.scalars().all())
 
