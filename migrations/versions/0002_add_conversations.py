@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.add_column("projects", sa.Column("conversation_id", UUID(as_uuid=True), nullable=True))
     op.create_foreign_key(
         "fk_projects_conversation_id", "projects", "conversations",
-        ["conversation_id"], ["id"]
+        ["conversation_id"], ["id"], ondelete="SET NULL"
     )
     op.create_index("ix_projects_conversation_id", "projects", ["conversation_id"])
 
@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "conversation_id", UUID(as_uuid=True),
-            sa.ForeignKey("conversations.id"), nullable=False
+            sa.ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
         ),
         sa.Column("role", sa.String(), nullable=False),
         sa.Column("content", sa.String(), nullable=False),
