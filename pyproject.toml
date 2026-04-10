@@ -56,6 +56,11 @@ dependencies = [
     # HTTP Client
     "httpx>=0.26.0",
 
+    # Auth
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "slowapi>=0.1.9",
+
     # Utilities
     "python-dotenv>=1.0.0",
     "structlog>=24.1.0",
