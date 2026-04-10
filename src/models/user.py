@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import Column
+from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlmodel import Field, SQLModel
 
 
@@ -18,4 +20,7 @@ class User(SQLModel, table=True):
     hashed_password: str
     display_name: str
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(
+        default_factory=_utcnow,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=False),
+    )

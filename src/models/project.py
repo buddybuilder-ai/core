@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import JSON, TIMESTAMP
 from sqlmodel import Field, SQLModel
 
 
@@ -24,5 +24,11 @@ class Project(SQLModel, table=True):
         default=None, sa_column=Column(JSON, nullable=True)
     )
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(
+        default_factory=_utcnow,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=_utcnow,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=False),
+    )
