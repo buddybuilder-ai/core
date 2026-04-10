@@ -23,6 +23,7 @@ class ProjectResponse(BaseModel):
     name: str
     room_spec: dict[str, Any]
     latest_layout: list[dict[str, Any]] | None
+    conversation_id: UUID | None
     created_at: datetime
     updated_at: datetime
 

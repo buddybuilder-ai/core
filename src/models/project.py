@@ -18,6 +18,7 @@ class Project(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: UUID = Field(foreign_key="users.id", index=True)
+    conversation_id: UUID | None = Field(default=None, foreign_key="conversations.id", index=True)
     name: str
     room_spec: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     latest_layout: list[dict[str, Any]] | None = Field(

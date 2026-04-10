@@ -8,8 +8,8 @@ ROOM_SPEC = {"width": 4.0, "depth": 5.0, "height": 2.8, "doors": [], "windows": 
 
 async def _setup(
     client: AsyncClient, email: str = "chat@example.com"
-) -> tuple[dict[str, str], str]:
-    """Register user and create a project. Returns (cookies, project_id)."""
+) -> tuple[dict[str, str], str, str]:
+    """Register user and create a project + conversation. Returns (cookies, project_id, conversation_id)."""
     resp = await client.post(
         "/api/v1/auth/register",
         json={"email": email, "password": "password123", "display_name": "Chat User"},
@@ -20,25 +20,27 @@ async def _setup(
         json={"name": "Chat Room", "room_spec": ROOM_SPEC},
         cookies=cookies,
     )
-    return cookies, proj.json()["id"]
+    project_id = proj.json()["id"]
+    conversation_id = proj.json()["conversation_id"]
+    return cookies, project_id, conversation_id
 
 
 @pytest.mark.asyncio
 async def test_save_and_retrieve_messages(client: AsyncClient) -> None:
-    cookies, pid = await _setup(client)
+    cookies, pid, cid = await _setup(client)
 
     await client.post(
-        f"/api/v1/projects/{pid}/messages",
+        f"/api/v1/conversations/{cid}/messages",
         json={"role": "user", "content": "Hello", "intent": "question"},
         cookies=cookies,
     )
     await client.post(
-        f"/api/v1/projects/{pid}/messages",
+        f"/api/v1/conversations/{cid}/messages",
         json={"role": "assistant", "content": "Hi there!", "intent": None},
         cookies=cookies,
     )
 
-    resp = await client.get(f"/api/v1/projects/{pid}/messages", cookies=cookies)
+    resp = await client.get(f"/api/v1/conversations/{cid}/messages", cookies=cookies)
     assert resp.status_code == 200
     msgs = resp.json()
     assert len(msgs) == 2
@@ -49,15 +51,15 @@ async def test_save_and_retrieve_messages(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_messages_require_auth(client: AsyncClient) -> None:
-    cookies, pid = await _setup(client, "chatauth@example.com")
-    resp = await client.get(f"/api/v1/projects/{pid}/messages")
+    cookies, pid, cid = await _setup(client, "chatauth@example.com")
+    resp = await client.get(f"/api/v1/conversations/{cid}/messages")
     assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_messages_wrong_project(client: AsyncClient) -> None:
-    """Cannot post to another user's project."""
-    cookies_a, pid = await _setup(client, "chatA@example.com")
+async def test_messages_wrong_conversation(client: AsyncClient) -> None:
+    """Cannot post to another user's conversation."""
+    cookies_a, pid, cid = await _setup(client, "chatA@example.com")
     resp_b = await client.post(
         "/api/v1/auth/register",
         json={"email": "chatB@example.com", "password": "password123", "display_name": "B"},
@@ -65,7 +67,7 @@ async def test_messages_wrong_project(client: AsyncClient) -> None:
     cookies_b = {"access_token": resp_b.json()["access_token"]}
 
     resp = await client.post(
-        f"/api/v1/projects/{pid}/messages",
+        f"/api/v1/conversations/{cid}/messages",
         json={"role": "user", "content": "Hack!"},
         cookies=cookies_b,
     )
