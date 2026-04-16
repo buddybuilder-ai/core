@@ -19,12 +19,17 @@ from step3_vectorstore import get_embeddings
 from langchain_community.vectorstores import Chroma
 
 
-def print_separator(char="=", width=80):
+def print_separator(char: str = "=", width: int = 80) -> None:
+    """พิมพ์เส้นคั่น (separator) สำหรับจัดรูปแบบ output ใน terminal"""
     print(char * width)
 
 
-def export_to_csv(all_docs, all_metas, output_path: Path):
-    """Export ข้อมูล chunks ทั้งหมดเป็น CSV"""
+def export_to_csv(all_docs: list, all_metas: list, output_path: Path) -> None:
+    """Export chunks ทั้งหมดเป็น CSV เพื่อตรวจสอบเนื้อหาใน Excel
+
+    columns: chunk_index, source (ชื่อไฟล์), size_chars, content
+    ใช้ encoding utf-8-sig เพื่อให้ Excel เปิดภาษาไทยได้ถูกต้อง
+    """
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow(["chunk_index", "source", "size_chars", "content"])
@@ -34,8 +39,12 @@ def export_to_csv(all_docs, all_metas, output_path: Path):
     print(f"  CSV: {output_path}")
 
 
-def export_to_json(all_docs, all_metas, sizes, buckets, sources, output_path: Path):
-    """Export ข้อมูลและสถิติเป็น JSON"""
+def export_to_json(all_docs: list, all_metas: list, sizes: list, buckets: dict, sources: dict, output_path: Path) -> None:
+    """Export chunks พร้อม metadata และสถิติ size distribution เป็น JSON
+
+    รวม exported_at timestamp, stats (min/max/avg), size_distribution,
+    per-source breakdown และ chunks ทั้งหมดไว้ในไฟล์เดียว
+    """
     data = {
         "exported_at": datetime.now().isoformat(),
         "total_chunks": len(all_docs),
@@ -69,8 +78,16 @@ def export_to_json(all_docs, all_metas, sizes, buckets, sources, output_path: Pa
     print(f"  JSON: {output_path}")
 
 
-def check_vectordb():
-    """ตรวจสอบข้อมูลใน VectorDB"""
+def check_vectordb() -> None:
+    """Interactive tool สำหรับตรวจสอบ ChromaDB vectorstore
+
+    แสดง: จำนวน chunks, สถิติ size distribution, สรุปแหล่งที่มา,
+           ตัวอย่าง chunks แบบ random sample, similarity search ทดสอบ
+    Export: CSV หรือ JSON ของ chunks ทั้งหมด
+
+    ใช้รันตรงๆ: python check_vectordb.py
+    CHROMA_DB_PATH อ่านจาก .env หรือใช้ default: vectorstore/chroma_db
+    """
 
     _default = str(Path(__file__).parent / "vectorstore" / "chroma_db")
     chroma_path = os.getenv("CHROMA_DB_PATH", _default)

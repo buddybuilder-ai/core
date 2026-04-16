@@ -169,13 +169,15 @@ class FengShuiRAGService:
         self,
         question: str,
         conversation_history: list[dict[str, str]],
-    ) -> bool:
+    ) -> tuple[bool, list[Any]]:
         """2-layer relevance check before calling LLM.
 
         Layer 1: Keyword check (fast — no embedding needed).
         Layer 2: L2 distance against vectorstore (mirrors feng-shui-rag threshold 0.35).
 
-        Returns True if question is in scope, False to skip LLM.
+        Returns (is_relevant, prefetched_docs) — prefetched_docs reuses the embedding
+        call from Layer 2 so ask() skips a second embed round-trip.
+        On Layer 1 failure or vectorstore unavailability, prefetched_docs is [].
         """
         from src.config.settings import get_settings
 
@@ -191,19 +193,19 @@ class FengShuiRAGService:
         # Layer 1
         if not self._has_domain_keywords(question, conversation_history):
             print(f"  [RAG] → BLOCKED (Layer 1 failed)\n{'─' * 60}")
-            return False
+            return False, []
 
         # Layer 2
         vs = self._ensure_vectorstore()
         if vs is None:
             print("  [RAG] Layer 2 ⚠️  vectorstore unavailable — allowing query")
-            return True
+            return True, []
 
         try:
             docs_with_scores = vs.similarity_search_with_score(question, k=top_k)
             if not docs_with_scores:
                 print(f"  [RAG] Layer 2 ❌  no documents found\n{'─' * 60}")
-                return False
+                return False, []
 
             print(
                 f"  [RAG] Layer 2 — L2 Similarity Scores (threshold ≤ {self.RELEVANCE_THRESHOLD}):"
@@ -220,54 +222,62 @@ class FengShuiRAGService:
             verdict = "✅ PASS → ส่ง LLM" if is_relevant else "❌ BLOCKED"
             print(f"  [RAG] Best={best_score:.4f} → {verdict}")
             print(f"{'─' * 60}")
-            return is_relevant
+            # Return the already-fetched docs to avoid a second embedding call in ask()
+            prefetched = [doc for doc, _ in docs_with_scores]
+            return is_relevant, prefetched
         except Exception as exc:
             logger.warning("RAG L2 relevance check failed (%s) — allowing query", exc)
-            return True
+            return True, []
 
     # ------------------------------------------------------------------
     # Document retrieval
     # (mirrors step3_vectorstore.py get_retriever + step4b format_documents)
     # ------------------------------------------------------------------
 
-    def _retrieve_context(self, question: str) -> tuple[str, list[dict[str, Any]]]:
+    def _retrieve_context(
+        self,
+        question: str,
+        prefetched_docs: list[Any] | None = None,
+    ) -> tuple[str, list[dict[str, Any]]]:
         """Retrieve relevant chunks from ChromaDB and format as Thai-labelled context.
 
-        Uses MMR search (same as feng-shui-rag get_retriever search_type="mmr").
+        If prefetched_docs is provided (from _check_relevance Layer 2), those docs are
+        used directly — avoiding a second embedding round-trip.  Otherwise falls back
+        to MMR retriever (same as feng-shui-rag get_retriever search_type="mmr").
         Returns (formatted_context_str, source_docs_list).
         """
-        vs = self._ensure_vectorstore()
-        if vs is None:
-            return "", []
+        if prefetched_docs:
+            docs = prefetched_docs
+        else:
+            vs = self._ensure_vectorstore()
+            if vs is None:
+                return "", []
 
-        try:
-            retriever = self._retriever
-            if retriever is None:
-                from src.config.settings import get_settings
+            try:
+                retriever = self._retriever
+                if retriever is None:
+                    from src.config.settings import get_settings
 
-                s = get_settings()
-                retriever = vs.as_retriever(
-                    search_type=s.RAG_SEARCH_TYPE,
-                    search_kwargs={"k": s.RAG_TOP_K},
-                )
+                    s = get_settings()
+                    retriever = vs.as_retriever(
+                        search_type=s.RAG_SEARCH_TYPE,
+                        search_kwargs={"k": s.RAG_TOP_K},
+                    )
+                docs = retriever.invoke(question)
+            except Exception as exc:
+                logger.warning("FengShuiRAGService retrieval failed: %s", exc)
+                return "", []
 
-            docs = retriever.invoke(question)
+        formatted_parts: list[str] = []
+        source_docs: list[dict[str, Any]] = []
+        for i, doc in enumerate(docs, 1):
+            source = doc.metadata.get("source", "ฐานความรู้")
+            content = doc.page_content.strip()
+            formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
+            source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
 
-            formatted_parts: list[str] = []
-            source_docs: list[dict[str, Any]] = []
-            for i, doc in enumerate(docs, 1):
-                source = doc.metadata.get("source", "ฐานความรู้")
-                content = doc.page_content.strip()
-                # Format matches feng-shui-rag format_documents() style
-                formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
-                source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
-
-            context = "\n\n---\n\n".join(formatted_parts)
-            return context, source_docs
-
-        except Exception as exc:
-            logger.warning("FengShuiRAGService retrieval failed: %s", exc)
-            return "", []
+        context = "\n\n---\n\n".join(formatted_parts)
+        return context, source_docs
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -367,7 +377,10 @@ class FengShuiRAGService:
         history = conversation_history or []
 
         # --- Relevance guard (mirrors ConversationRAGChain._check_relevance) ---
-        if not self._check_relevance(question, history):
+        # _check_relevance now returns (is_relevant, prefetched_docs) so we can
+        # reuse the Layer-2 embedding result instead of embedding the query twice.
+        is_relevant, prefetched_docs = self._check_relevance(question, history)
+        if not is_relevant:
             logger.info("FengShuiRAGService: out-of-scope → %r", question[:60])
             print("  [RAG] OUT_OF_SCOPE — returning default message")
             return OUT_OF_SCOPE_MSG, []
@@ -386,8 +399,8 @@ class FengShuiRAGService:
         else:
             question_for_llm = question
 
-        # --- Retrieve context from ChromaDB ---
-        context, source_docs = self._retrieve_context(question)
+        # --- Retrieve context from ChromaDB (reuse prefetched docs from Layer 2 check) ---
+        context, source_docs = self._retrieve_context(question, prefetched_docs=prefetched_docs or None)
 
         # --- Build prompt messages ---
         messages = self._build_messages(question_for_llm, context, history, mode)
