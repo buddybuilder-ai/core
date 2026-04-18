@@ -473,3 +473,128 @@ class FengShuiRAGService:
         except Exception as exc:
             logger.exception("FengShuiRAGService.ask failed")
             return f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}", []
+
+    async def ask_stream(
+        self,
+        question: str,
+        mode: str = "buddy",
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> "AsyncIterator[tuple[str, str, list[dict[str, Any]] | None]]":
+        """Streaming variant of `ask` — yields ("delta"|"final", text, sources|None).
+
+        Mirrors `ask()` exactly through relevance, retrieval, and prompt building,
+        but switches the LLM call to SSE streaming. Yields:
+          - ("delta",  token_chunk, None) repeatedly as chunks arrive
+          - ("final",  full_answer,  source_docs) once at the end
+
+        If relevance fails, yields a single ("final", OUT_OF_SCOPE_MSG, []).
+        """
+        import json
+
+        import httpx
+
+        from src.config.settings import get_settings
+
+        history = conversation_history or []
+
+        is_relevant, prefetched_docs = self._check_relevance(question, history)
+        if not is_relevant:
+            logger.info("FengShuiRAGService: out-of-scope (stream) → %r", question[:60])
+            yield ("final", OUT_OF_SCOPE_MSG, [])
+            return
+
+        q_lower = question.lower()
+        excluded_rooms = [kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower]
+        has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
+        if excluded_rooms and has_bedroom:
+            rooms_str = ", ".join(excluded_rooms[:3])
+            question_for_llm = (
+                f"[ระบบ: คำถามนี้พูดถึง {rooms_str} ซึ่งอยู่นอก scope — "
+                f"ห้ามตอบส่วน {rooms_str} เด็ดขาด ตอบเฉพาะห้องนอนเท่านั้น]\n{question}"
+            )
+        else:
+            question_for_llm = question
+
+        context, source_docs = self._retrieve_context(
+            question, prefetched_docs=prefetched_docs or None
+        )
+        messages = self._build_messages(question_for_llm, context, history, mode)
+
+        settings = get_settings()
+        provider = settings.LLM_PROVIDER
+        model = settings.LLM_MODEL_NAME
+
+        if provider == "ollama":
+            url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+        elif provider == "groq":
+            url = f"{settings.GROQ_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            }
+        else:
+            url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://buddybuilder.ai",
+                "X-Title": "BuddyBuilder AI",
+            }
+
+        full: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream(
+                    "POST",
+                    url,
+                    headers=headers,
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "temperature": settings.LLM_TEMPERATURE_RAG,
+                        "max_tokens": 1200,
+                        "stream": True,
+                    },
+                ) as response:
+                    if response.status_code != 200:
+                        err_body = (await response.aread()).decode("utf-8", errors="replace")
+                        logger.error(
+                            "FengShuiRAGService.stream: LLM error %d — %s",
+                            response.status_code,
+                            err_body[:200],
+                        )
+                        yield (
+                            "final",
+                            f"ขออภัยครับ ระบบมีปัญหาชั่วคราว (error {response.status_code})",
+                            [],
+                        )
+                        return
+
+                    async for raw_line in response.aiter_lines():
+                        if not raw_line:
+                            continue
+                        line = raw_line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(payload)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = obj.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta") or {}
+                        chunk = delta.get("content")
+                        if chunk:
+                            full.append(chunk)
+                            yield ("delta", chunk, None)
+        except Exception as exc:
+            logger.exception("FengShuiRAGService.ask_stream failed")
+            yield ("final", f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}", [])
+            return
+
+        yield ("final", "".join(full), source_docs)
