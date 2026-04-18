@@ -62,7 +62,7 @@ async def create_project(
 ) -> Project:
     now = datetime.now(UTC)
     # Auto-create conversation for this project
-    conv = Conversation(user_id=current_user.id, title=body.name)
+    conv = Conversation(user_id=current_user.id, title=body.name, kind="project")
     db.add(conv)
     await db.flush()  # get conv.id before creating project
     project = Project(
@@ -85,7 +85,17 @@ async def get_project(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Project:
-    return await _get_project_or_404(project_id, current_user, db)
+    project = await _get_project_or_404(project_id, current_user, db)
+    if project.conversation_id is None:
+        conv = Conversation(user_id=current_user.id, title=project.name, kind="project")
+        db.add(conv)
+        await db.flush()
+        project.conversation_id = conv.id
+        project.updated_at = datetime.now(UTC)
+        db.add(project)
+        await db.commit()
+        await db.refresh(project)
+    return project
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)

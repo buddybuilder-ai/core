@@ -1,5 +1,4 @@
 """Conversation and chat message endpoints."""
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -38,14 +37,15 @@ async def _get_conversation_or_404(
 
 @router.get("", response_model=list[ConversationResponse])
 async def list_conversations(
+    kind: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Conversation]:
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.user_id == current_user.id)
-        .order_by(col(Conversation.created_at).desc())
-    )
+    stmt = select(Conversation).where(Conversation.user_id == current_user.id)
+    if kind is not None:
+        stmt = stmt.where(Conversation.kind == kind)
+    stmt = stmt.order_by(col(Conversation.created_at).desc())
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -55,7 +55,7 @@ async def create_conversation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Conversation:
-    conv = Conversation(user_id=current_user.id, title=body.title)
+    conv = Conversation(user_id=current_user.id, title=body.title, kind="general")
     db.add(conv)
     await db.commit()
     await db.refresh(conv)
