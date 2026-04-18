@@ -112,6 +112,8 @@ async def update_project(
         project.room_spec = body.room_spec
     if body.latest_layout is not None:
         project.latest_layout = body.latest_layout
+    if body.preview_image is not None:
+        project.preview_image = body.preview_image
     project.updated_at = datetime.now(UTC)
     db.add(project)
     await db.commit()

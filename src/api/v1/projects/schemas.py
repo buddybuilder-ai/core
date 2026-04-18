@@ -16,6 +16,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = None
     room_spec: dict[str, Any] | None = None
     latest_layout: list[dict[str, Any]] | None = None
+    preview_image: str | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -23,6 +24,7 @@ class ProjectResponse(BaseModel):
     name: str
     room_spec: dict[str, Any]
     latest_layout: list[dict[str, Any]] | None
+    preview_image: str | None
     conversation_id: UUID | None
     created_at: datetime
     updated_at: datetime
