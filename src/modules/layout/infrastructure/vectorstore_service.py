@@ -18,13 +18,12 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from langchain_community.vectorstores import Chroma
-    from langchain_core.embeddings import Embeddings
     from langchain_core.vectorstores import VectorStoreRetriever
 
 logger = logging.getLogger(__name__)
 
 
-def _get_embeddings(model_name: str) -> Embeddings:
+def _get_embeddings(model_name: str) -> "object":
     """Build a HuggingFaceEmbeddings instance, auto-selecting GPU/CPU.
 
     Args:
@@ -57,7 +56,7 @@ def _get_embeddings(model_name: str) -> Embeddings:
     )
 
 
-def load_vectorstore(db_path: str, embedding_model: str) -> Chroma:
+def load_vectorstore(db_path: str, embedding_model: str) -> "Chroma":
     """Load an existing ChromaDB vectorstore from disk.
 
     Args:
@@ -94,7 +93,7 @@ def get_retriever(
     embedding_model: str,
     k: int = 5,
     search_type: str = "mmr",
-) -> VectorStoreRetriever:
+) -> "VectorStoreRetriever":
     """Return a LangChain retriever backed by the local ChromaDB vectorstore.
 
     Args:
@@ -116,7 +115,7 @@ def get_retriever(
 
 
 @lru_cache(maxsize=1)
-def get_cached_vectorstore(db_path: str, embedding_model: str) -> Chroma:
+def get_cached_vectorstore(db_path: str, embedding_model: str) -> "Chroma":
     """Return a module-level cached ChromaDB vectorstore (loads once per process).
 
     Using lru_cache means the heavy model-loading step only happens once,

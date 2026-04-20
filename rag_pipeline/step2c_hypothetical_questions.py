@@ -19,11 +19,7 @@ from config import (
 
 
 def get_question_llm():
-    """สร้าง LLM สำหรับ generate คำถามสมมติ (HyDE — Hypothetical Document Embeddings)
-
-    ใช้ QUESTION_GEN_TEMPERATURE ปานกลาง (~0.4) เพื่อให้คำถามมีความหลากหลาย
-    แต่ยังคงตรงประเด็นกับเนื้อหาใน chunk — ปัจจุบันรองรับเฉพาะ Ollama
-    """
+    """สร้าง LLM สำหรับ generate คำถาม"""
     if LLM_PROVIDER == "ollama":
         from langchain_ollama import ChatOllama
 
@@ -37,21 +33,15 @@ def get_question_llm():
 
 
 def generate_questions_from_chunk(chunk: Document, num_questions: int = 3) -> List[str]:
-    """สร้างคำถามสมมติที่ผู้ใช้อาจถามจากเนื้อหาใน chunk
-
-    แนวคิด HyDE: แทนที่จะ embed เนื้อหาตรงๆ ให้ embed "คำถามที่น่าจะตรงกับ chunk"
-    เพราะ query ของผู้ใช้มักมีรูปแบบเป็นคำถาม ทำให้ embedding ใกล้กันมากขึ้น
-
-    ตัวอย่าง: chunk มีเนื้อหา "วางเตียงไม่ให้ตรงกับประตู"
-              → สร้างคำถาม "ห้ามวางเตียงตรงกับประตูเพราะอะไร"
-              → เมื่อ user ถามแบบเดียวกัน embedding จะ match ได้ดีกว่า
+    """
+    สร้างคำถามสมมติจาก chunk
 
     Args:
-        chunk: Document chunk ที่ต้องการสร้างคำถาม
-        num_questions: จำนวนคำถามที่ต้องการ (default: 3)
+        chunk: Chunk ที่ต้องการสร้างคำถาม
+        num_questions: จำนวนคำถามที่ต้องการ
 
     Returns:
-        List คำถามภาษาไทย ถ้า LLM ล้มเหลวจะคืน list ว่าง
+        รายการคำถามที่สร้างได้
     """
     try:
         llm = get_question_llm()
@@ -79,43 +69,31 @@ def generate_questions_from_chunk(chunk: Document, num_questions: int = 3) -> Li
         ])
 
         chain = prompt | llm
-        # จำกัด 800 ตัวอักษรเพื่อประหยัด token และให้คำถามไม่กว้างเกินไป
         response = chain.invoke({"content": chunk.page_content[:800]})
 
-        # แยกทีละบรรทัด กรองบรรทัดว่าง
+        # แยกคำถามออกมา
         questions = [q.strip() for q in response.content.strip().split('\n') if q.strip()]
 
-        # ลบเลขข้อที่ LLM อาจใส่มาแม้จะสั่งห้ามแล้ว เช่น "1. ", "- "
+        # ลบเลขข้อออก (ถ้ามี)
         questions = [q.lstrip('0123456789.- ') for q in questions]
 
         return questions[:num_questions]
 
     except Exception as e:
         print(f"  ไม่สามารถสร้างคำถาม: {e}")
-        return []  # คืน list ว่าง — caller จะใช้ chunk เดิมแทน
+        return []
 
 
 def create_qa_chunks(documents: List[Document], questions_per_chunk: int = QUESTIONS_PER_CHUNK) -> List[Document]:
-    """แบ่งเอกสารเป็น chunks และ prepend คำถามสมมติไว้หน้าเนื้อหา
-
-    Pipeline: documents → split → generate_questions → รวม Q+A เป็น chunk ใหม่
-
-    chunk ที่ได้จะมีรูปแบบ:
-        คำถามที่เกี่ยวข้อง:
-        - คำถาม 1
-        - คำถาม 2
-        เนื้อหา:
-        <เนื้อหาเดิม>
-
-    การ embed chunk รูปแบบนี้ทำให้ query ของ user (ซึ่งเป็นคำถาม) match ได้ดีกว่า
-    เพราะ embedding space ของ "คำถาม" อยู่ใกล้กันมากกว่า "คำถาม" กับ "เนื้อหาตอบ"
+    """
+    สร้าง chunks ในรูปแบบ Q&A
 
     Args:
-        documents: รายการ Document จาก step1_data_loader
-        questions_per_chunk: จำนวนคำถามสมมติต่อ chunk (default: QUESTIONS_PER_CHUNK จาก config)
+        documents: รายการเอกสาร
+        questions_per_chunk: จำนวนคำถามต่อ chunk
 
     Returns:
-        รายการ Document chunks พร้อม Q&A format — chunk ที่ generate คำถามไม่ได้จะใช้ chunk เดิม
+        รายการ chunks ที่มีคำถาม + เนื้อหา
     """
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_CONFIG["chunk_size"],
@@ -124,6 +102,7 @@ def create_qa_chunks(documents: List[Document], questions_per_chunk: int = QUEST
         length_function=len,
     )
 
+    # แบ่ง chunks ก่อน
     chunks = text_splitter.split_documents(documents)
 
     print(f"  แบ่งเป็น {len(chunks)} chunks")
@@ -135,33 +114,34 @@ def create_qa_chunks(documents: List[Document], questions_per_chunk: int = QUEST
         if (i + 1) % 5 == 0:
             print(f"   ประมวลผล: {i + 1}/{len(chunks)} chunks...")
 
+        # สร้างคำถามจาก chunk
         questions = generate_questions_from_chunk(chunk, questions_per_chunk)
 
         if questions:
-            # รวมคำถามและเนื้อหาเป็น chunk เดียว เพื่อให้ embed ใน vector space เดียวกัน
+            # สร้าง chunk ใหม่ที่มีคำถาม + เนื้อหา
             qa_content = f"""คำถามที่เกี่ยวข้อง:
 {chr(10).join(f'- {q}' for q in questions)}
 
 เนื้อหา:
 {chunk.page_content}
 """
+
             new_chunk = Document(
                 page_content=qa_content,
                 metadata={
-                    **chunk.metadata,       # คัดลอก metadata เดิม (source, row, ฯลฯ)
+                    **chunk.metadata,
                     "questions": questions,
                     "has_questions": True
                 }
             )
             qa_chunks.append(new_chunk)
         else:
-            # Fallback: ถ้า LLM สร้างคำถามไม่ได้ ใช้ chunk เดิมโดยไม่ transform
+            # ถ้าสร้างคำถามไม่ได้ ใช้ chunk เดิม
             chunk.metadata["has_questions"] = False
             qa_chunks.append(chunk)
 
-    success_count = sum(1 for c in qa_chunks if c.metadata.get('has_questions', False))
     print(f" สร้างคำถามเรียบร้อย!")
-    print(f"   Chunks ที่มีคำถาม: {success_count}/{len(qa_chunks)}")
+    print(f"   Chunks ที่มีคำถาม: {sum(1 for c in qa_chunks if c.metadata.get('has_questions', False))}/{len(qa_chunks)}")
 
     return qa_chunks
 

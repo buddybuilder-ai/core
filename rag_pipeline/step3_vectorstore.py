@@ -12,15 +12,8 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from config import CHROMA_DB_PATH, EMBEDDING_MODEL, TOP_K, SEARCH_TYPE
 
 
-def get_embeddings() -> HuggingFaceEmbeddings:
-    """สร้าง HuggingFaceEmbeddings พร้อม auto-detect device (CUDA → MPS → CPU)
-
-    ใช้ normalize_embeddings=True เพื่อให้ L2 distance มีความหมายเดียวกับ cosine similarity
-    (L2² = 2·(1 − cosine) เมื่อ normalize แล้ว) ซึ่ง ChromaDB ใช้เป็น relevance score
-
-    Returns:
-        HuggingFaceEmbeddings พร้อมใช้งาน
-    """
+def get_embeddings():
+    
     print(f"Embedding model: {EMBEDDING_MODEL}")
 
     # ตรวจสอบว่ามี GPU หรือไม่
@@ -60,36 +53,32 @@ def get_embeddings() -> HuggingFaceEmbeddings:
 
 
 def create_vectorstore(chunks: List[Document], force_rebuild: bool = False):
-    """สร้างหรือโหลด ChromaDB vectorstore จาก chunks ที่ผ่านการแบ่งแล้ว
-
-    ถ้า vectorstore มีอยู่แล้วและไม่ได้ force_rebuild จะโหลดของเดิมแทนการสร้างใหม่
-    เพื่อประหยัดเวลา embedding (ใช้เวลานานถ้ามี docs เยอะ)
+    """
+    สร้าง Vector Store จาก chunks
 
     Args:
-        chunks: รายการ Document chunks ที่จะ embed และเก็บลง ChromaDB
-        force_rebuild: ถ้า True จะลบ vectorstore เดิมและสร้างใหม่ทั้งหมด (default: False)
+        chunks: รายการ chunks ที่จะ embed
+        force_rebuild: rebuild ทับของเดิม (default: False)
 
     Returns:
-        Chroma vectorstore instance พร้อมใช้งาน
+        Chroma vectorstore
     """
     embeddings = get_embeddings()
 
-    # ลบ vectorstore เดิมก่อนสร้างใหม่ — ต้องปิด server ที่ใช้ไฟล์อยู่ก่อน
-    # มิฉะนั้นจะเกิด PermissionError: chroma.sqlite3 is being used by another process
+    # ถ้าต้องการ rebuild ให้ลบของเดิมก่อน
     if force_rebuild and Path(CHROMA_DB_PATH).exists():
         print(f"  ลบ vectorstore เดิม: {CHROMA_DB_PATH}")
         import shutil
         shutil.rmtree(CHROMA_DB_PATH)
 
+    # สร้าง vectorstore
     if Path(CHROMA_DB_PATH).exists() and not force_rebuild:
-        # โหลด vectorstore ที่มีอยู่แล้ว — เร็วกว่าการ embed ใหม่ทั้งหมด
         print(f" โหลด vectorstore ที่มีอยู่: {CHROMA_DB_PATH}")
         vectorstore = Chroma(
             persist_directory=CHROMA_DB_PATH,
             embedding_function=embeddings
         )
     else:
-        # Embed chunks ทั้งหมดและบันทึกลง disk — ขั้นตอนที่ใช้เวลานานที่สุด
         print(f" สร้าง vectorstore ใหม่: {CHROMA_DB_PATH}")
         print(f"   Embedding model: {EMBEDDING_MODEL}")
         print(f"   จำนวน chunks: {len(chunks)}")
@@ -105,21 +94,19 @@ def create_vectorstore(chunks: List[Document], force_rebuild: bool = False):
 
 
 def get_retriever(vectorstore, k: int = TOP_K, search_type: str = SEARCH_TYPE):
-    """สร้าง LangChain Retriever จาก vectorstore
-
-    search_type="mmr" (Maximum Marginal Relevance) คืน docs ที่หลากหลายกว่า "similarity"
-    ลดการดึง chunks ซ้ำๆ จากเอกสารเดียวกัน ทำให้ context ครอบคลุมมากขึ้น
+    """
+    สร้าง Retriever จาก vectorstore
 
     Args:
-        vectorstore: ChromaDB vectorstore instance
-        k: จำนวน chunks ที่จะดึงต่อ query (default: TOP_K จาก config)
-        search_type: "mmr" = หลากหลาย, "similarity" = แม่นยำ (default: SEARCH_TYPE จาก config)
+        vectorstore: ChromaDB vectorstore
+        k: จำนวน chunks ที่จะดึง (default: 5)
+        search_type: "similarity" หรือ "mmr" (default: "mmr")
 
     Returns:
-        VectorStoreRetriever พร้อมใช้งานกับ LangChain chain
+        Retriever object
     """
     retriever = vectorstore.as_retriever(
-        search_type=search_type,
+        search_type=search_type,  # "mmr" = Maximum Marginal Relevance (หลากหลายกว่า)
         search_kwargs={"k": k}
     )
 
@@ -128,20 +115,17 @@ def get_retriever(vectorstore, k: int = TOP_K, search_type: str = SEARCH_TYPE):
 
 
 def get_retriever_with_filter(vectorstore, filters: dict, k: int = TOP_K, search_type: str = SEARCH_TYPE):
-    """สร้าง Retriever ที่กรองด้วย metadata ก่อน search
-
-    ใช้เมื่อต้องการจำกัด search ให้อยู่เฉพาะ subset ของ documents
-    เช่น ดึงแค่ chunks ที่มี category="placement" หรือ topic_th="ห้องนอน"
-    metadata เหล่านี้ถูก index ไว้ตอน load_csv_excel() ใน step1_data_loader.py
+    """
+    สร้าง Retriever ที่ filter ด้วย metadata labels
 
     Args:
-        vectorstore: ChromaDB vectorstore instance
-        filters: dict ของ metadata filter เช่น {"category": "placement"}
-        k: จำนวน chunks ที่จะดึง (default: TOP_K จาก config)
-        search_type: "mmr" หรือ "similarity" (default: SEARCH_TYPE จาก config)
+        vectorstore: ChromaDB vectorstore
+        filters: dict เช่น {"category": "placement"} หรือ {"topic_th": "ห้องนอน"}
+        k: จำนวน chunks ที่จะดึง
+        search_type: "similarity" หรือ "mmr"
 
     Returns:
-        VectorStoreRetriever ที่กรองด้วย metadata label
+        Retriever object ที่กรองด้วย label
     """
     retriever = vectorstore.as_retriever(
         search_type=search_type,

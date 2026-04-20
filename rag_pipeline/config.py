@@ -24,9 +24,6 @@ LLM_PROVIDER, _, LLM_MODEL_NAME = _LLM_MODEL_RAW.partition("/")
 LLM_PROVIDER = LLM_PROVIDER.lower()
 """Provider ที่ parse ได้อัตโนมัติ: ollama | groq | claude"""
 
-OLLAMA_MODEL = LLM_MODEL_NAME
-"""ชื่อ model สำหรับ Ollama (alias ของ LLM_MODEL_NAME)"""
-
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.3"))
 """อุณหภูมิทั่วไป: 0.0 = ตอบตรง | 1.0 = สร้างสรรค์"""
 
