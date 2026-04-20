@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/render", tags=["Render"])
 settings = get_settings()
 
-# Gemini's image-preview endpoint on OpenRouter. It accepts a user message
+# Gemini's image-generation model on OpenRouter. Accepts a user message
 # with image+text parts and returns an image part in the assistant reply.
-_MODEL = "google/gemini-2.5-flash-image-preview"
+_MODEL = "google/gemini-3.1-flash-image-preview"
 
 _FENG_SHUI_PALETTE_BY_DIRECTION: dict[str, str] = {
     "north": "cool blues and soft blacks (water element — supports career area)",
