@@ -70,3 +70,4 @@ alembic/versions/*.pyc
 *.tmp
 *.temp
 *.bak
+.claude/worktrees/clever-vaughan/

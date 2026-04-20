@@ -119,15 +119,30 @@ class RouterAgent:
         self.config = config or RouterConfig()
         settings = get_settings()
 
+        # Support groq/ollama/openrouter based on LLM_MODEL_ROUTER prefix
+        router_model = self.config.model
+        if router_model.startswith("groq/"):
+            api_base = settings.GROQ_BASE_URL
+            api_key = settings.GROQ_API_KEY
+            model_name = router_model[len("groq/"):]
+        elif router_model.startswith("ollama/"):
+            api_base = f"{settings.OLLAMA_BASE_URL}/v1"
+            api_key = "ollama"
+            model_name = router_model[len("ollama/"):]
+        else:
+            api_base = settings.OPENROUTER_BASE_URL
+            api_key = settings.OPENROUTER_API_KEY
+            model_name = router_model
+
         self._llm = ChatOpenAI(
-            model=self.config.model,
+            model=model_name,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
             timeout=self.config.timeout,
-            openai_api_key=settings.OPENROUTER_API_KEY,
-            openai_api_base=settings.OPENROUTER_BASE_URL,
+            openai_api_key=api_key,
+            openai_api_base=api_base,
         )
-        logger.debug(f"RouterAgent initialised with model: {self.config.model}")
+        logger.debug(f"RouterAgent initialised with model: {model_name} via {api_base}")
 
     async def classify(
         self,

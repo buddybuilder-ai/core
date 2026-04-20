@@ -1,0 +1,134 @@
+"""Project endpoints."""
+
+from datetime import UTC, datetime
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+
+from src.api.v1.auth.service import get_current_user
+from src.api.v1.projects.schemas import (
+    ProjectCreate,
+    ProjectResponse,
+    ProjectUpdate,
+)
+from src.core.database import get_db
+from src.models.conversation import Conversation
+from src.models.project import Project
+from src.models.user import User
+
+router = APIRouter(prefix="/projects", tags=["Projects"])
+
+
+async def _get_project_or_404(project_id: UUID, user: User, db: AsyncSession) -> Project:
+    result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.user_id == user.id,
+            col(Project.is_active).is_(True),
+        )
+    )
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    return project
+
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
+
+
+@router.get("", response_model=list[ProjectResponse])
+async def list_projects(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Project]:
+    result = await db.execute(
+        select(Project).where(
+            Project.user_id == current_user.id,
+            col(Project.is_active).is_(True),
+        )
+    )
+    return list(result.scalars().all())
+
+
+@router.post("", response_model=ProjectResponse, status_code=201)
+async def create_project(
+    body: ProjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Project:
+    now = datetime.now(UTC)
+    # Auto-create conversation for this project
+    conv = Conversation(user_id=current_user.id, title=body.name, kind="project")
+    db.add(conv)
+    await db.flush()  # get conv.id before creating project
+    project = Project(
+        user_id=current_user.id,
+        name=body.name,
+        room_spec=body.room_spec,
+        conversation_id=conv.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.get("/{project_id}", response_model=ProjectResponse)
+async def get_project(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Project:
+    project = await _get_project_or_404(project_id, current_user, db)
+    if project.conversation_id is None:
+        conv = Conversation(user_id=current_user.id, title=project.name, kind="project")
+        db.add(conv)
+        await db.flush()
+        project.conversation_id = conv.id
+        project.updated_at = datetime.now(UTC)
+        db.add(project)
+        await db.commit()
+        await db.refresh(project)
+    return project
+
+
+@router.patch("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: UUID,
+    body: ProjectUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Project:
+    project = await _get_project_or_404(project_id, current_user, db)
+    if body.name is not None:
+        project.name = body.name
+    if body.room_spec is not None:
+        project.room_spec = body.room_spec
+    if body.latest_layout is not None:
+        project.latest_layout = body.latest_layout
+    if body.preview_image is not None:
+        project.preview_image = body.preview_image
+    project.updated_at = datetime.now(UTC)
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    project = await _get_project_or_404(project_id, current_user, db)
+    project.is_active = False
+    project.updated_at = datetime.now(UTC)
+    db.add(project)
+    await db.commit()

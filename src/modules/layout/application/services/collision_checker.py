@@ -3,7 +3,7 @@
 Checks:
   - out_of_bounds: furniture footprint extends outside room
   - overlap: two furniture footprints intersect
-  - door_blocked: furniture inside 80 cm clearance zone in front of a door
+  - door_blocked: furniture inside 150 cm clearance zone in front of a door (±50 cm side padding)
   - insufficient_clearance: less than 60 cm between two items
 
 No LLM calls. All measurements in meters.
@@ -20,7 +20,8 @@ from src.modules.layout.application.services.spatial_resolver import (
 from src.modules.layout.domain.entities.room import DoorPosition, WallSide
 from src.modules.layout.infrastructure.geometry.collision import AABB
 
-DOOR_CLEARANCE = 0.80  # metres
+DOOR_CLEARANCE = 1.50  # metres — matches spatial_resolver._DOOR_CLEARANCE
+DOOR_SIDE_PAD = 0.50  # metres — lateral padding either side of doorway
 WALKWAY_CLEARANCE = 0.60  # metres
 
 
@@ -58,7 +59,7 @@ def check_collisions(
     results.extend(_check_out_of_bounds(placements, room))
     results.extend(_check_overlaps(placements))
     results.extend(_check_door_clearances(placements, room))
-    results.extend(_check_walkway_clearances(placements))
+    results.extend(_check_walkway_clearances(placements, room))
     return results
 
 
@@ -111,16 +112,29 @@ def _check_overlaps(placements: list[PhysicalPlacement]) -> list[Collision]:
 
 
 def _door_clearance_box(door: DoorPosition, room: RoomSpec) -> AABB:
-    """Return the AABB that must remain clear in front of a door."""
-    off, w, c = door.offset, door.width, DOOR_CLEARANCE
+    """Return the AABB that must remain clear in front of a door.
+
+    Matches the zone produced by spatial_resolver._door_zones():
+    - Depth: DOOR_CLEARANCE (1.5 m) into the room from the door wall
+    - Width: door opening + DOOR_SIDE_PAD (0.5 m) on each side
+    """
+    off, w, c, pad = door.offset, door.width, DOOR_CLEARANCE, DOOR_SIDE_PAD
     if door.wall == WallSide.SOUTH:
-        return AABB(min_x=off, min_z=0.0, max_x=off + w, max_z=c)
+        x0 = max(0.0, off - pad)
+        x1 = min(room.width, off + w + pad)
+        return AABB(min_x=x0, min_z=0.0, max_x=x1, max_z=c)
     if door.wall == WallSide.NORTH:
-        return AABB(min_x=off, min_z=room.depth - c, max_x=off + w, max_z=room.depth)
+        x0 = max(0.0, off - pad)
+        x1 = min(room.width, off + w + pad)
+        return AABB(min_x=x0, min_z=room.depth - c, max_x=x1, max_z=room.depth)
     if door.wall == WallSide.WEST:
-        return AABB(min_x=0.0, min_z=off, max_x=c, max_z=off + w)
+        z0 = max(0.0, off - pad)
+        z1 = min(room.depth, off + w + pad)
+        return AABB(min_x=0.0, min_z=z0, max_x=c, max_z=z1)
     # EAST
-    return AABB(min_x=room.width - c, min_z=off, max_x=room.width, max_z=off + w)
+    z0 = max(0.0, off - pad)
+    z1 = min(room.depth, off + w + pad)
+    return AABB(min_x=room.width - c, min_z=z0, max_x=room.width, max_z=z1)
 
 
 def _check_door_clearances(placements: list[PhysicalPlacement], room: RoomSpec) -> list[Collision]:
@@ -136,14 +150,33 @@ def _check_door_clearances(placements: list[PhysicalPlacement], room: RoomSpec) 
                         furniture_ids=[p.furniture_id],
                         description=(
                             f"{p.furniture_id} blocks {DOOR_CLEARANCE * 100:.0f}cm "
-                            f"clearance zone of door_{i + 1} on {door.wall.value} wall"
+                            f"clearance zone of door_{i + 1} on {door.wall.value} wall "
+                            f"(±{DOOR_SIDE_PAD * 100:.0f}cm side padding)"
                         ),
                     )
                 )
     return collisions
 
 
-def _check_walkway_clearances(placements: list[PhysicalPlacement]) -> list[Collision]:
+_WALL_TOL = 0.15  # tolerance to consider an item "hugging" a wall
+
+
+def _wall_side(bbox: AABB, room: RoomSpec) -> str | None:
+    """Return which wall an item is hugging, or None if floating."""
+    if bbox.min_x <= _WALL_TOL:
+        return "west"
+    if bbox.max_x >= room.width - _WALL_TOL:
+        return "east"
+    if bbox.min_z <= _WALL_TOL:
+        return "south"
+    if bbox.max_z >= room.depth - _WALL_TOL:
+        return "north"
+    return None
+
+
+def _check_walkway_clearances(
+    placements: list[PhysicalPlacement], room: RoomSpec | None = None
+) -> list[Collision]:
     collisions: list[Collision] = []
     for i, a in enumerate(placements):
         for b in placements[i + 1 :]:
@@ -151,6 +184,14 @@ def _check_walkway_clearances(placements: list[PhysicalPlacement]) -> list[Colli
                 continue  # already reported as overlap
             dist = a.bbox.distance_to(b.bbox)
             if 0.0 < dist < WALKWAY_CLEARANCE:
+                # Skip pairs where both items hug the SAME wall — the gap
+                # between them is along the wall surface, not a walkway that
+                # people need to pass through, so the clearance rule does not apply.
+                if room is not None:
+                    wall_a = _wall_side(a.bbox, room)
+                    wall_b = _wall_side(b.bbox, room)
+                    if wall_a is not None and wall_a == wall_b:
+                        continue
                 collisions.append(
                     Collision(
                         type="insufficient_clearance",

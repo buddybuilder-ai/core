@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
+# Register all models so SQLModel.metadata knows about them
+import src.models  # noqa: F401, E402
+
 # Test database URL (use SQLite for fast tests)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 
@@ -58,11 +61,23 @@ async def db_session(engine: Any) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-def app() -> FastAPI:
-    """Create a test FastAPI application."""
+def app(db_session: AsyncSession) -> FastAPI:
+    """Create a test FastAPI application with DB override and rate limiting disabled."""
+    import src.api.v1.auth.router as auth_router_mod
+    from src.core.database import get_db
     from src.main import create_app
 
-    return create_app()
+    test_app = create_app()
+
+    # Disable rate limiting: both the app-level limiter and the router-level limiter
+    test_app.state.limiter.enabled = False
+    auth_router_mod.limiter.enabled = False
+
+    async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    test_app.dependency_overrides[get_db] = _override_get_db
+    return test_app
 
 
 @pytest.fixture

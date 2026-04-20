@@ -169,13 +169,15 @@ class FengShuiRAGService:
         self,
         question: str,
         conversation_history: list[dict[str, str]],
-    ) -> bool:
+    ) -> tuple[bool, list[Any]]:
         """2-layer relevance check before calling LLM.
 
         Layer 1: Keyword check (fast — no embedding needed).
         Layer 2: L2 distance against vectorstore (mirrors feng-shui-rag threshold 0.35).
 
-        Returns True if question is in scope, False to skip LLM.
+        Returns (is_relevant, prefetched_docs) — prefetched_docs reuses the embedding
+        call from Layer 2 so ask() skips a second embed round-trip.
+        On Layer 1 failure or vectorstore unavailability, prefetched_docs is [].
         """
         from src.config.settings import get_settings
 
@@ -191,19 +193,19 @@ class FengShuiRAGService:
         # Layer 1
         if not self._has_domain_keywords(question, conversation_history):
             print(f"  [RAG] → BLOCKED (Layer 1 failed)\n{'─' * 60}")
-            return False
+            return False, []
 
         # Layer 2
         vs = self._ensure_vectorstore()
         if vs is None:
             print("  [RAG] Layer 2 ⚠️  vectorstore unavailable — allowing query")
-            return True
+            return True, []
 
         try:
             docs_with_scores = vs.similarity_search_with_score(question, k=top_k)
             if not docs_with_scores:
                 print(f"  [RAG] Layer 2 ❌  no documents found\n{'─' * 60}")
-                return False
+                return False, []
 
             print(
                 f"  [RAG] Layer 2 — L2 Similarity Scores (threshold ≤ {self.RELEVANCE_THRESHOLD}):"
@@ -220,54 +222,62 @@ class FengShuiRAGService:
             verdict = "✅ PASS → ส่ง LLM" if is_relevant else "❌ BLOCKED"
             print(f"  [RAG] Best={best_score:.4f} → {verdict}")
             print(f"{'─' * 60}")
-            return is_relevant
+            # Return the already-fetched docs to avoid a second embedding call in ask()
+            prefetched = [doc for doc, _ in docs_with_scores]
+            return is_relevant, prefetched
         except Exception as exc:
             logger.warning("RAG L2 relevance check failed (%s) — allowing query", exc)
-            return True
+            return True, []
 
     # ------------------------------------------------------------------
     # Document retrieval
     # (mirrors step3_vectorstore.py get_retriever + step4b format_documents)
     # ------------------------------------------------------------------
 
-    def _retrieve_context(self, question: str) -> tuple[str, list[dict[str, Any]]]:
+    def _retrieve_context(
+        self,
+        question: str,
+        prefetched_docs: list[Any] | None = None,
+    ) -> tuple[str, list[dict[str, Any]]]:
         """Retrieve relevant chunks from ChromaDB and format as Thai-labelled context.
 
-        Uses MMR search (same as feng-shui-rag get_retriever search_type="mmr").
+        If prefetched_docs is provided (from _check_relevance Layer 2), those docs are
+        used directly — avoiding a second embedding round-trip.  Otherwise falls back
+        to MMR retriever (same as feng-shui-rag get_retriever search_type="mmr").
         Returns (formatted_context_str, source_docs_list).
         """
-        vs = self._ensure_vectorstore()
-        if vs is None:
-            return "", []
+        if prefetched_docs:
+            docs = prefetched_docs
+        else:
+            vs = self._ensure_vectorstore()
+            if vs is None:
+                return "", []
 
-        try:
-            retriever = self._retriever
-            if retriever is None:
-                from src.config.settings import get_settings
+            try:
+                retriever = self._retriever
+                if retriever is None:
+                    from src.config.settings import get_settings
 
-                s = get_settings()
-                retriever = vs.as_retriever(
-                    search_type=s.RAG_SEARCH_TYPE,
-                    search_kwargs={"k": s.RAG_TOP_K},
-                )
+                    s = get_settings()
+                    retriever = vs.as_retriever(
+                        search_type=s.RAG_SEARCH_TYPE,
+                        search_kwargs={"k": s.RAG_TOP_K},
+                    )
+                docs = retriever.invoke(question)
+            except Exception as exc:
+                logger.warning("FengShuiRAGService retrieval failed: %s", exc)
+                return "", []
 
-            docs = retriever.invoke(question)
+        formatted_parts: list[str] = []
+        source_docs: list[dict[str, Any]] = []
+        for i, doc in enumerate(docs, 1):
+            source = doc.metadata.get("source", "ฐานความรู้")
+            content = doc.page_content.strip()
+            formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
+            source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
 
-            formatted_parts: list[str] = []
-            source_docs: list[dict[str, Any]] = []
-            for i, doc in enumerate(docs, 1):
-                source = doc.metadata.get("source", "ฐานความรู้")
-                content = doc.page_content.strip()
-                # Format matches feng-shui-rag format_documents() style
-                formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
-                source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
-
-            context = "\n\n---\n\n".join(formatted_parts)
-            return context, source_docs
-
-        except Exception as exc:
-            logger.warning("FengShuiRAGService retrieval failed: %s", exc)
-            return "", []
+        context = "\n\n---\n\n".join(formatted_parts)
+        return context, source_docs
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -367,7 +377,10 @@ class FengShuiRAGService:
         history = conversation_history or []
 
         # --- Relevance guard (mirrors ConversationRAGChain._check_relevance) ---
-        if not self._check_relevance(question, history):
+        # _check_relevance now returns (is_relevant, prefetched_docs) so we can
+        # reuse the Layer-2 embedding result instead of embedding the query twice.
+        is_relevant, prefetched_docs = self._check_relevance(question, history)
+        if not is_relevant:
             logger.info("FengShuiRAGService: out-of-scope → %r", question[:60])
             print("  [RAG] OUT_OF_SCOPE — returning default message")
             return OUT_OF_SCOPE_MSG, []
@@ -386,8 +399,8 @@ class FengShuiRAGService:
         else:
             question_for_llm = question
 
-        # --- Retrieve context from ChromaDB ---
-        context, source_docs = self._retrieve_context(question)
+        # --- Retrieve context from ChromaDB (reuse prefetched docs from Layer 2 check) ---
+        context, source_docs = self._retrieve_context(question, prefetched_docs=prefetched_docs or None)
 
         # --- Build prompt messages ---
         messages = self._build_messages(question_for_llm, context, history, mode)
@@ -405,16 +418,15 @@ class FengShuiRAGService:
         if provider == "ollama":
             url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
             headers = {"Content-Type": "application/json"}
-            print(f"  [RAG] LLM: Ollama ({model})")
+            provider_label = f"Ollama ({model})"
         elif provider == "groq":
             url = f"{settings.GROQ_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.GROQ_API_KEY}",
                 "Content-Type": "application/json",
             }
-            print(f"  [RAG] LLM: Groq ({model})")
+            provider_label = f"Groq ({model})"
         else:
-            # openrouter หรือ provider อื่น
             url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
@@ -422,7 +434,15 @@ class FengShuiRAGService:
                 "HTTP-Referer": "https://buddybuilder.ai",
                 "X-Title": "BuddyBuilder AI",
             }
-            print(f"  [RAG] LLM: OpenRouter ({model})")
+            provider_label = f"OpenRouter ({model})"
+
+        print(
+            f"\n  ┌─ RAG → LLM Call ───────────────────────────────────\n"
+            f"  │  Model      : {provider_label}\n"
+            f"  │  Temperature: {settings.LLM_TEMPERATURE_RAG}\n"
+            f"  │  Threshold  : {self.RELEVANCE_THRESHOLD} (L2)  TOP_K={settings.RAG_TOP_K}\n"
+            f"  └────────────────────────────────────────────────────"
+        )
 
         try:
             async with httpx.AsyncClient() as client:
@@ -453,3 +473,128 @@ class FengShuiRAGService:
         except Exception as exc:
             logger.exception("FengShuiRAGService.ask failed")
             return f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}", []
+
+    async def ask_stream(
+        self,
+        question: str,
+        mode: str = "buddy",
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> "AsyncIterator[tuple[str, str, list[dict[str, Any]] | None]]":
+        """Streaming variant of `ask` — yields ("delta"|"final", text, sources|None).
+
+        Mirrors `ask()` exactly through relevance, retrieval, and prompt building,
+        but switches the LLM call to SSE streaming. Yields:
+          - ("delta",  token_chunk, None) repeatedly as chunks arrive
+          - ("final",  full_answer,  source_docs) once at the end
+
+        If relevance fails, yields a single ("final", OUT_OF_SCOPE_MSG, []).
+        """
+        import json
+
+        import httpx
+
+        from src.config.settings import get_settings
+
+        history = conversation_history or []
+
+        is_relevant, prefetched_docs = self._check_relevance(question, history)
+        if not is_relevant:
+            logger.info("FengShuiRAGService: out-of-scope (stream) → %r", question[:60])
+            yield ("final", OUT_OF_SCOPE_MSG, [])
+            return
+
+        q_lower = question.lower()
+        excluded_rooms = [kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower]
+        has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
+        if excluded_rooms and has_bedroom:
+            rooms_str = ", ".join(excluded_rooms[:3])
+            question_for_llm = (
+                f"[ระบบ: คำถามนี้พูดถึง {rooms_str} ซึ่งอยู่นอก scope — "
+                f"ห้ามตอบส่วน {rooms_str} เด็ดขาด ตอบเฉพาะห้องนอนเท่านั้น]\n{question}"
+            )
+        else:
+            question_for_llm = question
+
+        context, source_docs = self._retrieve_context(
+            question, prefetched_docs=prefetched_docs or None
+        )
+        messages = self._build_messages(question_for_llm, context, history, mode)
+
+        settings = get_settings()
+        provider = settings.LLM_PROVIDER
+        model = settings.LLM_MODEL_NAME
+
+        if provider == "ollama":
+            url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+        elif provider == "groq":
+            url = f"{settings.GROQ_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            }
+        else:
+            url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://buddybuilder.ai",
+                "X-Title": "BuddyBuilder AI",
+            }
+
+        full: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream(
+                    "POST",
+                    url,
+                    headers=headers,
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "temperature": settings.LLM_TEMPERATURE_RAG,
+                        "max_tokens": 1200,
+                        "stream": True,
+                    },
+                ) as response:
+                    if response.status_code != 200:
+                        err_body = (await response.aread()).decode("utf-8", errors="replace")
+                        logger.error(
+                            "FengShuiRAGService.stream: LLM error %d — %s",
+                            response.status_code,
+                            err_body[:200],
+                        )
+                        yield (
+                            "final",
+                            f"ขออภัยครับ ระบบมีปัญหาชั่วคราว (error {response.status_code})",
+                            [],
+                        )
+                        return
+
+                    async for raw_line in response.aiter_lines():
+                        if not raw_line:
+                            continue
+                        line = raw_line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(payload)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = obj.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta") or {}
+                        chunk = delta.get("content")
+                        if chunk:
+                            full.append(chunk)
+                            yield ("delta", chunk, None)
+        except Exception as exc:
+            logger.exception("FengShuiRAGService.ask_stream failed")
+            yield ("final", f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}", [])
+            return
+
+        yield ("final", "".join(full), source_docs)

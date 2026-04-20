@@ -76,8 +76,6 @@ class Settings(BaseSettings):
     # ==========================================================================
     # RAG LLM Temperature
     # ==========================================================================
-    LLM_MODEL_RAG: str = "anthropic/claude-3.5-sonnet"
-    """legacy OpenRouter model (ใช้เมื่อ LLM_PROVIDER=openrouter)"""
     LLM_TEMPERATURE_RAG: float = 0.7
 
     # ==========================================================================
@@ -123,10 +121,11 @@ class Settings(BaseSettings):
     """L2 distance threshold for filtering out-of-scope queries (lower = stricter)."""
 
     # ==========================================================================
-    # Security
+    # Security / JWT Auth
     # ==========================================================================
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_DAYS: int = 7
 
     # ==========================================================================
     # CORS Settings

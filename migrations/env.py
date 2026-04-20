@@ -1,16 +1,16 @@
 """Alembic migrations environment configuration."""
+
 import asyncio
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import async_engine_from_config, create_async_engine
 from sqlmodel import SQLModel
 
 # Import all models to register them with SQLModel metadata
-# from src.modules.rag.infrastructure.persistence.models import *
-# from src.modules.layout.infrastructure.persistence.models import *
+import src.models  # noqa: F401 — registers User, Project, ChatMessage with SQLModel metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,18 +26,18 @@ if config.config_file_name is not None:
 target_metadata = SQLModel.metadata
 
 
-def get_url() -> str:
+def get_url(async_driver: bool = False) -> str:
     """Get database URL from environment or config."""
     import os
+    from dotenv import load_dotenv
+    load_dotenv()
 
-    # Try to get from environment first
-    url = os.getenv("DATABASE_URL")
-    if url:
-        # Convert async URL to sync for alembic
-        return url.replace("postgresql+asyncpg://", "postgresql://")
-
-    # Fallback to alembic.ini config
-    return config.get_main_option("sqlalchemy.url", "")
+    url = os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url", ""))
+    # Normalise to base postgresql:// first
+    url = url.replace("postgresql+asyncpg://", "postgresql://")
+    if async_driver:
+        url = url.replace("postgresql://", "postgresql+asyncpg://")
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -51,7 +51,7 @@ def run_migrations_offline() -> None:
     Calls to context.execute() here emit the given string to the
     script output.
     """
-    url = get_url()
+    url = get_url(async_driver=False)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -73,12 +73,8 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
-    configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = get_url()
-
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
+    connectable = create_async_engine(
+        get_url(async_driver=True),
         poolclass=pool.NullPool,
     )
 

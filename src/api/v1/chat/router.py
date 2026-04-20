@@ -110,6 +110,144 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             },
         ).to_sse()
 
+        # --- 1a. Empty-room guard ---
+        # If the user asks to arrange/rearrange a room that has no furniture,
+        # don't run the pipeline (it produces random guesses). Tell the user
+        # to add furniture first.
+        if result.intent in {"new_layout", "rearrange_all", "modify"} and not request.current_layout:
+            yield SSEEvent(
+                event_type=SSEEventType.ANSWER,
+                data={
+                    "answer": (
+                        "ห้องยังว่างอยู่เลยครับ ลองเพิ่มเฟอร์นิเจอร์ที่อยากใช้เข้าไปในห้องก่อน "
+                        "(เช่น เตียง โซฟา โต๊ะ ตู้) แล้วค่อยบอกผมให้จัดวางใหม่ให้ถูกหลักฮวงจุ้ยนะครับ"
+                    )
+                },
+            ).to_sse()
+            return
+
+        # --- 1b. Clarification gate (stateless — skipped when answers present) ---
+        pending_questions = get_pending_questions(
+            intent=result.intent,
+            clarification_answers=request.clarification_answers,
+            has_existing_layout=bool(request.current_layout),
+        )
+        if pending_questions:
+            yield SSEEvent(
+                event_type=SSEEventType.CLARIFICATION_NEEDED,
+                data={
+                    "questions": pending_questions,
+                    "original_message": request.message,
+                },
+            ).to_sse()
+            return
+
+        # --- 2. Merge clarification answers into room_spec ---
+        _OPPOSITE_WALL: dict[str, str] = {
+            "south": "north",
+            "north": "south",
+            "east": "west",
+            "west": "east",
+        }
+        _SIDE_WALLS: dict[str, tuple[str, str]] = {
+            "south": ("west", "east"),
+            "north": ("west", "east"),
+            "east": ("south", "north"),
+            "west": ("south", "north"),
+        }
+
+        def _apply_clarification_answers(
+            room_spec: dict[str, Any], answers: dict[str, str]
+        ) -> dict[str, Any]:
+            """Inject clarification answers into room_spec.
+
+            Converts answers to explicit placement_hint strings that the LLM
+            reads as hard constraints, e.g.:
+              "โซนนอนควรอยู่ส่วนไหน → ตรงข้ามประตู"
+              → placement_hint: "sofa_bed/bed: target_wall=north (opposite of south door)"
+
+            RECOMMENDED questions that the user did not answer fall back to
+            their predefined default_value so the LLM always receives a full
+            set of hints (pipeline never loops asking the same things).
+            """
+            from src.modules.layout.infrastructure.tools.user_clarifier_tool import (
+                QuestionPriority,
+                UserClarifierTool,
+            )
+
+            spec = dict(room_spec)
+            merged: dict[str, str] = {}
+            for q in UserClarifierTool().get_questions_for_room_type("studio_apartment"):
+                if q.priority == QuestionPriority.RECOMMENDED and q.default_value is not None:
+                    merged[q.id] = q.default_value
+            merged.update(answers or {})
+            answers = merged
+
+            # Budget level → top-level field
+            budget_map = {"ประหยัด": "low", "กลาง": "medium", "สูง": "high"}
+            if "budget_level" in answers:
+                spec["budget_level"] = budget_map.get(answers["budget_level"], "medium")
+
+            # Build placement hints from answers
+            prefs = dict(spec.get("user_preferences") or {})
+            hints: list[str] = []
+
+            # Determine door wall for relative directions
+            doors = spec.get("doors") or []
+            door_wall = str(doors[0].get("wall", "south")).lower() if doors else "south"
+            opp = _OPPOSITE_WALL.get(door_wall, "north")
+            sides = _SIDE_WALLS.get(door_wall, ("west", "east"))
+
+            sleep_ans = answers.get("sleep_zone_preference", "")
+            if "ตรงข้ามประตู" in sleep_ans or "ผู้บัญชาการ" in sleep_ans:
+                hints.append(
+                    f"SLEEP ZONE: sofa_bed / bed MUST use target_wall={opp} "
+                    f"(wall opposite the {door_wall} door — command position)"
+                )
+            elif "ซ้าย" in sleep_ans:
+                hints.append(
+                    f"SLEEP ZONE: sofa_bed / bed MUST use target_wall={sides[0]} "
+                    f"(left wall as seen from door)"
+                )
+            elif "ขวา" in sleep_ans:
+                hints.append(
+                    f"SLEEP ZONE: sofa_bed / bed MUST use target_wall={sides[1]} "
+                    f"(right wall as seen from door)"
+                )
+
+            sofa_ans = answers.get("sofa_bed_or_separate", "")
+            if "โซฟาเตียง" in sofa_ans:
+                hints.append(
+                    "FURNITURE TYPE: use sofa_bed (id=sofa_bed_001 or sofa_bed_002) "
+                    "as the primary sleep+seating piece — do NOT place a separate bed AND sofa"
+                )
+            elif "เตียงแยก" in sofa_ans:
+                hints.append(
+                    "FURNITURE TYPE: use a separate bed (id=bed_single_001 or bed_queen_001) "
+                    "AND a sofa — two distinct pieces"
+                )
+            elif "เตียงเดี่ยว" in sofa_ans:
+                hints.append(
+                    "FURNITURE TYPE: use a single bed only (id=bed_single_001) — no sofa needed"
+                )
+
+            work_ans = answers.get("work_area_needed", "")
+            if work_ans.lower() in ("yes", "ใช่"):
+                hints.append(
+                    "WORK ZONE: include a folding_desk (id=folding_desk_001 or folding_desk_002) "
+                    f"on the {sides[0]} or {sides[1]} wall (NOT on the sleep wall)"
+                )
+            elif work_ans.lower() in ("no", "ไม่ใช่"):
+                hints.append("WORK ZONE: no desk needed — omit folding_desk from layout")
+
+            if hints:
+                prefs["placement_constraints"] = "\n".join(hints)
+
+            prefs["clarification_answers"] = answers
+            spec["user_preferences"] = prefs
+            return spec
+
+        # --- 3. Dispatch to handler ---
         if result.intent == "set_mode":
             new_mode = (
                 result.extracted_params.get("mode")
@@ -134,7 +272,7 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 yield event.to_sse()
 
         elif result.intent == "modify":
-            if not request.current_layout or not request.room_spec:
+            if not request.room_spec:
                 yield SSEEvent(
                     event_type=SSEEventType.PIPELINE_FAILED,
                     data={"error": "current_layout and room_spec are required for modify intent"},
@@ -146,6 +284,27 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 room_spec=request.room_spec,
                 modification_request=request.message,
                 extracted_params=result.extracted_params,
+            ):
+                yield event.to_sse()
+
+        elif result.intent == "rearrange_all":
+            if not request.room_spec:
+                yield SSEEvent(
+                    event_type=SSEEventType.PIPELINE_FAILED,
+                    data={"error": "current_layout and room_spec are required for rearrange_all intent"},
+                ).to_sse()
+                return
+            rearrange_room_spec = _apply_clarification_answers(
+                dict(request.room_spec), request.clarification_answers
+            )
+            rearrange_prefs = dict(rearrange_room_spec.get("user_preferences") or {})
+            rearrange_prefs["user_message"] = request.message
+            rearrange_room_spec["user_preferences"] = rearrange_prefs
+            agent = RearrangeAgent()
+            async for event in agent.apply(
+                current_layout=request.current_layout,
+                room_spec=rearrange_room_spec,
+                modification_request=request.message,
             ):
                 yield event.to_sse()
 
@@ -161,8 +320,8 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
         else:
             answer = await _answer_question(request.message, request.mode, mood)
             yield SSEEvent(
-                event_type=SSEEventType.PIPELINE_COMPLETED,
-                data={"intent": "question", "answer": answer},
+                event_type=SSEEventType.ANSWER,
+                data={"answer": answer},
             ).to_sse()
 
     return StreamingResponse(
@@ -176,10 +335,59 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     )
 
 
-async def _answer_question(message: str, mode: str, mood: str = "neutral") -> str:
-    """Answer a feng shui / design question directly via LLM with RAG augmentation."""
-    from src.modules.layout.application.agent.personality import get_system_prompt
-    from src.modules.layout.application.services import ContextInjector
+@router.post("/rag")
+async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
+    """RAG-only chat endpoint — ตอบคำถามฮวงจุ้ยโดยตรง ไม่ผ่าน router agent และไม่สร้าง layout.
+
+    ใช้สำหรับหน้า Chatbot โดยเฉพาะ.
+    """
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        from src.modules.layout.application.services.rag_service import FengShuiRAGService
+
+        service = FengShuiRAGService()
+        full_answer = ""
+        try:
+            async for kind, text, _sources in service.ask_stream(
+                question=request.message,
+                mode=request.mode,
+                conversation_history=request.conversation_history or [],
+            ):
+                if kind == "delta":
+                    yield SSEEvent(
+                        event_type=SSEEventType.ANSWER_DELTA,
+                        data={"delta": text},
+                    ).to_sse()
+                elif kind == "final":
+                    full_answer = text
+        except Exception as exc:  # pragma: no cover - safety net
+            full_answer = full_answer or f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
+
+        # Keep the `answer` event as the terminal marker so legacy clients that
+        # only listen for ANSWER still receive the full text.
+        yield SSEEvent(
+            event_type=SSEEventType.ANSWER,
+            data={"answer": full_answer},
+        ).to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _answer_question(
+    message: str,
+    mode: str,
+    mood: str = "neutral",
+    conversation_history: list[dict[str, str]] | None = None,
+) -> str:
+    """Answer a feng shui / design question using FengShuiRAGService.
 
     system_prompt = get_system_prompt(mode, mood)
     rag_context = ""
