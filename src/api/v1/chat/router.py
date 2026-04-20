@@ -121,6 +121,22 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             },
         ).to_sse()
 
+        # --- 1a. Empty-room guard ---
+        # If the user asks to arrange/rearrange a room that has no furniture,
+        # don't run the pipeline (it produces random guesses). Tell the user
+        # to add furniture first.
+        if result.intent in {"new_layout", "rearrange_all", "modify"} and not request.current_layout:
+            yield SSEEvent(
+                event_type=SSEEventType.ANSWER,
+                data={
+                    "answer": (
+                        "ห้องยังว่างอยู่เลยครับ ลองเพิ่มเฟอร์นิเจอร์ที่อยากใช้เข้าไปในห้องก่อน "
+                        "(เช่น เตียง โซฟา โต๊ะ ตู้) แล้วค่อยบอกผมให้จัดวางใหม่ให้ถูกหลักฮวงจุ้ยนะครับ"
+                    )
+                },
+            ).to_sse()
+            return
+
         # --- 1b. Clarification gate (stateless — skipped when answers present) ---
         pending_questions = get_pending_questions(
             intent=result.intent,
@@ -160,10 +176,23 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             reads as hard constraints, e.g.:
               "โซนนอนควรอยู่ส่วนไหน → ตรงข้ามประตู"
               → placement_hint: "sofa_bed/bed: target_wall=north (opposite of south door)"
+
+            RECOMMENDED questions that the user did not answer fall back to
+            their predefined default_value so the LLM always receives a full
+            set of hints (pipeline never loops asking the same things).
             """
-            if not answers:
-                return room_spec
+            from src.modules.layout.infrastructure.tools.user_clarifier_tool import (
+                QuestionPriority,
+                UserClarifierTool,
+            )
+
             spec = dict(room_spec)
+            merged: dict[str, str] = {}
+            for q in UserClarifierTool().get_questions_for_room_type("studio_apartment"):
+                if q.priority == QuestionPriority.RECOMMENDED and q.default_value is not None:
+                    merged[q.id] = q.default_value
+            merged.update(answers or {})
+            answers = merged
 
             # Budget level → top-level field
             budget_map = {"ประหยัด": "low", "กลาง": "medium", "สูง": "high"}
@@ -260,27 +289,6 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 yield event.to_sse()
 
         elif result.intent == "modify":
-            # If no existing layout, downgrade to new_layout and inject placement preference
-            if not request.current_layout:
-                if not request.room_spec:
-                    yield SSEEvent(
-                        event_type=SSEEventType.PIPELINE_FAILED,
-                        data={"error": "room_spec is required"},
-                    ).to_sse()
-                    return
-                room_spec = _apply_clarification_answers(
-                    dict(request.room_spec), request.clarification_answers
-                )
-                prefs = dict(room_spec.get("user_preferences") or {})
-                prefs["user_message"] = request.message
-                params = result.extracted_params
-                if params.get("target_furniture") and params.get("details"):
-                    prefs["placement_hint"] = f"{params['target_furniture']}: {params['details']}"
-                room_spec["user_preferences"] = prefs
-                orchestrator = PipelineOrchestrator(PipelineConfig())
-                async for event in orchestrator.run(room_spec, mode=request.mode):
-                    yield event.to_sse()
-                return
             if not request.room_spec:
                 yield SSEEvent(
                     event_type=SSEEventType.PIPELINE_FAILED,
@@ -297,37 +305,25 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 yield event.to_sse()
 
         elif result.intent == "rearrange_all":
-            if not request.current_layout or not request.room_spec:
-                # No existing layout — fall through to new_layout pipeline
-                if not request.room_spec:
-                    yield SSEEvent(
-                        event_type=SSEEventType.PIPELINE_FAILED,
-                        data={"error": "room_spec is required"},
-                    ).to_sse()
-                    return
-                room_spec = _apply_clarification_answers(
-                    dict(request.room_spec), request.clarification_answers
-                )
-                prefs = dict(room_spec.get("user_preferences") or {})
-                prefs["user_message"] = request.message
-                room_spec["user_preferences"] = prefs
-                orchestrator = PipelineOrchestrator(PipelineConfig())
-                async for event in orchestrator.run(room_spec, mode=request.mode):
-                    yield event.to_sse()
-            else:
-                rearrange_room_spec = _apply_clarification_answers(
-                    dict(request.room_spec), request.clarification_answers
-                )
-                rearrange_prefs = dict(rearrange_room_spec.get("user_preferences") or {})
-                rearrange_prefs["user_message"] = request.message
-                rearrange_room_spec["user_preferences"] = rearrange_prefs
-                agent = RearrangeAgent()
-                async for event in agent.apply(
-                    current_layout=request.current_layout,
-                    room_spec=rearrange_room_spec,
-                    modification_request=request.message,
-                ):
-                    yield event.to_sse()
+            if not request.room_spec:
+                yield SSEEvent(
+                    event_type=SSEEventType.PIPELINE_FAILED,
+                    data={"error": "current_layout and room_spec are required for rearrange_all intent"},
+                ).to_sse()
+                return
+            rearrange_room_spec = _apply_clarification_answers(
+                dict(request.room_spec), request.clarification_answers
+            )
+            rearrange_prefs = dict(rearrange_room_spec.get("user_preferences") or {})
+            rearrange_prefs["user_message"] = request.message
+            rearrange_room_spec["user_preferences"] = rearrange_prefs
+            agent = RearrangeAgent()
+            async for event in agent.apply(
+                current_layout=request.current_layout,
+                room_spec=rearrange_room_spec,
+                modification_request=request.message,
+            ):
+                yield event.to_sse()
 
         elif result.intent == "explain":
             state = PipelineState(
