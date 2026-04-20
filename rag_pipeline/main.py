@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from step1_data_loader import load_all_documents
 from step2b_contextual_chunking import split_documents_with_context
-from step2c_hypothetical_questions import create_qa_chunks
 from step3_vectorstore import create_vectorstore
 
 
@@ -56,6 +55,7 @@ def main():
         elif args.method == "contextual":
             chunks = split_documents_with_context(docs, use_llm_context=args.llm_context)
         elif args.method == "questions":
+            from step2c_hypothetical_questions import create_qa_chunks
             chunks = create_qa_chunks(docs, questions_per_chunk=3)
 
         # Step 3: สร้าง vectorstore

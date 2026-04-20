@@ -87,6 +87,8 @@ class SSEEventType(StrEnum):
     CLARIFICATION_NEEDED = "clarification_needed"
     # Direct answer (question intent — no pipeline)
     ANSWER = "answer"
+    # Streaming token chunks for the RAG chat UI
+    ANSWER_DELTA = "answer_delta"
 
 
 @dataclass

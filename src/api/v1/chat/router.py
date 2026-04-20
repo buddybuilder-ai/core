@@ -369,15 +369,31 @@ async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
     """
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        answer = await _answer_question(
-            request.message,
-            request.mode,
-            "neutral",
-            request.conversation_history,
-        )
+        from src.modules.layout.application.services.rag_service import FengShuiRAGService
+
+        service = FengShuiRAGService()
+        full_answer = ""
+        try:
+            async for kind, text, _sources in service.ask_stream(
+                question=request.message,
+                mode=request.mode,
+                conversation_history=request.conversation_history or [],
+            ):
+                if kind == "delta":
+                    yield SSEEvent(
+                        event_type=SSEEventType.ANSWER_DELTA,
+                        data={"delta": text},
+                    ).to_sse()
+                elif kind == "final":
+                    full_answer = text
+        except Exception as exc:  # pragma: no cover - safety net
+            full_answer = full_answer or f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
+
+        # Keep the `answer` event as the terminal marker so legacy clients that
+        # only listen for ANSWER still receive the full text.
         yield SSEEvent(
             event_type=SSEEventType.ANSWER,
-            data={"answer": answer},
+            data={"answer": full_answer},
         ).to_sse()
 
     return StreamingResponse(

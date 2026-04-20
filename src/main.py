@@ -6,6 +6,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from src.config.settings import get_settings
 
@@ -27,11 +30,18 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
-    # Startup
-    print(f"🚀 Starting {settings.APP_NAME}...")
+    # Startup — preload embedding model so first request isn't slow
+    print(f"Starting {settings.APP_NAME}...")
+    try:
+        from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
+
+        get_cached_vectorstore(settings.CHROMA_DB_PATH, settings.EMBEDDING_MODEL_LOCAL)
+        print("Vectorstore + embedding model loaded")
+    except Exception as exc:
+        print(f"Vectorstore preload skipped: {exc}")
     yield
     # Shutdown
-    print(f"👋 Shutting down {settings.APP_NAME}...")
+    print(f"Shutting down {settings.APP_NAME}...")
 
 
 def create_app() -> FastAPI:
@@ -44,6 +54,10 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    # Rate limiter state (used by @limiter.limit decorators in routers)
+    app.state.limiter = Limiter(key_func=get_remote_address)
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     # CORS middleware
     app.add_middleware(
