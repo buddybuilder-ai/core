@@ -1,0 +1,108 @@
+{
+    "project": "BuddyBuilder.ai",
+    "student_id": "66073169",
+    "room_summary": {
+        "applied_height_m": 2.5,
+        "scale_factor": 1.86,
+        "total_objects": 8
+    },
+    "objects": [
+        {
+            "label": "lamp",
+            "confidence": 0.93,
+            "width_m": 1.93,
+            "height_m": 0.85,
+            "elevation_m": 2.02,
+            "distance_m": 1.25,
+            "center_pixel": [
+                610,
+                199
+            ]
+        },
+        {
+            "label": "bed",
+            "confidence": 0.93,
+            "width_m": 2.2,
+            "height_m": 1.0,
+            "elevation_m": 0.0,
+            "distance_m": 1.25,
+            "center_pixel": [
+                705,
+                829
+            ]
+        },
+        {
+            "label": "lamp",
+            "confidence": 0.87,
+            "width_m": 0.44,
+            "height_m": 0.37,
+            "elevation_m": 0.8,
+            "distance_m": 1.25,
+            "center_pixel": [
+                650,
+                626
+            ]
+        },
+        {
+            "label": "desk",
+            "confidence": 0.79,
+            "width_m": 1.79,
+            "height_m": 0.81,
+            "elevation_m": 0.27,
+            "distance_m": 1.25,
+            "center_pixel": [
+                127,
+                751
+            ]
+        },
+        {
+            "label": "nightstand",
+            "confidence": 0.73,
+            "width_m": 0.88,
+            "height_m": 0.13,
+            "elevation_m": 0.71,
+            "distance_m": 1.25,
+            "center_pixel": [
+                640,
+                687
+            ]
+        },
+        {
+            "label": "shelf",
+            "confidence": 0.43,
+            "width_m": 2.16,
+            "height_m": 1.88,
+            "elevation_m": 0.35,
+            "distance_m": 1.25,
+            "center_pixel": [
+                372,
+                567
+            ]
+        },
+        {
+            "label": "shelf",
+            "confidence": 0.3,
+            "width_m": 1.11,
+            "height_m": 1.87,
+            "elevation_m": 0.36,
+            "distance_m": 1.25,
+            "center_pixel": [
+                300,
+                566
+            ]
+        },
+        {
+            "label": "rug",
+            "confidence": 0.3,
+            "width_m": 7.76,
+            "height_m": 0.91,
+            "elevation_m": 0.0,
+            "distance_m": 1.25,
+            "center_pixel": [
+                543,
+                968
+            ]
+        }
+    ],
+    "status": "success"
+}

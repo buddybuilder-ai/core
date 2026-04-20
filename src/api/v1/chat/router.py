@@ -52,7 +52,7 @@ async def send_message(
                     "X-Title": "BuddyBuilder AI",
                 },
                 json={
-                    "model": settings.LLM_MODEL_RAG,
+                    "model": settings.LLM_MODEL_NAME,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": request.text},
@@ -127,6 +127,10 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             return
 
         # --- 1b. Clarification gate (stateless — skipped when answers present) ---
+        from src.modules.layout.application.services.clarification_gate import (
+            get_pending_questions,
+        )
+
         pending_questions = get_pending_questions(
             intent=result.intent,
             clarification_answers=request.clarification_answers,
@@ -300,6 +304,8 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             rearrange_prefs = dict(rearrange_room_spec.get("user_preferences") or {})
             rearrange_prefs["user_message"] = request.message
             rearrange_room_spec["user_preferences"] = rearrange_prefs
+
+            from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
             agent = RearrangeAgent()
             async for event in agent.apply(
                 current_layout=request.current_layout,
@@ -387,9 +393,9 @@ async def _answer_question(
     mood: str = "neutral",
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str:
-    """Answer a feng shui / design question using FengShuiRAGService.
+    """Answer a feng shui / design question using FengShuiRAGService."""
 
-    system_prompt = get_system_prompt(mode, mood)
+    system_prompt = _get_default_system_prompt(mode)
     rag_context = ""
     try:
         injector = ContextInjector()
@@ -411,7 +417,7 @@ async def _answer_question(
                     "X-Title": "BuddyBuilder AI",
                 },
                 json={
-                    "model": settings.LLM_MODEL_RAG,
+                    "model": settings.LLM_MODEL_NAME,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": augmented_message},
@@ -456,7 +462,16 @@ async def process_single_image(
 
     # 3. สั่งรัน AI Script (detect_objects_2.py)
     try:
+        import sys
         print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
+        script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
+        subprocess.run(
+            [sys.executable, script_path, str(target_height), temp_image_path],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
 
         # 4. อ่านไฟล์ JSON ที่ AI สร้างขึ้นใน assets
         json_path = os.path.join(assets_dir, "my_room_2_data.json")
@@ -472,3 +487,10 @@ async def process_single_image(
     except Exception as e:
         print(f"❌ Server Exception: {str(e)}")
         return {"status": "error", "message": str(e)}
+    finally:
+        # 5. ลบไฟล์รูปภาพทิ้งเพื่อไม่ให้เปลืองพื้นที่
+        if os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+            except Exception as cleanup_error:
+                print(f"⚠️ Failed to clean up temporary image: {cleanup_error}")

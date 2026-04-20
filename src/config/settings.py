@@ -39,9 +39,9 @@ class Settings(BaseSettings):
     #   ollama/qwen2.5:7b
     #   groq/llama-3.3-70b-versatile
     #   groq/llama-3.1-8b-instant
-    #   openrouter/anthropic/claude-3.5-sonnet
+    #   openrouter/anthropic/claude-3.7-sonnet
     # ==========================================================================
-    LLM_MODEL: str = "openrouter/anthropic/claude-3.5-sonnet"
+    LLM_MODEL: str = "openrouter/anthropic/claude-3.7-sonnet"
     """LLM backend — parse provider จาก prefix ก่อน /"""
 
     @property
