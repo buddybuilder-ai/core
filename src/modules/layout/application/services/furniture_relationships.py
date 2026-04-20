@@ -91,7 +91,7 @@ _RULES: list[dict[str, Any]] = [
     # ── Wardrobe near bed ─────────────────────────────────────────────────────
     {
         "requires": ["wardrobe", "bed"],
-        "description": "{a} (wardrobe) should be on the same wall as {b} (bed) or the adjacent wall — do NOT place it on the wall directly opposite the bed.",
+        "description": "{a} (wardrobe) must be on an ADJACENT wall to {b} (bed) — never on the same wall as the bed and never directly opposite it. Keep at least 0.6 m clearance so no corner of the wardrobe points at the sleeping area (poison arrow).",
         "a_type": "wardrobe",
         "b_type": "bed",
     },
