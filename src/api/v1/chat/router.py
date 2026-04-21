@@ -426,19 +426,9 @@ async def process_single_image(
 @router.get("/get-ip")
 async def get_ip():
     """
-    Mock up endpoint สำหรับคืนค่า IP Address ของเครื่อง Server
+    คืนค่า IP Address ในรูปแบบ JSON object
     """
-    try:
-        # วิธีดึง IP ของเครื่องในเครือข่ายปัจจุบัน (Local IP)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip_address = s.getsockname()[0]
-        s.close()
-    except Exception:
-        # หากดึงไม่ได้ ให้คืนค่า Mock up เป็น Localhost แทน
-        ip_address = "127.0.0.1"
-    
-    return {"ipAddress": ip_address}
+    return {"ipAddress": "127.0.0.1"}
 
 
 @router.get("/check-upload-status")
