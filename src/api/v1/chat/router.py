@@ -5,11 +5,11 @@ import os
 import subprocess
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any, cast ,Dict
 import socket
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
@@ -27,6 +27,8 @@ from src.schemas.chat_stream import ChatStreamRequest
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 settings = get_settings()
+
+upload_sessions: Dict[str, Any] = {}
 
 
 async def get_chat_service() -> Any:
@@ -437,3 +439,21 @@ async def get_ip():
         ip_address = "127.0.0.1"
     
     return {"ipAddress": ip_address}
+
+
+@router.get("/check-upload-status")
+async def check_upload_status(sessionId: str = Query(...)):
+    """
+    Endpoint สำหรับให้ Frontend (PC) คอยเช็คว่ามือถืออัปโหลดรูปเสร็จหรือยัง
+    """
+    # 1. ถ้ายังไม่มี sessionId นี้ในระบบ
+    if sessionId not in upload_sessions:
+        return {
+            "status": "pending", 
+            "message": "Waiting for mobile upload..."
+        }
+    
+    # 2. ส่งสถานะปัจจุบันกลับไป (เช่น "processing", "success", "error")
+    session_data = upload_sessions.get(sessionId)
+    
+    return session_data
