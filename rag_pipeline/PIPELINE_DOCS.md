@@ -245,11 +245,34 @@ separators = ["\n\n", "\n", " ", ""]
 
 ---
 
-## `step2b_contextual_chunking.py` — Contextual Chunking
+## `step2b_contextual_chunking.py` — Contextual Chunking + Knowledge Type Classification
 
 แนวคิดจาก Anthropic "Contextual Retrieval": chunk เดี่ยวๆ มักขาดบริบท
 เช่น `"ห้ามวางเตียงตรงกับประตู"` — ไม่รู้ว่าเป็นกฎของอะไร
 การเติม context นำหน้าทำให้ embedding จับใจความได้ครบกว่า
+
+> **อัพเดตล่าสุด:** step2b ทำงาน 2 อย่างในครั้งเดียวคือเติม context สรุป **และ** classify `knowledge_type` (`feng_shui` / `interior_design` / `both`) ลงใน metadata — ค่านี้ถูก `/chat/rag` ใช้กรองเอกสารให้ตรง query type
+
+### `_FENG_SHUI_KW` / `_INTERIOR_KW`
+
+Keyword lists สำหรับ classify แบบ keyword-based (ไม่ใช้ LLM) ใช้ใน `_keyword_classify()` และ fallback ของ LLM mode
+
+### `_keyword_classify(text)` *(ใหม่)*
+
+```python
+def _keyword_classify(text: str) -> str:
+```
+
+Classify `knowledge_type` จาก keyword โดยไม่ใช้ LLM:
+- มีทั้งสอง → `"both"`
+- มีเฉพาะ interior → `"interior_design"`
+- มีเฉพาะ feng shui หรือไม่ชัดเจน → `"feng_shui"` (default เพราะ domain นี้คือ feng shui)
+
+### `_RecursiveCharacterTextSplitter` *(ใหม่)*
+
+Custom text splitter ที่ implement เอง ไม่ใช้ `langchain_text_splitters`
+เหตุผล: LangChain text splitter import `transformers` library ทำให้ startup ช้า **20+ วินาที**
+Logic เหมือน LangChain ทุกอย่าง: recursive split ตาม `separators = ["\n\n", "\n", " ", ""]` พร้อม overlap
 
 ### `get_contextual_llm()`
 
@@ -257,17 +280,17 @@ separators = ["\n\n", "\n", " ", ""]
 def get_contextual_llm():
 ```
 
-สร้าง LLM สำหรับ generate context summary ของแต่ละ chunk
-ใช้ `CONTEXTUAL_TEMPERATURE` (default 0.2) ซึ่งต่ำกว่า `TEMPERATURE` ทั่วไป เพราะต้องการ summary ที่แม่นยำไม่ใช่ creative
+สร้าง LLM สำหรับ generate context summary + classify ของแต่ละ chunk
+ใช้ `CONTEXTUAL_TEMPERATURE` (default 0.2) ซึ่งต่ำกว่า `TEMPERATURE` ทั่วไป เพราะต้องการ summary แม่นยำ
 รองรับ 3 providers: `ollama`, `groq`, `claude`
 
-### `add_context_to_chunk(chunk, document_title, use_llm)`
+### `add_context_to_chunk(chunk, document_title, use_llm, llm)` *(อัพเดต)*
 
 ```python
-def add_context_to_chunk(chunk: Document, document_title: str, use_llm: bool = True) -> Document:
+def add_context_to_chunk(chunk, document_title: str, use_llm: bool = True, llm=None) -> Document:
 ```
 
-เพิ่ม context นำหน้า chunk ก่อน embed มี 2 โหมด:
+เพิ่ม context นำหน้า chunk และตั้ง `metadata["knowledge_type"]` พร้อมกัน มี 2 โหมด:
 
 **`use_llm=False` (Simple mode):**
 ```
@@ -275,34 +298,57 @@ def add_context_to_chunk(chunk: Document, document_title: str, use_llm: bool = T
 
 <เนื้อหาเดิม>
 ```
-เร็ว ไม่เรียก LLM เหมาะสำหรับ rebuild ด่วน
+Classify ด้วย `_keyword_classify()` — เร็ว ไม่เรียก LLM เหมาะสำหรับ rebuild ด่วน
 
 **`use_llm=True` (LLM mode):**
-```
-บริบท: <LLM สรุปว่า chunk นี้พูดถึงอะไร ใน 1-2 ประโยค>
 
-<เนื้อหาเดิม>
+LLM prompt ถามพร้อมกัน 2 อย่างในครั้งเดียว (ประหยัด token):
 ```
-LLM รับ content แค่ 500 ตัวอักษรแรกเพื่อประหยัด token
-ถ้า LLM ล้มเหลว → fallback เป็น simple mode อัตโนมัติ ไม่หยุด pipeline
+บริบท: <สรุป 1-2 ประโยค>
+ประเภท: <feng_shui | interior_design | both>
+```
+Output format นี้ถูก parse แล้วตั้งเป็น `metadata["knowledge_type"]`
+ถ้า LLM ไม่ตอบตาม format → fallback เป็น `_keyword_classify()` อัตโนมัติ
+ถ้า LLM error → fallback เป็น simple mode ทั้งหมด ไม่หยุด pipeline
 
-### `split_documents_with_context(documents, use_llm_context)`
+**Parameter `llm`:** รับ LLM instance ที่สร้างไว้แล้ว ถ้าไม่ส่งจะสร้างใหม่ทุก chunk (ช้ากว่า)
+
+**Metadata ที่ตั้งค่า:**
+| key | ค่า | ความหมาย |
+|-----|-----|-----------|
+| `knowledge_type` | `feng_shui` / `interior_design` / `both` | ใช้กรองใน `/chat/rag` |
+| `has_llm_context` | `True` / `False` | ช่วย debug ว่า chunk ไหนได้ LLM context |
+
+### `export_chunks_to_csv(chunks)` *(ใหม่)*
 
 ```python
-def split_documents_with_context(documents: List[Document], use_llm_context: bool = False) -> List[Document]:
+def export_chunks_to_csv(chunks: List) -> Path:
+```
+
+Export chunks ทั้งหมดไปที่ `rag_pipeline/exports/chunks_YYYYMMDD_HHMMSS.csv` อัตโนมัติหลัง split เสร็จ
+Columns: `chunk_id`, `source`, `knowledge_type`, `has_llm_context`, `content_preview` (500 ตัวอักษรแรก)
+ใช้ `utf-8-sig` ให้ Excel เปิดภาษาไทยได้ถูกต้อง
+
+### `split_documents_with_context(documents, use_llm_context)` *(อัพเดต)*
+
+```python
+def split_documents_with_context(documents: List, use_llm_context: bool = False) -> List:
 ```
 
 Pipeline หลักของ step2b:
-1. แบ่ง documents → chunks ด้วย `RecursiveCharacterTextSplitter`
-2. วนลูปทุก chunk → เรียก `add_context_to_chunk()` ทีละชิ้น
-3. แสดง progress ทุก 10 chunks (เพราะถ้าใช้ LLM mode จะช้ามาก)
+1. สร้าง LLM instance **ครั้งเดียว** ก่อนเริ่ม loop (ไม่สร้างใหม่ทุก chunk — เร็วกว่า)
+2. แบ่ง documents → chunks ด้วย `_RecursiveCharacterTextSplitter` (custom, ไม่ใช้ LangChain)
+3. วนลูปทุก chunk → เรียก `add_context_to_chunk()` พร้อม LLM instance ที่แชร์ร่วมกัน
+4. Progress: ทุก 10 chunks (LLM mode) หรือ ทุก 100 chunks (keyword mode)
+5. แสดงสถิติ `feng_shui` / `interior_design` / `both` เมื่อเสร็จ
+6. เรียก `export_chunks_to_csv()` อัตโนมัติ
 
 **การเรียกใช้:**
 ```bash
-# simple mode (เร็ว)
+# keyword classify (เร็ว — แนะนำสำหรับ dev)
 python main.py --method contextual
 
-# LLM mode (ดีกว่า แต่ต้องมี Ollama)
+# LLM classify + context (แม่นยำกว่า — ต้องมี LLM)
 python main.py --method contextual --llm-context
 ```
 
@@ -451,6 +497,8 @@ metadata เหล่านี้ถูก index ไว้ตอน `load_csv_ex
 
 > ไฟล์นี้ใช้สำหรับ **dev/testing** เท่านั้น
 > Production ใช้ `FengShuiRAGService` ใน `core/src/` แทน เพราะ stateless เหมาะกับ FastAPI
+
+**อัพเดตล่าสุด:** `SYSTEM_PROMPT`, `DOMAIN_KEYWORDS`, `OUT_OF_SCOPE_MSG` ย้ายไปอยู่ใน `rag_constants.py` แล้ว — import จากที่นั่นเพื่อให้ dev และ production ใช้ค่าเดียวกัน ไม่ต้อง sync กันเอง `FUZZY_MATCH_THRESHOLD` ก็ import จาก `config.py` แทนที่จะ hardcode
 
 ### `get_llm()`
 
@@ -738,7 +786,73 @@ step4b_rag_with_memory.py (dev) ◄── RELEVANCE_THRESHOLD ◄─────
   └── ConversationRAGChain
         ├── _check_relevance()  → Layer 1 (keywords) + Layer 2 (L2)
         └── invoke()            → LLM → answer
+
+          │  (production path)
+          ▼
+src/modules/layout/application/services/rag_service.py
+  └── FengShuiRAGService  (stateless — ใช้ใน FastAPI)
+        ├── ask()          → (answer, source_docs)
+        └── ask_stream()   → yields ("delta"|"final", text, sources)
+                │
+                ▼
+src/api/v1/chat/router.py  POST /chat/rag
+  └── event_generator()   → SSE stream
+        ├── "delta" → event: answer_delta\ndata: {"type":"answer_delta","delta":"..."}
+        └── "final" → event: answer\ndata: {"type":"answer","answer":"...","source_documents":[...]}
 ```
+
+---
+
+---
+
+## API Integration — `POST /chat/rag`
+
+> endpoint นี้เป็น **production path** ของ RAG pipeline เชื่อมต่อ `FengShuiRAGService` เข้ากับ frontend ผ่าน SSE streaming
+
+### ที่อยู่ไฟล์
+
+```
+core/src/api/v1/chat/router.py  (function: chat_rag_only)
+```
+
+### Flow การทำงาน
+
+```
+POST /chat/rag  ← { message, mode, conversation_history }
+       │
+       ▼
+FengShuiRAGService.ask_stream()
+       │
+       ├── yield ("delta", token, None)   ──►  event: answer_delta
+       │                                        data: {"type":"answer_delta","delta":"..."}
+       │
+       └── yield ("final", answer, docs)  ──►  event: answer
+                                                data: {"type":"answer","answer":"...","source_documents":[...]}
+```
+
+### SSE Event Format
+
+endpoint นี้ format SSE inline โดยตรง **ไม่ import จาก layout module** เพื่อให้ RAG pipeline เป็น independent module:
+
+```python
+def _sse(event: str, **data) -> str:
+    payload = json.dumps({"type": event, **data})
+    return f"event: {event}\ndata: {payload}\n\n"
+```
+
+| Event | เมื่อไร | Fields ใน data |
+|-------|---------|----------------|
+| `answer_delta` | ทุก token chunk ที่ stream มา | `type`, `delta` |
+| `answer` | ตอบสุดท้ายหลัง stream จบ | `type`, `answer`, `source_documents` |
+
+### ข้อแตกต่างจาก `/chat/stream`
+
+| | `/chat/rag` | `/chat/stream` |
+|--|-------------|----------------|
+| Intent routing | ไม่มี — ตอบตรงทันที | ผ่าน RouterAgent ก่อน |
+| Layout pipeline | ไม่เกี่ยวข้อง | trigger ได้ถ้า intent = new_layout |
+| SSE events | `answer_delta`, `answer` เท่านั้น | มี event type ครบ (pipeline, steps, modifier ฯลฯ) |
+| ใช้สำหรับ | หน้า Chatbot ฮวงจุ้ย | หน้า Room Builder |
 
 ---
 
