@@ -461,7 +461,6 @@ class RearrangeAgent:
             room_type=room_type,
             width=room_w,
             depth=room_d,
-            item_count=len(enriched),
             modification_request=modification_request,
             collisions_remaining=len(collisions),
             feng_shui_score=resolution.deterministic_score,
@@ -661,7 +660,6 @@ class RearrangeAgent:
         room_type: str,
         width: float,
         depth: float,
-        item_count: int,
         modification_request: str,
         collisions_remaining: int,
         feng_shui_score: int,
@@ -677,7 +675,7 @@ class RearrangeAgent:
             detect_kua_priority,
             kua_best_direction_info,
         )
-        from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT
+        from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT, _build_items_summary
 
         # Build kua_line — pre-rendered Thai text, no LLM logic needed
         kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"
@@ -719,7 +717,10 @@ class RearrangeAgent:
 
         grade = "ดีมาก" if feng_shui_score >= 55 else ("ดี" if feng_shui_score >= 35 else "พอใช้")
 
+        items_summary = _build_items_summary(enriched_layout or [])
+
         prompt = EXPLANATION_PROMPT.format(
+            items_summary=items_summary,
             total_score=feng_shui_score,
             grade=grade,
             remaining_issues="ไม่มี"
@@ -730,6 +731,7 @@ class RearrangeAgent:
 
         try:
             system_prompt = get_system_prompt("buddy")
+            logger.info(f"RearrangeAgent: explain PROMPT:\n{prompt}")
             response = await self._llm_agent._llm.ainvoke(
                 [
                     SystemMessage(content=system_prompt),

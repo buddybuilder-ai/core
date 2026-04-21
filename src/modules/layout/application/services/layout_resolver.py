@@ -359,11 +359,31 @@ class LayoutResolver:
             dim_w = fw
             dim_d = fd
 
+        # Derive which wall the furniture is against from rotation.
+        # _WALL_ROTATION in spatial_resolver maps wall → rotation:
+        #   south=180, north=0, west=90, east=270
+        # Reverse: rotation → wall the back is against.
+        _ROT_TO_WALL = {0: "north", 180: "south", 90: "west", 270: "east"}
+        _WALL_TOL = 0.15
+        rot_wall = _ROT_TO_WALL.get(p.rotation % 360)
+        if rot_wall:
+            wall = rot_wall
+        elif p.z <= _WALL_TOL:
+            wall = "south"
+        elif p.z + fd >= room.depth - _WALL_TOL:
+            wall = "north"
+        elif p.x <= _WALL_TOL:
+            wall = "west"
+        elif p.x + fw >= room.width - _WALL_TOL:
+            wall = "east"
+        else:
+            wall = "center"
+
         logger.info(
             f"_physical_to_dict: {p.furniture_id} "
             f"backend=({p.x:.3f},{p.z:.3f}) rot={p.rotation}° "
             f"footprint={fw}x{fd} room=({room.width}x{room.depth}) → "
-            f"frontend=({centre_x},{centre_z}) dim={dim_w}x{dim_d}"
+            f"frontend=({centre_x},{centre_z}) dim={dim_w}x{dim_d} wall={wall}"
         )
 
         return {
@@ -376,6 +396,7 @@ class LayoutResolver:
             "pos_y": 0,
             "pos_z": centre_z,
             "rotation": p.rotation,
+            "wall": wall,
             "dimensions": {
                 "width": dim_w,
                 "depth": dim_d,

@@ -221,14 +221,53 @@ MODIFIER_EXPLANATION_PROMPT = """\
 ร้อยแก้วภาษาไทยเท่านั้น ห้าม JSON หรือ bullet list\
 """
 
+_WALL_TH = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก", "center": "กลางห้อง"}
+_ROT_TO_DIR = {0: "south", 90: "east", 180: "north", 270: "west"}
+_DIR_TH = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก"}
+_BED_TYPES = {"bed", "sofa_bed", "sofa-bed"}
+
+
+def _build_items_summary(items: list) -> str:
+    """Build Thai items summary with correct directional language per furniture type.
+
+    Beds: "หัวนอนทิศ X" (wall = headboard side).
+    Others: "หันหน้าทิศ X" (facing direction from rotation).
+    """
+    lines = []
+    for i in items:
+        name = i.get("name", i.get("furniture_id", "item"))
+        wall = i.get("wall", "")
+        rot = (i.get("rotation") or 0) % 360
+        ftype = (i.get("furniture_type") or i.get("category") or "").lower().replace("-", "_")
+        fid = (i.get("furniture_id") or i.get("id") or "").lower()
+        wall_th = _WALL_TH.get(wall, "")
+        facing_dir = _ROT_TO_DIR.get(rot, "")
+        facing_th = _DIR_TH.get(facing_dir, "")
+        is_bed = ftype in _BED_TYPES or any(t in fid for t in ("bed", "sofa_bed", "sofa-bed"))
+        if is_bed and wall_th:
+            lines.append(f"{name}: หัวนอนทิศ{wall_th}")
+        elif wall_th and facing_th:
+            lines.append(f"{name}: ผนัง{wall_th} หันหน้าทิศ{facing_th}")
+        elif wall_th:
+            lines.append(f"{name}: ผนัง{wall_th}")
+        else:
+            lines.append(name)
+    if not lines:
+        return "no items placed"
+    return f"{len(lines)} items:\n" + "\n".join(f"  - {l}" for l in lines)
+
+
 EXPLANATION_PROMPT = """\
-คุณคือที่ปรึกษาฮวงจุ้ยที่พูดอบอุ่น น่าเชื่อถือ ตอบเป็นภาษาไทย 35-50 คำ
+คุณคือที่ปรึกษาฮวงจุ้ยที่พูดอบอุ่น น่าเชื่อถือ ตอบเป็นภาษาไทย 35-60 คำ
+
+ตำแหน่งเฟอร์นิเจอร์ที่จัดไป:
+{items_summary}
 
 ข้อมูล:
 - คะแนนฮวงจุ้ย: {total_score}/100 ({grade})
 - ปัญหาคงค้าง: {remaining_issues}
 
-เขียนประโยคเดียวบอกคะแนนด้วยโทนชื่นชม แล้วต่อด้วย: {kua_line}
+อธิบายการจัดวางที่เกิดขึ้นจริงตามข้อมูลด้านบน โดยอ้างอิงตำแหน่งจริง เช่น "หัวเตียงหันไปทิศเหนือ" แล้วต่อด้วย: {kua_line}
 
 ห้าม JSON ห้าม bullet list ตอบเป็นร้อยแก้วเท่านั้น\
 """
