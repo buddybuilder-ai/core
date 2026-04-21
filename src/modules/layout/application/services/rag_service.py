@@ -211,6 +211,11 @@ class FengShuiRAGService:
 
         _rlog(f"\n{'─' * 60}")
         _rlog(f'  [RAG] Question: "{question[:80]}"')
+        _rlog(f"  [RAG] History: {len(conversation_history)} messages ({len(conversation_history)//2} rounds)")
+        for i, h in enumerate(conversation_history[-4:]):
+            role = h.get("role", "?")
+            preview = h.get("content", "")[:60].replace("\n", " ")
+            _rlog(f"    [{i}] {role}: {preview}...")
         _rlog(f"  [RAG] Threshold={self.RELEVANCE_THRESHOLD}  TOP_K={top_k}  Fuzzy≤{self.FUZZY_MATCH_THRESHOLD}")
 
         # Layer 1
@@ -449,24 +454,29 @@ class FengShuiRAGService:
     ) -> list[dict[str, str]]:
         """Build messages array for OpenRouter API.
 
-        Prompt structure mirrors ConversationRAGChain.prompt:
-        - System: SYSTEM_PROMPT + mode addition
-        - Human: chat_history + context + question (same sections as feng-shui-rag)
+        Pass conversation history as real message objects so the LLM treats them
+        as actual prior turns (not text to read). RAG context is injected only
+        into the current user turn.
         """
         mode_addition = _MODE_ADDITIONS.get(mode, _MODE_ADDITIONS["buddy"])
         system_content = f"{_SYSTEM_PROMPT_BASE}\n\n{mode_addition}"
 
-        history_text = self._format_chat_history(conversation_history)
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
+
+        # Inject prior turns as real message objects — LLM treats these as memory
+        for turn in conversation_history:
+            role = turn.get("role", "user")
+            content = turn.get("content", "").strip()
+            if content and role in ("user", "assistant"):
+                messages.append({"role": role, "content": content})
+
+        # Current turn: RAG context + question
         context_text = context if context else "[ไม่มีข้อมูลเพิ่มเติมจากฐานความรู้]"
+        user_content = f"[ข้อมูลอ้างอิง]\n{context_text}\n\n[คำถาม]\n{question}"
+        messages.append({"role": "user", "content": user_content})
 
-        user_content = (
-            f"[บทสนทนาก่อนหน้า]\n{history_text}\n\n[ข้อมูลอ้างอิง]\n{context_text}\n\n[คำถาม]\n{question}"
-        )
-
-        return [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": user_content},
-        ]
+        _rlog(f"  [RAG] Prompt: {len(messages)} messages ({len(conversation_history)} history + system + current)")
+        return messages
 
     # ------------------------------------------------------------------
     # Public API
@@ -496,7 +506,10 @@ class FengShuiRAGService:
         Returns:
             (answer_str, source_documents_list) — source_docs match ChatResponse.source_documents schema.
         """
-        history = conversation_history or []
+        from src.config.settings import get_settings as _gs
+        _max_turns = _gs().MAX_HISTORY
+        # Keep the last max_turns*2 messages (each turn = 1 user + 1 assistant)
+        history = (conversation_history or [])[-_max_turns * 2:]
 
         # --- Relevance guard (mirrors ConversationRAGChain._check_relevance) ---
         # _check_relevance now returns (is_relevant, prefetched_docs) so we can
@@ -620,7 +633,8 @@ class FengShuiRAGService:
 
         from src.config.settings import get_settings
 
-        history = conversation_history or []
+        _max_turns = get_settings().MAX_HISTORY
+        history = (conversation_history or [])[-_max_turns * 2:]
 
         is_relevant, prefetched_docs = self._check_relevance(question, history)
         if not is_relevant:
