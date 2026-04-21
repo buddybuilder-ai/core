@@ -84,13 +84,13 @@ migrate-downgrade:
 # =============================================================================
 
 run:
-	PYTHONUNBUFFERED=1 .venv/bin/uvicorn src.main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 3
+	PYTHONUNBUFFERED=1 .venv/bin/uvicorn src.main:app --reload --reload-dir src --host 0.0.0.0 --port 8002 --timeout-graceful-shutdown 3
 
 run-prod:
-	PYTHONUNBUFFERED=1 .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4 --timeout-graceful-shutdown 3
+	PYTHONUNBUFFERED=1 .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8002 --workers 4 --timeout-graceful-shutdown 3
 
 kill:
-	@lsof -ti:8000 | xargs kill -9 2>/dev/null && echo "Port 8000 cleared" || echo "Port 8000 already free"
+	@lsof -ti:8002 | xargs kill -9 2>/dev/null && echo "Port 8002 cleared" || echo "Port 8002 already free"
 
 # =============================================================================
 # RAG / Vectorstore
