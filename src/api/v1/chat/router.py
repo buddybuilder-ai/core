@@ -426,9 +426,21 @@ async def process_single_image(
 @router.get("/get-ip")
 async def get_ip():
     """
-    คืนค่า IP Address ในรูปแบบ JSON object
+    ดึง Local IP Address ของเครื่องคอมพิวเตอร์ (เช่น 192.168.1.XX)
+    เพื่อให้มือถือในวง Wi-Fi เดียวกันสามารถเชื่อมต่อได้
     """
-    return {"ipAddress": "127.0.0.1"}
+    try:
+        # สร้าง socket เพื่อเชื่อมต่อออกไปข้างนอกชั่วคราว (ไม่ได้ส่งข้อมูลจริง)
+        # เพื่อดูว่าเครื่องเราใช้ IP ไหนในการออกสู่ Network
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip_address = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # ถ้าดึงไม่ได้จริงๆ ให้ถอยกลับไปใช้ localhost
+        ip_address = "127.0.0.1"
+    
+    return {"ipAddress": ip_address}
 
 
 @router.get("/check-upload-status")
