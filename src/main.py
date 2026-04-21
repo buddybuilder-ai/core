@@ -1,7 +1,13 @@
 """BuddyBuilder AI - FastAPI Application Factory."""
 
 import logging
+import sys
 from collections.abc import AsyncGenerator
+
+# Force line-buffered stdout so print() calls appear immediately in the terminal
+# regardless of whether PYTHONUNBUFFERED=1 was set at process start.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
