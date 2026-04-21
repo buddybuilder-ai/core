@@ -4,12 +4,14 @@ import json
 import os
 import subprocess
 import uuid
+import asyncio
+import sys
 from collections.abc import AsyncGenerator
 from typing import Any, cast ,Dict
 import socket
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Path
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
@@ -446,16 +448,126 @@ async def get_ip():
 @router.get("/check-upload-status")
 async def check_upload_status(sessionId: str = Query(...)):
     """
-    Endpoint สำหรับให้ Frontend (PC) คอยเช็คว่ามือถืออัปโหลดรูปเสร็จหรือยัง
+    Endpoint สำหรับให้ Frontend (PC) คอยเช็คสถานะการอัปโหลดและประมวลผลจากมือถือ
     """
-    # 1. ถ้ายังไม่มี sessionId นี้ในระบบ
+    # 1. ถ้ายังไม่มี sessionId นี้ในระบบ (มือถือยังไม่ได้เริ่มส่งอะไรมา)
     if sessionId not in upload_sessions:
         return {
             "status": "pending", 
-            "message": "Waiting for mobile upload..."
+            "message": "Waiting for mobile connection...",
+            "isProcessing": False
         }
     
-    # 2. ส่งสถานะปัจจุบันกลับไป (เช่น "processing", "success", "error")
+    # 2. ดึงข้อมูล Session ปัจจุบัน
     session_data = upload_sessions.get(sessionId)
+    status = session_data.get("status")
+
+    # 3. จัดการสถานะการตอบกลับ
+    if status == "processing":
+        return {
+            "status": "processing",
+            "isProcessing": True,
+            "message": "AI is analyzing your room..."
+        }
     
+    elif status == "success":
+        return {
+            "status": "success",
+            "isProcessing": False,
+            "objects": session_data.get("objects", []),
+            "room_summary": session_data.get("room_summary", {}),
+            "message": "AI processing completed!"
+        }
+    
+    elif status == "error":
+        return {
+            "status": "error",
+            "isProcessing": False,
+            "message": session_data.get("message", "An error occurred during processing")
+        }
+
     return session_data
+
+
+
+
+@router.post("/mobile-upload/{sessionId}")
+async def mobile_upload(
+    sessionId: str, 
+    image: UploadFile = File(...), 
+    target_height: str = Form("2.5")
+) -> dict[str, Any]:
+    """รับรูปจากมือถือ รัน AI และเก็บผลลัพธ์ลง session"""
+
+    upload_sessions[sessionId] = {"status": "processing"}
+    
+    # --- 1. จัดการเรื่อง Path (แก้ไขจุดที่พัง) ---
+    # current_dir คือ core/src/api/v1/chat/
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # root_dir คือ core/ (ถอยออกมา 4 ชั้น)
+    root_dir = os.path.abspath(os.path.join(current_dir, "../../../../")) 
+    
+    # assets_dir คือ core/assets/ (สำหรับเก็บไฟล์)
+    assets_dir = os.path.join(root_dir, "assets")
+    os.makedirs(assets_dir, exist_ok=True)
+
+    # script_path คือ core/src/detect_objects_2.py (ชี้ไปที่ตัวสคริปต์)
+    # **ตรวจสอบอีกครั้ง: ถ้าไฟล์ AI อยู่ใน src/ ให้ใช้ path นี้**
+    script_path = os.path.join(root_dir, "src", "detect_objects_2.py")
+
+    # 2. บันทึกรูปภาพ
+    file_id = f"mobile_{sessionId}"
+    temp_image_path = os.path.join(assets_dir, f"{file_id}.jpg")
+    
+    with open(temp_image_path, "wb") as buffer:
+        buffer.write(await image.read())
+
+    # ตั้งสถานะสำหรับ Polling
+    upload_sessions[sessionId] = {"status": "processing"}
+
+    try:
+        # 3. รัน AI Script
+        print(f"🚀 Running AI: {script_path}")
+        print(f"📸 Image: {temp_image_path}")
+
+        result = subprocess.run(
+            [sys.executable, script_path, str(target_height), temp_image_path],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+
+        # 4. อ่านไฟล์ JSON ที่ AI สร้าง (อ้างอิงจาก assets_dir)
+        json_path = os.path.join(assets_dir, "my_room_2_data.json")
+        
+        if os.path.exists(json_path):
+            with open(json_path, encoding="utf-8") as f:
+                ai_data = json.load(f)
+                
+                upload_sessions[sessionId] = {
+                    "status": "success",
+                    "objects": ai_data.get("objects", []),
+                    "room_summary": ai_data.get("room_summary", {})
+                }
+                return {"status": "success", "message": "Processed successfully"}
+        
+        raise Exception(f"AI JSON not found at: {json_path}")
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr if e.stderr else e.stdout
+        print(f"❌ AI Error: {error_msg}")
+        upload_sessions[sessionId] = {"status": "error", "message": error_msg}
+        return {"status": "error", "message": error_msg}
+    except Exception as e:
+        print(f"❌ Exception: {str(e)}")
+        upload_sessions[sessionId] = {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e)}
+    finally:
+        # ลบไฟล์รูปชั่วคราว
+        if os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+            except:
+                pass
