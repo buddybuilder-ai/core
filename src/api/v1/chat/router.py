@@ -365,7 +365,13 @@ async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
     """
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        import json
+
         from src.modules.layout.application.services.rag_service import FengShuiRAGService
+
+        def _sse(event: str, **data: object) -> str:
+            payload = json.dumps({"type": event, **data})
+            return f"event: {event}\ndata: {payload}\n\n"
 
         service = FengShuiRAGService()
         full_answer = ""
@@ -377,20 +383,14 @@ async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
                 conversation_history=request.conversation_history or [],
             ):
                 if kind == "delta":
-                    yield SSEEvent(
-                        event_type=SSEEventType.ANSWER_DELTA,
-                        data={"delta": text},
-                    ).to_sse()
+                    yield _sse("answer_delta", delta=text)
                 elif kind == "final":
                     full_answer = text
                     source_docs = sources or []
         except Exception as exc:  # pragma: no cover - safety net
             full_answer = full_answer or f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
 
-        yield SSEEvent(
-            event_type=SSEEventType.ANSWER,
-            data={"answer": full_answer, "source_documents": source_docs},
-        ).to_sse()
+        yield _sse("answer", answer=full_answer, source_documents=source_docs)
 
     return StreamingResponse(
         event_generator(),
