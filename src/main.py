@@ -36,15 +36,25 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
-    # Startup — preload embedding model so first request isn't slow
+    import asyncio
+
     print(f"Starting {settings.APP_NAME}...")
+    print("  Loading embedding model (bge-m3)...", flush=True)
+
     try:
+        loop = asyncio.get_running_loop()
         from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
 
-        get_cached_vectorstore(settings.CHROMA_DB_PATH, settings.EMBEDDING_MODEL_LOCAL)
-        print("Vectorstore + embedding model loaded")
+        await loop.run_in_executor(
+            None,
+            get_cached_vectorstore,
+            settings.CHROMA_DB_PATH,
+            settings.EMBEDDING_MODEL_LOCAL,
+        )
+        print("  Vectorstore + embedding model ready ✓")
     except Exception as exc:
-        print(f"Vectorstore preload skipped: {exc}")
+        print(f"  Vectorstore preload skipped: {exc}")
+
     yield
     # Shutdown
     print(f"Shutting down {settings.APP_NAME}...")

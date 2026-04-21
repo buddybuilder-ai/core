@@ -34,6 +34,83 @@ _INTERIOR_KW = [
 ]
 
 
+class _RecursiveCharacterTextSplitter:
+    """Lightweight recursive character text splitter — no transformers dependency."""
+
+    def __init__(self, chunk_size: int, chunk_overlap: int, separators: list[str]):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.separators = separators
+
+    def split_text(self, text: str) -> list[str]:
+        return self._split(text, self.separators)
+
+    def _split(self, text: str, separators: list[str]) -> list[str]:
+        if not separators:
+            return self._merge([text])
+        sep = separators[0]
+        remaining = separators[1:]
+        if sep == "":
+            splits = list(text)
+        else:
+            splits = text.split(sep)
+
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+
+        for s in splits:
+            s_len = len(s)
+            if current_len + s_len + (len(sep) if current else 0) > self.chunk_size and current:
+                merged = sep.join(current)
+                if len(merged) > self.chunk_size and remaining:
+                    chunks.extend(self._split(merged, remaining))
+                else:
+                    chunks.append(merged)
+                # keep overlap
+                overlap_parts: list[str] = []
+                overlap_len = 0
+                for part in reversed(current):
+                    if overlap_len + len(part) + len(sep) > self.chunk_overlap:
+                        break
+                    overlap_parts.insert(0, part)
+                    overlap_len += len(part) + len(sep)
+                current = overlap_parts
+                current_len = overlap_len
+
+            current.append(s)
+            current_len += s_len + (len(sep) if len(current) > 1 else 0)
+
+        if current:
+            merged = sep.join(current)
+            if len(merged) > self.chunk_size and remaining:
+                chunks.extend(self._split(merged, remaining))
+            else:
+                chunks.append(merged)
+
+        return [c for c in chunks if c.strip()]
+
+    def _merge(self, splits: list[str]) -> list[str]:
+        chunks: list[str] = []
+        current = ""
+        for s in splits:
+            if len(current) + len(s) > self.chunk_size and current:
+                chunks.append(current)
+                current = current[-self.chunk_overlap:] if self.chunk_overlap else ""
+            current += s
+        if current:
+            chunks.append(current)
+        return chunks
+
+    def split_documents(self, documents: list) -> list:
+        from langchain_core.documents import Document
+        result = []
+        for doc in documents:
+            for chunk_text in self.split_text(doc.page_content):
+                result.append(Document(page_content=chunk_text, metadata=dict(doc.metadata)))
+        return result
+
+
 def _keyword_classify(text: str) -> str:
     """Classify knowledge_type จาก keyword ใน content (ไม่ใช้ LLM)"""
     t = text.lower()
@@ -208,22 +285,22 @@ def split_documents_with_context(
         print(f"  Classify: keyword-based (ไม่ใช้ LLM)")
 
     # --- แบ่ง chunks ---
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-    text_splitter = RecursiveCharacterTextSplitter(
+    # ใช้ splitter ของเราเองแทน langchain_text_splitters เพื่อหลีกเลี่ยง
+    # transformers dependency ที่ทำให้ import ช้า 20+ วินาที
+    text_splitter = _RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_CONFIG["chunk_size"],
         chunk_overlap=CHUNK_CONFIG["chunk_overlap"],
         separators=CHUNK_CONFIG["separators"],
-        length_function=len,
     )
-    print(f"  กำลังแบ่ง chunks...", end="", flush=True)
+    print(f"  กำลังแบ่ง chunks จาก {len(documents)} เอกสาร...", end="", flush=True)
     chunks = text_splitter.split_documents(documents)
-    print(f" {len(chunks)} chunks  (size={CHUNK_CONFIG['chunk_size']}, overlap={CHUNK_CONFIG['chunk_overlap']})")
+    print(f" ได้ {len(chunks)} chunks  (size={CHUNK_CONFIG['chunk_size']}, overlap={CHUNK_CONFIG['chunk_overlap']})")
 
     total = len(chunks)
     loop_start = time.time()
     contextual_chunks: list = []
 
-    print(f"  เริ่ม {'LLM context + classify' if use_llm_context else 'keyword classify'}...\n")
+    print(f"  เริ่ม {'LLM context + classify' if use_llm_context else 'keyword classify'} ({total} chunks)...\n")
 
     for i, chunk in enumerate(chunks):
         source = chunk.metadata.get("source", "Unknown")
@@ -245,8 +322,10 @@ def split_documents_with_context(
                 print(f"  {'─' * 62}")
         else:
             contextual_chunks.append(add_context_to_chunk(chunk, document_title, use_llm=False))
-            if (i + 1) % 50 == 0 or (i + 1) == total:
-                print(f"  [{i+1}/{total}] keyword classify...")
+            if (i + 1) % 100 == 0 or (i + 1) == total:
+                elapsed = time.time() - loop_start
+                pct = (i + 1) / total * 100
+                print(f"  [{i+1}/{total}] {pct:.0f}%  ({elapsed:.1f}s)", flush=True)
 
     elapsed_total = time.time() - loop_start
     fs = sum(1 for c in contextual_chunks if c.metadata.get("knowledge_type") == "feng_shui")

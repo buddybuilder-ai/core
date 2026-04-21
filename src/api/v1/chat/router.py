@@ -8,19 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
-from src.modules.layout.application.modifier import ModifierAgent
-from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
-from src.modules.layout.application.pipeline import PipelineConfig, PipelineOrchestrator
-from src.modules.layout.application.pipeline.models import (
-    PipelineState,
-    SSEEvent,
-    SSEEventType,
-)
-from src.modules.layout.application.pipeline.steps import ExplainerStep
-from src.modules.layout.application.services.clarification_gate import get_pending_questions
-from src.modules.layout.infrastructure.llm.router_agent import RouterAgent
 from src.schemas.chat import ChatRequest, ChatResponse
 from src.schemas.chat_stream import ChatStreamRequest
+
+# Heavy imports (LangChain, pipeline) are lazy-loaded inside route handlers
+# to keep startup time fast — they're cached by Python after first use.
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 settings = get_settings()
@@ -96,10 +88,14 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     """
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        from src.modules.layout.application.agent.personality import (
-            detect_mode_switch,
-            detect_mood,
-        )
+        from src.modules.layout.application.agent.personality import detect_mode_switch, detect_mood
+        from src.modules.layout.application.modifier import ModifierAgent
+        from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
+        from src.modules.layout.application.pipeline import PipelineConfig, PipelineOrchestrator
+        from src.modules.layout.application.pipeline.models import PipelineState, SSEEvent, SSEEventType
+        from src.modules.layout.application.pipeline.steps import ExplainerStep
+        from src.modules.layout.application.services.clarification_gate import get_pending_questions
+        from src.modules.layout.infrastructure.llm.router_agent import RouterAgent
 
         # Detect user mood from the message (keyword-based, no LLM call)
         mood = detect_mood(request.message)
@@ -373,8 +369,9 @@ async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
 
         service = FengShuiRAGService()
         full_answer = ""
+        source_docs: list = []
         try:
-            async for kind, text, _sources in service.ask_stream(
+            async for kind, text, sources in service.ask_stream(
                 question=request.message,
                 mode=request.mode,
                 conversation_history=request.conversation_history or [],
@@ -386,14 +383,13 @@ async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
                     ).to_sse()
                 elif kind == "final":
                     full_answer = text
+                    source_docs = sources or []
         except Exception as exc:  # pragma: no cover - safety net
             full_answer = full_answer or f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
 
-        # Keep the `answer` event as the terminal marker so legacy clients that
-        # only listen for ANSWER still receive the full text.
         yield SSEEvent(
             event_type=SSEEventType.ANSWER,
-            data={"answer": full_answer},
+            data={"answer": full_answer, "source_documents": source_docs},
         ).to_sse()
 
     return StreamingResponse(

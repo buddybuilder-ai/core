@@ -1,9 +1,0 @@
-﻿kua,group,sheng_chi,tien_yi,nien_yen,fu_wei,ho_hai,wu_kwei,liu_sha,chueh_ming
-1,East,SE,E,S,N,W,NE,NW,SW
-2,West,NE,W,NW,SW,E,SE,S,N
-3,East,S,N,SE,E,SW,NW,NE,W
-4,East,N,S,E,SE,NW,SW,W,NE
-6,West,W,NE,SW,NW,SE,E,N,S
-7,West,NW,SW,NE,W,S,N,SE,E
-8,West,SW,NW,W,NE,N,S,E,SE
-9,East,E,SE,N,S,NE,W,SW,NW

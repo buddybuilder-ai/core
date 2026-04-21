@@ -9,6 +9,20 @@ import sys
 import argparse
 from pathlib import Path
 
+# Patch importlib.metadata before any heavy imports.
+# transformers calls packages_distributions() at import time; on macOS with
+# miniconda some package metadata files are unreadable → OSError [Errno 89].
+# transformers calls packages_distributions() at import time.
+# On macOS+miniconda this crashes with OSError [Errno 89] on some metadata files.
+# Fix: build the mapping cheaply using find_spec (no actual import) so
+# transformers can check package availability without importing torch/tf/etc.
+import importlib.metadata as _im
+import importlib.util as _ilu
+_heavy = ["torch", "tensorflow", "jax", "flax", "tokenizers", "sentencepiece",
+          "accelerate", "peft", "safetensors", "transformers", "sentence_transformers"]
+_pkg_map = {p: [p] for p in _heavy if _ilu.find_spec(p) is not None}
+_im.packages_distributions = lambda: _pkg_map
+
 # print ก่อน import อื่นๆ เพื่อให้รู้ว่า process เริ่มทำงานแล้ว
 print("RAG Pipeline กำลังเริ่มต้น...", flush=True)
 
@@ -31,7 +45,7 @@ def main():
     """Rebuild vectorstore และแสดงคำแนะนำสำหรับ interactive testing"""
     parser = argparse.ArgumentParser(description="RAG Vectorstore Builder")
     parser.add_argument("--rebuild", action="store_true", help="Rebuild vector store")
-    parser.add_argument("--method", choices=["standard", "contextual", "questions"],
+    parser.add_argument("--method", choices=["standard", "contextual"],
                        default="contextual", help="วิธี chunking (default: contextual)")
     parser.add_argument("--llm-context", action="store_true",
                        help="ใช้ LLM เพิ่ม context (ช้ากว่า แต่ดีกว่า)")
@@ -66,10 +80,6 @@ def main():
             export_chunks_to_csv(chunks)
         elif args.method == "contextual":
             chunks = split_documents_with_context(docs, use_llm_context=args.llm_context)
-        elif args.method == "questions":
-            from step2c_hypothetical_questions import create_qa_chunks
-            chunks = create_qa_chunks(docs, questions_per_chunk=3)
-            export_chunks_to_csv(chunks)
 
         print(f"\n[ Step 3 ] {'Rebuild' if args.rebuild else 'สร้าง'} Vector Store  ({len(chunks)} chunks)", flush=True)
         create_vectorstore(chunks, force_rebuild=args.rebuild)
