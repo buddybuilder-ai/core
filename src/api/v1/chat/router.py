@@ -6,6 +6,7 @@ import subprocess
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any, cast
+import socket
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -418,3 +419,21 @@ async def process_single_image(
                 os.remove(temp_image_path)
             except Exception as cleanup_error:
                 print(f"⚠️ Failed to clean up temporary image: {cleanup_error}")
+
+
+@router.get("/get-ip")
+async def get_ip():
+    """
+    Mock up endpoint สำหรับคืนค่า IP Address ของเครื่อง Server
+    """
+    try:
+        # วิธีดึง IP ของเครื่องในเครือข่ายปัจจุบัน (Local IP)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip_address = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # หากดึงไม่ได้ ให้คืนค่า Mock up เป็น Localhost แทน
+        ip_address = "127.0.0.1"
+    
+    return {"ipAddress": ip_address}
