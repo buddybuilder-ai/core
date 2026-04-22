@@ -84,7 +84,7 @@ migrate-downgrade:
 # =============================================================================
 
 run:
-	PYTHONUNBUFFERED=1 .venv/bin/uvicorn src.main:app --reload --reload-dir src --host 0.0.0.0 --port 8002 --timeout-graceful-shutdown 3
+	PYTHONUNBUFFERED=1 WATCHFILES_FORCE_POLLING=true .venv/bin/uvicorn src.main:app --reload --reload-dir src --host 0.0.0.0 --port 8002 --timeout-graceful-shutdown 3
 
 run-prod:
 	PYTHONUNBUFFERED=1 .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8002 --workers 4 --timeout-graceful-shutdown 3
