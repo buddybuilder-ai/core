@@ -73,3 +73,4 @@ alembic/versions/*.pyc
 .claude/worktrees/clever-vaughan/
 /rag_pipeline/exports
 /rag_pipeline/exports
+/rag_pipeline/vectorstore/chroma_db

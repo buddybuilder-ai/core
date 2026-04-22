@@ -18,13 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 def _rlog(msg: str) -> None:
-    """Write RAG debug line to stderr + /tmp/rag.log for visibility."""
-    line = msg + "\n"
-    sys.stderr.write(line)
-    sys.stderr.flush()
+    """Write RAG debug line to stdout + /tmp/rag.log for visibility."""
+    print(msg, flush=True)
     try:
         with open("/tmp/rag.log", "a", encoding="utf-8") as _f:
-            _f.write(line)
+            _f.write(msg + "\n")
     except Exception:
         pass
 
