@@ -329,6 +329,45 @@ class FengShuiRAGService:
         return "both"
 
     # ------------------------------------------------------------------
+    # Query enrichment — inject Kua context so retriever can find per-Kua docs
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_kua_from_history(history: list[dict[str, str]]) -> str | None:
+        """Scan conversation history for a previously calculated Kua number.
+
+        Looks for patterns like 'กัว 4', 'กัว = 4', 'ได้กัว 4', 'เลขกัว 4'
+        in assistant messages. Returns the Kua number string (e.g. '4') or None.
+        """
+        import re
+        pattern = re.compile(r"กัว\s*[=:]*\s*([1-9])|เลขกัว\s*([1-9])|ได้กัว\s*([1-9])", re.UNICODE)
+        for turn in reversed(history):
+            if turn.get("role") == "assistant":
+                m = pattern.search(turn.get("content", ""))
+                if m:
+                    return next(g for g in m.groups() if g is not None)
+        return None
+
+    @staticmethod
+    def _enrich_retrieval_query(question: str, history: list[dict[str, str]]) -> str:
+        """Prepend Kua number to retrieval query when the current question is a
+        follow-up that doesn't mention Kua explicitly.
+
+        Example: 'ทิศที่เสริมเรื่องความรัก' + history has 'กัว 4'
+                 → 'กัว 4 ทิศที่เสริมเรื่องความรัก'
+        This makes BGE-M3 retrieve gua_directions_kua4 instead of only the generic
+        dir_meaning_nien_yen entry.
+        """
+        import re
+        if re.search(r"กัว\s*[1-9]", question):
+            return question
+        kua = FengShuiRAGService._extract_kua_from_history(history)
+        if kua:
+            _rlog(f"  [RAG] Query enriched with Kua {kua} from history")
+            return f"กัว {kua} {question}"
+        return question
+
+    # ------------------------------------------------------------------
     # Document retrieval
     # (mirrors step3_vectorstore.py get_retriever + step4b format_documents)
     # ------------------------------------------------------------------
@@ -536,8 +575,9 @@ class FengShuiRAGService:
 
         # --- Classify query type then retrieve filtered context ---
         knowledge_type = await self._classify_query(question)
+        retrieval_query = self._enrich_retrieval_query(question, history)
         context, source_docs = self._retrieve_context(
-            question, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
+            retrieval_query, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
         )
 
         # --- Build prompt messages ---
@@ -655,8 +695,9 @@ class FengShuiRAGService:
             question_for_llm = question
 
         knowledge_type = await self._classify_query(question)
+        retrieval_query = self._enrich_retrieval_query(question, history)
         context, source_docs = self._retrieve_context(
-            question, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
+            retrieval_query, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
         )
         messages = self._build_messages(question_for_llm, context, history, mode)
 
