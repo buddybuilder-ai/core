@@ -8,6 +8,17 @@ from collections.abc import AsyncGenerator
 # regardless of whether PYTHONUNBUFFERED=1 was set at process start.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
+
+# macOS + miniconda: transformers calls packages_distributions() at import time
+# which crashes with OSError [Errno 89] on some metadata files → process hangs.
+# Build a cheap mapping using find_spec (no actual import) so transformers can
+# check package availability without triggering the crash.
+import importlib.metadata as _im
+import importlib.util as _ilu
+_heavy = ["torch", "tensorflow", "jax", "flax", "tokenizers", "sentencepiece",
+          "accelerate", "peft", "safetensors", "transformers", "sentence_transformers"]
+_im.packages_distributions = lambda: {p: [p] for p in _heavy if _ilu.find_spec(p) is not None}
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -45,13 +56,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         loop = asyncio.get_running_loop()
         from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
 
-        await loop.run_in_executor(
-            None,
-            get_cached_vectorstore,
-            settings.CHROMA_DB_PATH,
-            settings.EMBEDDING_MODEL_LOCAL,
+        await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                get_cached_vectorstore,
+                settings.CHROMA_DB_PATH,
+                settings.EMBEDDING_MODEL_LOCAL,
+            ),
+            timeout=120,  # หยุดรอหลัง 2 นาที — ป้องกันค้างบน macOS
         )
         print("  Vectorstore + embedding model ready ✓")
+    except asyncio.TimeoutError:
+        print("  Vectorstore preload timed out — will load on first request instead")
     except Exception as exc:
         print(f"  Vectorstore preload skipped: {exc}")
 
