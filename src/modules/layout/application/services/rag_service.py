@@ -16,6 +16,18 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
+def _rlog(msg: str) -> None:
+    """Write RAG debug line to stderr + /tmp/rag.log for visibility."""
+    line = msg + "\n"
+    sys.stderr.write(line)
+    sys.stderr.flush()
+    try:
+        with open("/tmp/rag.log", "a", encoding="utf-8") as _f:
+            _f.write(line)
+    except Exception:
+        pass
+
 # ---------------------------------------------------------------------------
 # Import shared constants from core/rag_pipeline/rag_constants.py
 # (single source of truth — แก้ที่ rag_pipeline/rag_constants.py)
@@ -33,6 +45,21 @@ from rag_constants import (  # noqa: E402
     OUT_OF_SCOPE_MSG,
     SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE,
 )
+
+# ---------------------------------------------------------------------------
+# Quick keyword sets for query-type pre-classification (no LLM needed)
+# ---------------------------------------------------------------------------
+_FENG_SHUI_TERMS: frozenset[str] = frozenset([
+    "ฮวงจุ้ย", "feng shui", "fengshui", "กัว", "ming gua", "minggua",
+    "ทิศมงคล", "ทิศหัวนอน", "ทิศนอน", "ทิศเสีย", "ทิศอัปมงคล",
+    "ชี", "chi", "ธาตุ", "ห้าธาตุ", "เลขกัว", "กัวบุคคล", "กัวคน",
+    "พลังงานฮวงจุ้ย", "มิงกัว",
+])
+_INTERIOR_TERMS: frozenset[str] = frozenset([
+    "ตกแต่ง", "interior", "เฟอร์นิเจอร์", "furniture", "สีผนัง",
+    "แสงสว่าง", "lighting", "วอลเปเปอร์", "wallpaper", "ออกแบบ",
+    "design", "decor", "โทนสี", "ทาสี", "วัสดุ", "material",
+])
 
 
 class FengShuiRAGService:
@@ -126,20 +153,20 @@ class FengShuiRAGService:
             has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
             if not has_bedroom:
                 matched_exclude = next(kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower)
-                print(f"  [RAG] Layer 0 ❌  non-bedroom room: \"{matched_exclude}\" (no bedroom keyword)")
+                _rlog(f'  [RAG] Layer 0 ❌  non-bedroom room: "{matched_exclude}" (no bedroom keyword)')
                 return False
-            print(f"  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
+            _rlog("  [RAG] Layer 0 ✅  exclude keyword found but bedroom keyword also present")
 
         # Sub-layer 1: exact keyword match (collect all for debug visibility)
         exact_matches = [kw for kw in DOMAIN_KEYWORDS if kw.lower() in q_lower]
         if exact_matches:
-            print(f"  [RAG] Layer 1 ✅  exact match: {exact_matches}")
+            _rlog(f"  [RAG] Layer 1 ✅  exact match: {exact_matches}")
             return True
 
         # Sub-layer 2: fuzzy match on long keywords
         fuzzy_matches = [kw for kw in DOMAIN_KEYWORDS if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower())]
         if fuzzy_matches:
-            print(f"  [RAG] Layer 1 ✅  fuzzy match: {fuzzy_matches}")
+            _rlog(f"  [RAG] Layer 1 ✅  fuzzy match: {fuzzy_matches}")
             return True
 
         # Sub-layer 3: follow-up question via conversation history
@@ -149,10 +176,10 @@ class FengShuiRAGService:
                 combined = turn.get("content", "").lower()
                 for kw in DOMAIN_KEYWORDS:
                     if kw.lower() in combined:
-                        print(f"  [RAG] Layer 1 ✅  history context match: \"{kw}\"")
+                        _rlog(f'  [RAG] Layer 1 ✅  history context match: "{kw}"')
                         return True
 
-        print(f"  [RAG] Layer 1 ❌  no domain keywords found")
+        _rlog("  [RAG] Layer 1 ❌  no domain keywords found")
         return False
 
     # ------------------------------------------------------------------
@@ -176,72 +203,238 @@ class FengShuiRAGService:
         settings = get_settings()
         top_k = settings.RAG_TOP_K
 
-        print(f"\n{'─'*60}")
-        print(f"  [RAG] Question: \"{question[:80]}\"")
-        print(f"  [RAG] Threshold={self.RELEVANCE_THRESHOLD}  TOP_K={top_k}  Fuzzy≤{self.FUZZY_MATCH_THRESHOLD}")
+        _rlog(f"\n{'─' * 60}")
+        _rlog(f'  [RAG] Question: "{question[:80]}"')
+        _rlog(f"  [RAG] History: {len(conversation_history)} messages ({len(conversation_history)//2} rounds)")
+        for i, h in enumerate(conversation_history[-4:]):
+            role = h.get("role", "?")
+            preview = h.get("content", "")[:60].replace("\n", " ")
+            _rlog(f"    [{i}] {role}: {preview}...")
+        _rlog(f"  [RAG] Threshold={self.RELEVANCE_THRESHOLD}  TOP_K={top_k}  Fuzzy≤{self.FUZZY_MATCH_THRESHOLD}")
 
         # Layer 1
         if not self._has_domain_keywords(question, conversation_history):
-            print(f"  [RAG] → BLOCKED (Layer 1 failed)\n{'─'*60}")
-            return False
+            _rlog(f"  [RAG] → BLOCKED (Layer 1 failed)\n{'─' * 60}")
+            return False, []
 
         # Layer 2
         vs = self._ensure_vectorstore()
         if vs is None:
-            print(f"  [RAG] Layer 2 ⚠️  vectorstore unavailable — allowing query")
-            return True
+            _rlog("  [RAG] Layer 2 ⚠️  vectorstore unavailable — allowing query")
+            return True, []
 
         try:
             docs_with_scores = vs.similarity_search_with_score(question, k=top_k)
             if not docs_with_scores:
-                print(f"  [RAG] Layer 2 ❌  no documents found\n{'─'*60}")
-                return False
+                _rlog(f"  [RAG] Layer 2 ❌  no documents found\n{'─' * 60}")
+                return False, []
 
-            print(f"  [RAG] Layer 2 — L2 Similarity Scores (threshold ≤ {self.RELEVANCE_THRESHOLD}):")
+            _rlog(f"  [RAG] Layer 2 — L2 Similarity Scores (threshold ≤ {self.RELEVANCE_THRESHOLD}):")
             for i, (doc, score) in enumerate(docs_with_scores, 1):
                 status = "✅" if score <= self.RELEVANCE_THRESHOLD else "❌"
                 src = doc.metadata.get("source", "?").split("/")[-1]
                 preview = doc.page_content[:60].replace("\n", " ")
-                print(f"    [{i}] L2={score:.4f} {status}  src={src}")
-                print(f"        \"{preview}...\"")
+                _rlog(f"    [{i}] L2={score:.4f} {status}  src={src}")
+                _rlog(f'        "{preview}..."')
 
             best_score: float = docs_with_scores[0][1]
             is_relevant = best_score <= self.RELEVANCE_THRESHOLD
             verdict = "✅ PASS → ส่ง LLM" if is_relevant else "❌ BLOCKED"
-            print(f"  [RAG] Best={best_score:.4f} → {verdict}")
-            print(f"{'─'*60}")
-            return is_relevant
+            _rlog(f"  [RAG] Best={best_score:.4f} → {verdict}")
+            _rlog(f"{'─' * 60}")
+            # Return the already-fetched docs to avoid a second embedding call in ask()
+            prefetched = [doc for doc, _ in docs_with_scores]
+            return is_relevant, prefetched
         except Exception as exc:
             logger.warning("RAG L2 relevance check failed (%s) — allowing query", exc)
-            return True
+            _rlog(f"  [RAG] Layer 2 ⚠️  similarity search failed: {exc}")
+            _rlog(f"{'─' * 60}")
+            return True, []
+
+    # ------------------------------------------------------------------
+    # Query-type classifier: feng_shui / interior_design / both
+    # Uses keyword check first; falls back to LLM_MODEL_ROUTER if ambiguous.
+    # ------------------------------------------------------------------
+
+    async def _classify_query(self, question: str) -> str:
+        """Classify the user question as 'feng_shui', 'interior_design', or 'both'.
+
+        Step 1: Fast keyword check — no LLM call needed for clear cases.
+        Step 2: Call LLM_MODEL_ROUTER (gpt-4o-mini) for ambiguous questions.
+        Returns 'both' on any error so retrieval is never blocked.
+        """
+        q = question.lower()
+        has_fs = any(kw in q for kw in _FENG_SHUI_TERMS)
+        has_id = any(kw in q for kw in _INTERIOR_TERMS)
+
+        if has_fs and not has_id:
+            _rlog(f"  [RAG] QueryType: feng_shui (keyword)")
+            return "feng_shui"
+        if has_id and not has_fs:
+            _rlog(f"  [RAG] QueryType: interior_design (keyword)")
+            return "interior_design"
+
+        # Ambiguous — call LLM_MODEL_ROUTER for a fast 1-token answer
+        try:
+            import httpx
+
+            from src.config.settings import get_settings
+
+            s = get_settings()
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.post(
+                    f"{s.OPENROUTER_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {s.OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://buddybuilder.ai",
+                        "X-Title": "BuddyBuilder AI",
+                    },
+                    json={
+                        "model": s.LLM_MODEL_ROUTER,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": (
+                                    "จำแนกคำถามต่อไปนี้ว่าเกี่ยวกับอะไรมากที่สุด "
+                                    "ตอบเพียง 1 คำ: feng_shui, interior_design, หรือ both"
+                                ),
+                            },
+                            {"role": "user", "content": question},
+                        ],
+                        "max_tokens": 10,
+                        "temperature": 0,
+                    },
+                )
+                if resp.status_code == 200:
+                    raw = resp.json()["choices"][0]["message"]["content"].strip().lower()
+                    if "feng_shui" in raw or "feng shui" in raw:
+                        kt = "feng_shui"
+                    elif "interior" in raw:
+                        kt = "interior_design"
+                    else:
+                        kt = "both"
+                    _rlog(f"  [RAG] QueryType: {kt} (LLM)")
+                    return kt
+        except Exception as exc:
+            _rlog(f"  [RAG] QueryType LLM failed ({exc}) → both")
+
+        _rlog("  [RAG] QueryType: both (fallback)")
+        return "both"
+
+    # ------------------------------------------------------------------
+    # Query enrichment — inject Kua context so retriever can find per-Kua docs
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_kua_from_history(history: list[dict[str, str]]) -> str | None:
+        """Scan conversation history for a previously calculated Kua number.
+
+        Looks for patterns like 'กัว 4', 'กัว = 4', 'ได้กัว 4', 'เลขกัว 4'
+        in assistant messages. Returns the Kua number string (e.g. '4') or None.
+        """
+        import re
+        pattern = re.compile(r"กัว\s*[=:]*\s*([1-9])|เลขกัว\s*([1-9])|ได้กัว\s*([1-9])", re.UNICODE)
+        for turn in reversed(history):
+            if turn.get("role") == "assistant":
+                m = pattern.search(turn.get("content", ""))
+                if m:
+                    return next(g for g in m.groups() if g is not None)
+        return None
+
+    @staticmethod
+    def _enrich_retrieval_query(question: str, history: list[dict[str, str]]) -> str:
+        """Prepend Kua number to retrieval query when the current question is a
+        follow-up that doesn't mention Kua explicitly.
+
+        Example: 'ทิศที่เสริมเรื่องความรัก' + history has 'กัว 4'
+                 → 'กัว 4 ทิศที่เสริมเรื่องความรัก'
+        This makes BGE-M3 retrieve gua_directions_kua4 instead of only the generic
+        dir_meaning_nien_yen entry.
+        """
+        import re
+        if re.search(r"กัว\s*[1-9]", question):
+            return question
+        kua = FengShuiRAGService._extract_kua_from_history(history)
+        if kua:
+            _rlog(f"  [RAG] Query enriched with Kua {kua} from history")
+            return f"กัว {kua} {question}"
+        return question
 
     # ------------------------------------------------------------------
     # Document retrieval
     # (mirrors step3_vectorstore.py get_retriever + step4b format_documents)
     # ------------------------------------------------------------------
 
-    def _retrieve_context(self, question: str) -> tuple[str, list[dict[str, Any]]]:
+    def _retrieve_context(
+        self,
+        question: str,
+        prefetched_docs: list[Any] | None = None,
+        knowledge_type: str = "both",
+    ) -> tuple[str, list[dict[str, Any]]]:
         """Retrieve relevant chunks from ChromaDB and format as Thai-labelled context.
 
-        Uses MMR search (same as feng-shui-rag get_retriever search_type="mmr").
+        knowledge_type filter: when not 'both', adds a ChromaDB metadata filter so
+        only chunks labelled feng_shui/interior_design/both are returned.
+        prefetched_docs (from Layer 2 check) are reused only when knowledge_type=='both'
+        to avoid returning unfiltered results.
         Returns (formatted_context_str, source_docs_list).
         """
-        vs = self._ensure_vectorstore()
-        if vs is None:
-            return "", []
+        # Reuse prefetched docs only when no filter is needed
+        if prefetched_docs and knowledge_type == "both":
+            docs = prefetched_docs
+        else:
+            vs = self._ensure_vectorstore()
+            if vs is None:
+                return "", []
 
-        try:
-            retriever = self._retriever
-            if retriever is None:
+            try:
                 from src.config.settings import get_settings
 
                 s = get_settings()
+                meta_filter = (
+                    {"knowledge_type": {"$in": [knowledge_type, "both"]}}
+                    if knowledge_type != "both"
+                    else None
+                )
+                if meta_filter:
+                    _rlog(f"  [RAG] Retrieval filter: knowledge_type ∈ [{knowledge_type}, both]")
+                search_kwargs: dict[str, Any] = {"k": s.RAG_TOP_K}
+                if meta_filter:
+                    search_kwargs["filter"] = meta_filter
+
                 retriever = vs.as_retriever(
                     search_type=s.RAG_SEARCH_TYPE,
-                    search_kwargs={"k": s.RAG_TOP_K},
+                    search_kwargs=search_kwargs,
                 )
+                docs = retriever.invoke(question)
 
-            docs = retriever.invoke(question)
+                # Fallback: if filter returned nothing, retry without filter
+                if not docs and meta_filter:
+                    _rlog("  [RAG] Filter returned 0 docs → retrying without filter")
+                    docs = vs.as_retriever(
+                        search_type=s.RAG_SEARCH_TYPE,
+                        search_kwargs={"k": s.RAG_TOP_K},
+                    ).invoke(question)
+            except Exception as exc:
+                logger.warning("FengShuiRAGService retrieval failed: %s", exc)
+                return "", []
+
+        formatted_parts: list[str] = []
+        source_docs: list[dict[str, Any]] = []
+
+        _rlog(f"  [RAG] Retrieved {len(docs)} doc(s) → LLM context:")
+        for i, doc in enumerate(docs, 1):
+            source = doc.metadata.get("source", "ฐานความรู้")
+            kt = doc.metadata.get("knowledge_type", "?")
+            src_short = source.split("/")[-1]
+            preview = doc.page_content.strip()[:70].replace("\n", " ")
+            _rlog(f"    [{i}] src={src_short}  type={kt}")
+            _rlog(f'        "{preview}..."')
+
+            content = doc.page_content.strip()
+            formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
+            source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
 
             formatted_parts: list[str] = []
             source_docs: list[dict[str, Any]] = []
@@ -311,26 +504,29 @@ class FengShuiRAGService:
     ) -> list[dict[str, str]]:
         """Build messages array for OpenRouter API.
 
-        Prompt structure mirrors ConversationRAGChain.prompt:
-        - System: SYSTEM_PROMPT + mode addition
-        - Human: chat_history + context + question (same sections as feng-shui-rag)
+        Pass conversation history as real message objects so the LLM treats them
+        as actual prior turns (not text to read). RAG context is injected only
+        into the current user turn.
         """
         mode_addition = _MODE_ADDITIONS.get(mode, _MODE_ADDITIONS["buddy"])
         system_content = f"{_SYSTEM_PROMPT_BASE}\n\n{mode_addition}"
 
-        history_text = self._format_chat_history(conversation_history)
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
+
+        # Inject prior turns as real message objects — LLM treats these as memory
+        for turn in conversation_history:
+            role = turn.get("role", "user")
+            content = turn.get("content", "").strip()
+            if content and role in ("user", "assistant"):
+                messages.append({"role": role, "content": content})
+
+        # Current turn: RAG context + question
         context_text = context if context else "[ไม่มีข้อมูลเพิ่มเติมจากฐานความรู้]"
+        user_content = f"[ข้อมูลอ้างอิง]\n{context_text}\n\n[คำถาม]\n{question}"
+        messages.append({"role": "user", "content": user_content})
 
-        user_content = (
-            f"[บทสนทนาก่อนหน้า]\n{history_text}\n\n"
-            f"[ข้อมูลอ้างอิง]\n{context_text}\n\n"
-            f"[คำถาม]\n{question}"
-        )
-
-        return [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": user_content},
-        ]
+        _rlog(f"  [RAG] Prompt: {len(messages)} messages ({len(conversation_history)} history + system + current)")
+        return messages
 
     # ------------------------------------------------------------------
     # Public API
@@ -360,12 +556,15 @@ class FengShuiRAGService:
         Returns:
             (answer_str, source_documents_list) — source_docs match ChatResponse.source_documents schema.
         """
-        history = conversation_history or []
+        from src.config.settings import get_settings as _gs
+        _max_turns = _gs().MAX_HISTORY
+        # Keep the last max_turns*2 messages (each turn = 1 user + 1 assistant)
+        history = (conversation_history or [])[-_max_turns * 2:]
 
         # --- Relevance guard (mirrors ConversationRAGChain._check_relevance) ---
         if not self._check_relevance(question, history):
             logger.info("FengShuiRAGService: out-of-scope → %r", question[:60])
-            print(f"  [RAG] OUT_OF_SCOPE — returning default message")
+            _rlog("  [RAG] OUT_OF_SCOPE — returning default message")
             return OUT_OF_SCOPE_MSG, []
 
         # --- Detect mixed-room question: inject hard constraint into user message ---
@@ -378,12 +577,16 @@ class FengShuiRAGService:
                 f"[ระบบ: คำถามนี้พูดถึง {rooms_str} ซึ่งอยู่นอก scope — "
                 f"ห้ามตอบส่วน {rooms_str} เด็ดขาด ตอบเฉพาะห้องนอนเท่านั้น]\n{question}"
             )
-            print(f"  [RAG] Mixed-room detected ({rooms_str}) — injecting constraint into prompt")
+            _rlog(f"  [RAG] Mixed-room detected ({rooms_str}) — injecting constraint into prompt")
         else:
             question_for_llm = question
 
-        # --- Retrieve context from ChromaDB ---
-        context, source_docs = self._retrieve_context(question)
+        # --- Classify query type then retrieve filtered context ---
+        knowledge_type = await self._classify_query(question)
+        retrieval_query = self._enrich_retrieval_query(question, history)
+        context, source_docs = self._retrieve_context(
+            retrieval_query, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
+        )
 
         # --- Build prompt messages ---
         messages = self._build_messages(question_for_llm, context, history, mode)
@@ -418,7 +621,15 @@ class FengShuiRAGService:
                 "HTTP-Referer": "https://buddybuilder.ai",
                 "X-Title": "BuddyBuilder AI",
             }
-            print(f"  [RAG] LLM: OpenRouter ({model})")
+            provider_label = f"OpenRouter ({model})"
+
+        _rlog(
+            f"\n  ┌─ RAG → LLM Call ───────────────────────────────────\n"
+            f"  │  Model      : {provider_label}\n"
+            f"  │  Temperature: {settings.LLM_TEMPERATURE_RAG}\n"
+            f"  │  Threshold  : {self.RELEVANCE_THRESHOLD} (L2)  TOP_K={settings.RAG_TOP_K}\n"
+            f"  └────────────────────────────────────────────────────"
+        )
 
         try:
             async with httpx.AsyncClient() as client:
@@ -449,3 +660,131 @@ class FengShuiRAGService:
         except Exception as exc:
             logger.exception("FengShuiRAGService.ask failed")
             return f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}", []
+
+    async def ask_stream(
+        self,
+        question: str,
+        mode: str = "buddy",
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> "AsyncIterator[tuple[str, str, list[dict[str, Any]] | None]]":
+        """Streaming variant of `ask` — yields ("delta"|"final", text, sources|None).
+
+        Mirrors `ask()` exactly through relevance, retrieval, and prompt building,
+        but switches the LLM call to SSE streaming. Yields:
+          - ("delta",  token_chunk, None) repeatedly as chunks arrive
+          - ("final",  full_answer,  source_docs) once at the end
+
+        If relevance fails, yields a single ("final", OUT_OF_SCOPE_MSG, []).
+        """
+        import json
+
+        import httpx
+
+        from src.config.settings import get_settings
+
+        _max_turns = get_settings().MAX_HISTORY
+        history = (conversation_history or [])[-_max_turns * 2:]
+
+        is_relevant, prefetched_docs = self._check_relevance(question, history)
+        if not is_relevant:
+            logger.info("FengShuiRAGService: out-of-scope (stream) → %r", question[:60])
+            yield ("final", OUT_OF_SCOPE_MSG, [])
+            return
+
+        q_lower = question.lower()
+        excluded_rooms = [kw for kw in EXCLUDE_KEYWORDS if kw.lower() in q_lower]
+        has_bedroom = any(kw.lower() in q_lower for kw in BEDROOM_KEYWORDS)
+        if excluded_rooms and has_bedroom:
+            rooms_str = ", ".join(excluded_rooms[:3])
+            question_for_llm = (
+                f"[ระบบ: คำถามนี้พูดถึง {rooms_str} ซึ่งอยู่นอก scope — "
+                f"ห้ามตอบส่วน {rooms_str} เด็ดขาด ตอบเฉพาะห้องนอนเท่านั้น]\n{question}"
+            )
+        else:
+            question_for_llm = question
+
+        knowledge_type = await self._classify_query(question)
+        retrieval_query = self._enrich_retrieval_query(question, history)
+        context, source_docs = self._retrieve_context(
+            retrieval_query, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
+        )
+        messages = self._build_messages(question_for_llm, context, history, mode)
+
+        settings = get_settings()
+        provider = settings.LLM_PROVIDER
+        model = settings.LLM_MODEL_NAME
+
+        if provider == "ollama":
+            url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+        elif provider == "groq":
+            url = f"{settings.GROQ_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            }
+        else:
+            url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://buddybuilder.ai",
+                "X-Title": "BuddyBuilder AI",
+            }
+
+        full: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                async with client.stream(
+                    "POST",
+                    url,
+                    headers=headers,
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "temperature": settings.LLM_TEMPERATURE_RAG,
+                        "max_tokens": 1200,
+                        "stream": True,
+                    },
+                ) as response:
+                    if response.status_code != 200:
+                        err_body = (await response.aread()).decode("utf-8", errors="replace")
+                        logger.error(
+                            "FengShuiRAGService.stream: LLM error %d — %s",
+                            response.status_code,
+                            err_body[:200],
+                        )
+                        yield (
+                            "final",
+                            f"ขออภัยครับ ระบบมีปัญหาชั่วคราว (error {response.status_code})",
+                            [],
+                        )
+                        return
+
+                    async for raw_line in response.aiter_lines():
+                        if not raw_line:
+                            continue
+                        line = raw_line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(payload)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = obj.get("choices") or []
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta") or {}
+                        chunk = delta.get("content")
+                        if chunk:
+                            full.append(chunk)
+                            yield ("delta", chunk, None)
+        except Exception as exc:
+            logger.exception("FengShuiRAGService.ask_stream failed")
+            yield ("final", f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}", [])
+            return
+
+        yield ("final", "".join(full), source_docs)

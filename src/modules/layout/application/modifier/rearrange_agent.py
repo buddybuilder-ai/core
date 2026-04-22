@@ -462,7 +462,6 @@ class RearrangeAgent:
             room_type=room_type,
             width=room_w,
             depth=room_d,
-            item_count=len(enriched),
             modification_request=modification_request,
             collisions_remaining=len(collisions),
             room_spec=room_spec,
@@ -661,7 +660,6 @@ class RearrangeAgent:
         room_type: str,
         width: float,
         depth: float,
-        item_count: int,
         modification_request: str,
         collisions_remaining: int,
         room_spec: dict[str, Any] | None = None,
@@ -676,7 +674,7 @@ class RearrangeAgent:
             detect_kua_priority,
             kua_best_direction_info,
         )
-        from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT
+        from src.modules.layout.infrastructure.llm.prompts import EXPLANATION_PROMPT, _build_items_summary
 
         # Build kua_line — pre-rendered Thai text, no LLM logic needed
         kua_line = "ลองกรอกปีเกิดและเพศในการตั้งค่าห้อง เพื่อให้เราปรับทิศหัวเตียงตามเลขกัวส่วนตัวของคุณได้"
@@ -739,6 +737,8 @@ class RearrangeAgent:
                     lines.append(f"- {name}: ผนัง{wall_th}")
             layout_summary = "\n".join(lines) if lines else "ไม่มีข้อมูล"
 
+        items_summary = _build_items_summary(enriched_layout or [])
+
         prompt = EXPLANATION_PROMPT.format(
             layout_summary=layout_summary,
             remaining_issues="ไม่มี"
@@ -749,6 +749,7 @@ class RearrangeAgent:
 
         try:
             system_prompt = get_system_prompt("buddy")
+            logger.info(f"RearrangeAgent: explain PROMPT:\n{prompt}")
             response = await self._llm_agent._llm.ainvoke(
                 [
                     SystemMessage(content=system_prompt),

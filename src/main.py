@@ -1,7 +1,24 @@
 """BuddyBuilder AI - FastAPI Application Factory."""
 
 import logging
+import sys
 from collections.abc import AsyncGenerator
+
+# Force line-buffered stdout so print() calls appear immediately in the terminal
+# regardless of whether PYTHONUNBUFFERED=1 was set at process start.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
+
+# macOS + miniconda: transformers calls packages_distributions() at import time
+# which crashes with OSError [Errno 89] on some metadata files → process hangs.
+# Build a cheap mapping using find_spec (no actual import) so transformers can
+# check package availability without triggering the crash.
+import importlib.metadata as _im
+import importlib.util as _ilu
+_heavy = ["torch", "tensorflow", "jax", "flax", "tokenizers", "sentencepiece",
+          "accelerate", "peft", "safetensors", "transformers", "sentence_transformers"]
+_im.packages_distributions = lambda: {p: [p] for p in _heavy if _ilu.find_spec(p) is not None}
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -30,15 +47,33 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
-    # Startup — preload embedding model so first request isn't slow
-    print(f"Starting {settings.APP_NAME}...")
-    try:
-        from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
+    import asyncio
 
-        get_cached_vectorstore(settings.CHROMA_DB_PATH, settings.EMBEDDING_MODEL_LOCAL)
-        print("Vectorstore + embedding model loaded")
-    except Exception as exc:
-        print(f"Vectorstore preload skipped: {exc}")
+    import sys
+
+    print(f"Starting {settings.APP_NAME}...")
+
+    if sys.platform == "darwin":
+        # macOS: skip eager preload — BGE-M3 loads in a background thread which
+        # can hang due to torch initialisation + FSEvents interference.
+        # The vectorstore loads lazily on the first request instead.
+        print("  macOS detected — vectorstore will load on first request")
+    else:
+        print("  Loading embedding model (bge-m3)...", flush=True)
+        try:
+            loop = asyncio.get_running_loop()
+            from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
+
+            await loop.run_in_executor(
+                None,
+                get_cached_vectorstore,
+                settings.CHROMA_DB_PATH,
+                settings.EMBEDDING_MODEL_LOCAL,
+            )
+            print("  Vectorstore + embedding model ready ✓")
+        except Exception as exc:
+            print(f"  Vectorstore preload skipped: {exc}")
+
     yield
     # Shutdown
     print(f"Shutting down {settings.APP_NAME}...")

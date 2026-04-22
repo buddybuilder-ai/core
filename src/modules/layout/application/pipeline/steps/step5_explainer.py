@@ -112,9 +112,8 @@ class ExplainerStep(BaseStep):
         width = spec.get("width", 0)
         depth = spec.get("depth", 0)
 
-        # Items summary
-        names = [i.get("name", i.get("furniture_type", "item")) for i in items]
-        items_summary = f"{len(items)} items: {', '.join(names)}" if names else "no items placed"
+        # Items summary — include wall placement so LLM can reference actual positions
+        items_summary = _build_items_summary(items)
 
         # Final geometric overlap safety-net: regardless of what the
         # pipeline conflict list says, verify the actual AABB layout right

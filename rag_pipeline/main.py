@@ -9,57 +9,79 @@ import sys
 import argparse
 from pathlib import Path
 
-# เพิ่ม rag_pipeline/ เข้า path (scripts อยู่ที่นี่โดยตรง)
+# Patch importlib.metadata before any heavy imports.
+# transformers calls packages_distributions() at import time; on macOS with
+# miniconda some package metadata files are unreadable → OSError [Errno 89].
+# transformers calls packages_distributions() at import time.
+# On macOS+miniconda this crashes with OSError [Errno 89] on some metadata files.
+# Fix: build the mapping cheaply using find_spec (no actual import) so
+# transformers can check package availability without importing torch/tf/etc.
+import importlib.metadata as _im
+import importlib.util as _ilu
+_heavy = ["torch", "tensorflow", "jax", "flax", "tokenizers", "sentencepiece",
+          "accelerate", "peft", "safetensors", "transformers", "sentence_transformers"]
+_pkg_map = {p: [p] for p in _heavy if _ilu.find_spec(p) is not None}
+_im.packages_distributions = lambda: _pkg_map
+
+# print ก่อน import อื่นๆ เพื่อให้รู้ว่า process เริ่มทำงานแล้ว
+print("RAG Pipeline กำลังเริ่มต้น...", flush=True)
+
 sys.path.insert(0, str(Path(__file__).parent))
 
+print("  [1/3] โหลด pandas + data loader...", end="", flush=True)
 from step1_data_loader import load_all_documents
-from step2b_contextual_chunking import split_documents_with_context
-from step2c_hypothetical_questions import create_qa_chunks
+print(" ✓", flush=True)
+
+print("  [2/3] โหลด LangChain + text splitter...", end="", flush=True)
+from step2b_contextual_chunking import export_chunks_to_csv, split_documents_with_context
+print(" ✓", flush=True)
+
+print("  [3/3] โหลด vectorstore (torch อาจช้า)...", end="", flush=True)
 from step3_vectorstore import create_vectorstore
+print(" ✓\n", flush=True)
 
 
 def main():
     """Rebuild vectorstore และแสดงคำแนะนำสำหรับ interactive testing"""
     parser = argparse.ArgumentParser(description="RAG Vectorstore Builder")
     parser.add_argument("--rebuild", action="store_true", help="Rebuild vector store")
-    parser.add_argument("--method", choices=["standard", "contextual", "questions"],
+    parser.add_argument("--method", choices=["standard", "contextual"],
                        default="contextual", help="วิธี chunking (default: contextual)")
     parser.add_argument("--llm-context", action="store_true",
-                       help="ใช้ LLM เพิ่ม context (ช้ากว่า แต่ดีกว่า — ต้องมี Ollama)")
+                       help="ใช้ LLM เพิ่ม context (ช้ากว่า แต่ดีกว่า)")
     args = parser.parse_args()
 
-    print("="*80)
-    print(" RAG Vectorstore Builder")
-    print(f"   Method: {args.method.upper()}")
-    print("="*80 + "\n")
+    print("=" * 80, flush=True)
+    print(f"  RAG Vectorstore Builder  |  method={args.method.upper()}  |  llm-context={args.llm_context}", flush=True)
+    print("=" * 80 + "\n", flush=True)
 
     import os
     chroma_path = os.getenv("CHROMA_DB_PATH", "./vectorstore/chroma_db")
     vector_store_exists = Path(chroma_path).exists()
 
     if not vector_store_exists or args.rebuild:
-        # Step 1: โหลดเอกสาร
-        print(" Step 1: โหลดเอกสารจาก data/raw/")
+        # Step 1
+        print("[ Step 1 ] โหลดเอกสารจาก data/raw/", flush=True)
         docs = load_all_documents()
 
         if not docs:
-            print("\n ไม่พบเอกสารในระบบ!")
-            print(" กรุณาวางไฟล์ (.pdf, .csv, .xlsx, .txt, .md, .json, .jsonl) ใน data/raw/")
+            print("\nไม่พบเอกสารในระบบ!")
+            print("กรุณาวางไฟล์ (.pdf, .csv, .xlsx, .txt, .md, .json, .jsonl) ใน data/raw/")
             return
 
-        # Step 2: แบ่ง chunks
-        print(f"\n  Step 2: แบ่งเอกสารเป็น chunks ({args.method})")
+        print(f"  โหลดเสร็จ: {len(docs)} documents\n", flush=True)
+
+        # Step 2
+        print(f"[ Step 2 ] Chunking  method={args.method}  llm-context={args.llm_context}", flush=True)
 
         if args.method == "standard":
             from step2_text_splitter import split_documents
             chunks = split_documents(docs)
+            export_chunks_to_csv(chunks)
         elif args.method == "contextual":
             chunks = split_documents_with_context(docs, use_llm_context=args.llm_context)
-        elif args.method == "questions":
-            chunks = create_qa_chunks(docs, questions_per_chunk=3)
 
-        # Step 3: สร้าง vectorstore
-        print(f"\n  Step 3: {'Rebuild' if args.rebuild else 'สร้าง'} Vector Store")
+        print(f"\n[ Step 3 ] {'Rebuild' if args.rebuild else 'สร้าง'} Vector Store  ({len(chunks)} chunks)", flush=True)
         create_vectorstore(chunks, force_rebuild=args.rebuild)
 
     else:

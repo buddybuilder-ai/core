@@ -585,6 +585,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
 
         system_prompt = get_system_prompt(personality_mode)
         prompt = EXPLANATION_PROMPT.format(
+            items_summary=items_summary,
             total_score=total_score,
             grade=grade,
             remaining_issues=remaining_issues,
@@ -595,6 +596,7 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
             HumanMessage(content=prompt),
         ]
         try:
+            logger.info(f"explain_layout PROMPT:\n{prompt}")
             response = await self._llm.ainvoke(messages)
             content = str(response.content) if hasattr(response, "content") else ""
             logger.info(f"explain_layout: generated {len(content)} chars (mode={personality_mode})")

@@ -71,3 +71,5 @@ alembic/versions/*.pyc
 *.temp
 *.bak
 .claude/worktrees/clever-vaughan/
+/rag_pipeline/exports
+/rag_pipeline/exports

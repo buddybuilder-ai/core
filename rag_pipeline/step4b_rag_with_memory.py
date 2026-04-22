@@ -7,7 +7,6 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage, AIMessage
 
 # Import centralized config
 from config import (
@@ -208,12 +207,12 @@ class ConversationRAGChain:
         question_lower = question.lower()
 
         # Layer 1: ตรวจสอบคำถามโดยตรง (exact match)
-        for keyword in self.DOMAIN_KEYWORDS:
+        for keyword in DOMAIN_KEYWORDS:
             if keyword.lower() in question_lower:
                 return True
 
         # Layer 2: ตรวจสอบคำพิมพ์ผิด (fuzzy match)
-        for keyword in self.DOMAIN_KEYWORDS:
+        for keyword in DOMAIN_KEYWORDS:
             if len(keyword) >= 4:  # ตรวจ fuzzy เฉพาะคำยาว >= 4 ตัวอักษร
                 if self._fuzzy_match(question_lower, keyword.lower()):
                     return True
@@ -226,7 +225,7 @@ class ConversationRAGChain:
                 combined_text = (human_q + " " + ai_a).lower()
 
                 # ตรวจว่าประวัติการสนทนามีคำสำคัญหรือไม่
-                for keyword in self.DOMAIN_KEYWORDS:
+                for keyword in DOMAIN_KEYWORDS:
                     if keyword.lower() in combined_text:
                         # ถ้าคำถามปัจจุบันสั้น (< 15 ตัวอักษร) และประวัติมีคำสำคัญ
                         # → ถือว่าเป็นคำถามต่อเนื่อง
@@ -289,7 +288,7 @@ class ConversationRAGChain:
         # ตรวจ relevance ก่อนเรียก LLM เพื่อประหยัด token
         if not self._check_relevance(question):
             print("    Out of scope — skipping LLM call")
-            return self.OUT_OF_SCOPE_MSG
+            return OUT_OF_SCOPE_MSG
 
         # ดึงคำตอบ
         answer = self.chain.invoke({

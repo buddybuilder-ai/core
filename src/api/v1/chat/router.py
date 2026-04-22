@@ -15,17 +15,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Q
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
-from src.modules.layout.application.modifier import ModifierAgent
-from src.modules.layout.application.pipeline import PipelineConfig, PipelineOrchestrator
-from src.modules.layout.application.pipeline.models import (
-    PipelineState,
-    SSEEvent,
-    SSEEventType,
-)
-from src.modules.layout.application.pipeline.steps import ExplainerStep
-from src.modules.layout.infrastructure.llm.router_agent import RouterAgent
 from src.schemas.chat import ChatRequest, ChatResponse
 from src.schemas.chat_stream import ChatStreamRequest
+
+# Heavy imports (LangChain, pipeline) are lazy-loaded inside route handlers
+# to keep startup time fast — they're cached by Python after first use.
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 settings = get_settings()
@@ -77,10 +71,14 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
     """Route user message and stream SSE events based on classified intent."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        from src.modules.layout.application.agent.personality import (
-            detect_mode_switch,
-            detect_mood,
-        )
+        from src.modules.layout.application.agent.personality import detect_mode_switch, detect_mood
+        from src.modules.layout.application.modifier import ModifierAgent
+        from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
+        from src.modules.layout.application.pipeline import PipelineConfig, PipelineOrchestrator
+        from src.modules.layout.application.pipeline.models import PipelineState, SSEEvent, SSEEventType
+        from src.modules.layout.application.pipeline.steps import ExplainerStep
+        from src.modules.layout.application.services.clarification_gate import get_pending_questions
+        from src.modules.layout.infrastructure.llm.router_agent import RouterAgent
 
         mood = detect_mood(request.message)
         router_agent = RouterAgent()
@@ -323,6 +321,52 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                 event_type=SSEEventType.ANSWER,
                 data={"answer": answer},
             ).to_sse()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/rag")
+async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
+    """RAG-only chat endpoint — ตอบคำถามฮวงจุ้ยโดยตรง ไม่ผ่าน router agent และไม่สร้าง layout.
+
+    ใช้สำหรับหน้า Chatbot โดยเฉพาะ.
+    """
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        import json
+
+        from src.modules.layout.application.services.rag_service import FengShuiRAGService
+
+        def _sse(event: str, **data: object) -> str:
+            payload = json.dumps({"type": event, **data})
+            return f"event: {event}\ndata: {payload}\n\n"
+
+        service = FengShuiRAGService()
+        full_answer = ""
+        source_docs: list = []
+        try:
+            async for kind, text, sources in service.ask_stream(
+                question=request.message,
+                mode=request.mode,
+                conversation_history=request.conversation_history or [],
+            ):
+                if kind == "delta":
+                    yield _sse("answer_delta", delta=text)
+                elif kind == "final":
+                    full_answer = text
+                    source_docs = sources or []
+        except Exception as exc:  # pragma: no cover - safety net
+            full_answer = full_answer or f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
+
+        yield _sse("answer", answer=full_answer, source_documents=source_docs)
 
     return StreamingResponse(
         event_generator(),

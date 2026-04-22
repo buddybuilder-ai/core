@@ -5,15 +5,22 @@ Step 3: Vector Store (ChromaDB)
 from pathlib import Path
 from typing import List
 from langchain_core.documents import Document
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
 # Import centralized config
 from config import CHROMA_DB_PATH, EMBEDDING_MODEL, TOP_K, SEARCH_TYPE
 
 
 def get_embeddings():
-    
+    """สร้าง HuggingFaceEmbeddings พร้อม auto-detect device (CUDA → MPS → CPU)
+
+    ใช้ normalize_embeddings=True เพื่อให้ L2 distance มีความหมายเดียวกับ cosine similarity
+    (L2² = 2·(1 − cosine) เมื่อ normalize แล้ว) ซึ่ง ChromaDB ใช้เป็น relevance score
+
+    Returns:
+        HuggingFaceEmbeddings พร้อมใช้งาน
+    """
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+
     print(f"Embedding model: {EMBEDDING_MODEL}")
 
     # ตรวจสอบว่ามี GPU หรือไม่
@@ -63,6 +70,8 @@ def create_vectorstore(chunks: List[Document], force_rebuild: bool = False):
     Returns:
         Chroma vectorstore
     """
+    from langchain_community.vectorstores import Chroma
+
     embeddings = get_embeddings()
 
     # ถ้าต้องการ rebuild ให้ลบของเดิมก่อน

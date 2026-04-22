@@ -3,7 +3,7 @@
 # =============================================================================
 # Development environment with all required services
 
-version: "3.8"
+# version: "3.8"  # obsolete — removed
 
 services:
   # ---------------------------------------------------------------------------
@@ -30,13 +30,13 @@ services:
         condition: service_started
     networks:
       - buddybuilder-network
-    restart: unless-stopped
+    restart: on-failure:3
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 60s
 
   # ---------------------------------------------------------------------------
   # PostgreSQL Database

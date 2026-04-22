@@ -5,14 +5,6 @@ Step 1: Data Loader
 import os
 from pathlib import Path
 from typing import List
-from langchain_core.documents import Document
-from langchain_community.document_loaders import (
-    PyPDFLoader,
-    CSVLoader,
-    TextLoader,
-    JSONLoader,
-)
-import pandas as pd
 
 
 DATA_RAW_PATH = Path("data/raw")
@@ -30,19 +22,18 @@ def _format_val(val) -> str:
     return str(val)
 
 
-def load_pdf(file_path: str) -> List[Document]:
+def load_pdf(file_path: str) -> "List[Document]":
     """โหลดไฟล์ PDF พร้อม normalize line endings
     รองรับ PDF ที่เข้ารหัส (encrypted) — ลอง decrypt ด้วย password ว่างก่อน
     """
+    from langchain_community.document_loaders import PyPDFLoader
     try:
         loader = PyPDFLoader(file_path, password="")
         docs = loader.load()
     except Exception:
-        # Fallback: โหลดโดยไม่ระบุ password
         loader = PyPDFLoader(file_path)
         docs = loader.load()
 
-    # กรองหน้าที่ไม่มีเนื้อหา
     docs = [doc for doc in docs if doc.page_content.strip()]
     for doc in docs:
         doc.page_content = _normalize_text(doc.page_content)
@@ -56,8 +47,10 @@ LABEL_COLUMNS = [
 ]
 
 
-def load_csv_excel(file_path: str) -> List[Document]:
+def load_csv_excel(file_path: str) -> "List[Document]":
     """โหลดไฟล์ CSV หรือ Excel พร้อม label metadata จากคอลัมน์ที่กำหนด"""
+    import pandas as pd
+    from langchain_core.documents import Document
     docs = []
 
     if file_path.endswith(".csv"):
@@ -89,47 +82,38 @@ def load_csv_excel(file_path: str) -> List[Document]:
     return docs
 
 
-def load_text(file_path: str) -> List[Document]:
+def load_text(file_path: str) -> "List[Document]":
     """โหลดไฟล์ TXT หรือ MD"""
+    from langchain_community.document_loaders import TextLoader
     loader = TextLoader(file_path, encoding="utf-8")
     return loader.load()
 
 
-def load_json(file_path: str) -> List[Document]:
+def load_json(file_path: str) -> "List[Document]":
     """โหลดไฟล์ JSON หรือ JSONL"""
     import json
+    from langchain_core.documents import Document
 
     docs = []
     with open(file_path, "r", encoding="utf-8") as f:
         if file_path.endswith(".jsonl"):
-            # JSONL: แต่ละบรรทัดคือ JSON object
             for line in f:
                 data = json.loads(line)
                 content = json.dumps(data, ensure_ascii=False, indent=2)
-                docs.append(Document(
-                    page_content=content,
-                    metadata={"source": file_path}
-                ))
+                docs.append(Document(page_content=content, metadata={"source": file_path}))
         else:
-            # JSON: ไฟล์เดียว
             data = json.load(f)
             if isinstance(data, list):
                 for item in data:
                     content = json.dumps(item, ensure_ascii=False, indent=2)
-                    docs.append(Document(
-                        page_content=content,
-                        metadata={"source": file_path}
-                    ))
+                    docs.append(Document(page_content=content, metadata={"source": file_path}))
             else:
                 content = json.dumps(data, ensure_ascii=False, indent=2)
-                docs.append(Document(
-                    page_content=content,
-                    metadata={"source": file_path}
-                ))
+                docs.append(Document(page_content=content, metadata={"source": file_path}))
     return docs
 
 
-def load_all_documents() -> List[Document]:
+def load_all_documents() -> "List[Document]":
     """โหลดเอกสารทั้งหมดจาก data/raw/"""
     all_docs = []
 

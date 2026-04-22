@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     RAG_RELEVANCE_THRESHOLD: float = 1.0
     """L2 distance threshold for filtering out-of-scope queries (lower = stricter)."""
 
+    MAX_HISTORY: int = 10
+    """Number of conversation rounds (user+assistant pairs) to keep in LLM prompt."""
+
     # ==========================================================================
     # RAG Configuration  ← ตั้งค่าที่ Buddy Builder/.env
     # ==========================================================================

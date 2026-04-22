@@ -36,14 +36,20 @@ def _get_embeddings(model_name: str) -> "object":
 
     device = "cpu"
     try:
+        import sys
         import torch
 
-        if torch.cuda.is_available():
+        if sys.platform == "darwin":
+            # macOS: skip CUDA check — torch.cuda.is_available() probes for NVIDIA
+            # GPU that doesn't exist on Mac, causing a multi-second hang.
+            if torch.backends.mps.is_available():
+                device = "mps"
+                logger.info("Vectorstore embeddings: using Apple Silicon MPS")
+            else:
+                logger.info("Vectorstore embeddings: using CPU (Intel Mac)")
+        elif torch.cuda.is_available():
             device = "cuda"
             logger.info("Vectorstore embeddings: using CUDA GPU")
-        elif torch.backends.mps.is_available():
-            device = "mps"
-            logger.info("Vectorstore embeddings: using Apple Silicon MPS")
         else:
             logger.info("Vectorstore embeddings: using CPU")
     except ImportError:

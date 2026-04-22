@@ -16,10 +16,6 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from src.modules.layout.application.pipeline import (
-    PipelineConfig,
-    PipelineOrchestrator,
-)
 from src.schemas.layout import FengShuiLayoutRequest
 
 router = APIRouter(prefix="/layout", tags=["Layout"])
@@ -49,6 +45,7 @@ async def generate_layout_stream(
     Returns:
         SSE stream of pipeline events.
     """
+    from src.modules.layout.application.pipeline import PipelineConfig, PipelineOrchestrator
     config = PipelineConfig(max_repair_loops=max_repair_loops)
     orchestrator = PipelineOrchestrator(config)
 
