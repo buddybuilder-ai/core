@@ -202,6 +202,38 @@ class RepairStep(BaseStep):
         half_w = room.width / 2
         half_d = room.depth / 2
 
+        # Pre-build door clearance zones in centre-based coords.
+        # spatial_resolver uses 1.5 m clearance + 0.5 m side padding.
+        _DOOR_CLEAR = 1.50
+        _DOOR_PAD = 0.50
+        door_forbidden: list[AABB] = []
+        for door in room.doors:
+            wall = str(door.wall.value).lower()
+            off = float(door.offset)
+            dw = float(door.width)
+            # Convert corner coords to centre-based coords (subtract half room)
+            if wall == "south":
+                x0 = max(0.0, off - _DOOR_PAD) - half_w
+                x1 = min(room.width, off + dw + _DOOR_PAD) - half_w
+                z0 = -half_d
+                z1 = _DOOR_CLEAR - half_d
+            elif wall == "north":
+                x0 = max(0.0, off - _DOOR_PAD) - half_w
+                x1 = min(room.width, off + dw + _DOOR_PAD) - half_w
+                z0 = half_d - _DOOR_CLEAR
+                z1 = half_d
+            elif wall == "west":
+                x0 = -half_w
+                x1 = _DOOR_CLEAR - half_w
+                z0 = max(0.0, off - _DOOR_PAD) - half_d
+                z1 = min(room.depth, off + dw + _DOOR_PAD) - half_d
+            else:  # east
+                x0 = half_w - _DOOR_CLEAR
+                x1 = half_w
+                z0 = max(0.0, off - _DOOR_PAD) - half_d
+                z1 = min(room.depth, off + dw + _DOOR_PAD) - half_d
+            door_forbidden.append(AABB(min_x=x0, max_x=x1, min_z=z0, max_z=z1))
+
         for dist in SHIFT_INCREMENTS:
             for dx, dz in SHIFT_DIRECTIONS:
                 new_x = original_x + dx * dist
@@ -231,6 +263,10 @@ class RepairStep(BaseStep):
                     if clearance_box.intersects(other_box):
                         has_collision = True
                         break
+
+                # Also reject positions that block door clearance zones
+                if not has_collision and any(new_box.intersects(dz) for dz in door_forbidden):
+                    has_collision = True
 
                 if not has_collision:
                     target["pos_x"] = round(new_x, 3)

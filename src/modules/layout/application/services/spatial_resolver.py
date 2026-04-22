@@ -60,6 +60,7 @@ class SemanticPlacement:
     priority: int
     orientation: str = ""
     facing: str = ""
+    along_wall_z: float | None = None  # exact z position along wall (overrides alignment when set)
 
 
 @dataclass(frozen=True)
@@ -515,17 +516,9 @@ class SpatialResolver:
                     return False  # truly flush — OK
                 # Not flush: apply full door zone check
                 return any(box.intersects(dz) for dz in _door_zones)
-            # Wall-hugging items on a wall that has NO door may skip door-zone
-            # checks (they can't block a door that isn't on their wall).
-            # Items on the SAME wall as a door must still respect clearance.
-            if on_south and "south" not in door_walls:
-                return False
-            if on_north and "north" not in door_walls:
-                return False
-            if on_west and "west" not in door_walls:
-                return False
-            if on_east and "east" not in door_walls:
-                return False
+            # All items must respect door clearance zones regardless of which wall
+            # they are on — a large item on the opposite wall can still protrude
+            # into the clearance zone in front of a door.
             return any(box.intersects(dz) for dz in _door_zones)
 
         if not overlaps_any(item.x, item.z):
@@ -821,8 +814,12 @@ class SpatialResolver:
         # For west/east walls: when alignment=left the z starts at 0 (south corner).
         # If there's a south door, clamp z_min to door clearance so the item
         # doesn't block the door opening or its walking clearance zone.
+        # Exception: nightstands and small items (depth ≤ 0.6m) are exempt because
+        # they hug the wall and don't protrude into the walking path.
         south_door_clearance = 0.0
-        if wall in ("west", "east") and room.doors:
+        _item_depth = p.size.w if p.size.w < p.size.length else p.size.length
+        _is_small_wall_item = _item_depth <= 0.6
+        if wall in ("west", "east") and room.doors and not _is_small_wall_item:
             for door in room.doors:
                 if str(getattr(door, "wall", "")).lower() == "south":
                     south_door_clearance = self._DOOR_CLEARANCE
@@ -830,18 +827,30 @@ class SpatialResolver:
 
         if wall == "south":
             z = gap
-            x = self._align_along_axis(p.alignment, w, room.width)
+            if p.along_wall_z is not None:
+                x = p.along_wall_z  # along_wall_z = position along x-axis for south/north walls
+            else:
+                x = self._align_along_axis(p.alignment, w, room.width)
         elif wall == "north":
             z = room.depth - length - gap
-            x = self._align_along_axis(p.alignment, w, room.width)
+            if p.along_wall_z is not None:
+                x = p.along_wall_z
+            else:
+                x = self._align_along_axis(p.alignment, w, room.width)
         elif wall == "west":
             x = gap
-            z = self._align_along_axis(p.alignment, length, room.depth)
-            z = max(z, south_door_clearance)
+            if p.along_wall_z is not None:
+                z = p.along_wall_z
+            else:
+                z = self._align_along_axis(p.alignment, length, room.depth)
+                z = max(z, south_door_clearance)
         elif wall == "east":
             x = room.width - w - gap
-            z = self._align_along_axis(p.alignment, length, room.depth)
-            z = max(z, south_door_clearance)
+            if p.along_wall_z is not None:
+                z = p.along_wall_z
+            else:
+                z = self._align_along_axis(p.alignment, length, room.depth)
+                z = max(z, south_door_clearance)
         else:
             x = gap
             z = gap

@@ -34,8 +34,8 @@ def get_pending_questions(
 ) -> list[dict[str, Any]]:
     """Return serialised pending ClarificationQuestion dicts, or [] if none needed.
 
-    Asks REQUIRED questions first; only after all REQUIRED are answered will
-    RECOMMENDED questions appear (up to 3 per round).
+    Asks REQUIRED questions once; RECOMMENDED questions fall back to their
+    default values so the pipeline never loops asking the user more than once.
 
     Args:
         intent: Classified intent from RouterAgent.
@@ -59,22 +59,15 @@ def get_pending_questions(
 
     all_questions = _TOOL.get_questions_for_room_type(_ROOM_TYPE)
 
-    # REQUIRED unanswered questions must be resolved before RECOMMENDED ones
+    # Only REQUIRED unanswered questions block the pipeline. RECOMMENDED
+    # questions rely on their default_value (applied downstream) so users
+    # are never asked more than one clarification round.
     required_pending = [
         q
         for q in all_questions
         if q.priority == QuestionPriority.REQUIRED and q.id not in clarification_answers
     ]
     if required_pending:
-        return [q.to_dict() for q in required_pending[:3]]
-
-    # All REQUIRED answered — surface RECOMMENDED ones next
-    recommended_pending = [
-        q
-        for q in all_questions
-        if q.priority == QuestionPriority.RECOMMENDED and q.id not in clarification_answers
-    ]
-    if recommended_pending:
-        return [q.to_dict() for q in recommended_pending[:3]]
+        return [q.to_dict() for q in required_pending]
 
     return []

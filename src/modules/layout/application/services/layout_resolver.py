@@ -58,6 +58,7 @@ class SemanticPlacementSchema(BaseModel):
     priority: int
     orientation: str = ""
     facing: str = ""
+    along_wall_z: float | None = None  # exact position along wall axis (set by WallAssigner for nightstands)
 
     @field_validator("target_wall")
     @classmethod
@@ -311,6 +312,7 @@ class LayoutResolver:
             priority=s.priority,
             orientation=s.orientation,
             facing=s.facing,
+            along_wall_z=s.along_wall_z,
         )
 
     @staticmethod
