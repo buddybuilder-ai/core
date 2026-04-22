@@ -450,9 +450,9 @@ class FengShuiRAGService:
             context = "\n\n---\n\n".join(formatted_parts)
             return context, source_docs
 
-        except Exception as exc:
-            logger.warning("FengShuiRAGService retrieval failed: %s", exc)
-            return "", []
+        # except Exception as exc:
+        #     logger.warning("FengShuiRAGService retrieval failed: %s", exc)
+        #     return "", []
 
     # ------------------------------------------------------------------
     # Prompt building
