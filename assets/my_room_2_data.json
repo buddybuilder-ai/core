@@ -1,11 +1,107 @@
 {
-    "project": "BuddyBuilder.ai",
-    "student_id": "66073169",
     "room_summary": {
-        "applied_height_m": 2.5,
-        "scale_factor": 1.76,
-        "total_objects": 0
+        "applied_height_m": 2.8,
+        "scale_factor": 2.0,
+        "total_objects": 8
     },
-    "objects": [],
-    "status": "success"
+    "objects": [
+        {
+            "label": "bed",
+            "confidence": 0.86,
+            "width_m": 2.2,
+            "height_m": 1.0,
+            "elevation_m": 0.0,
+            "distance_m": 1.4,
+            "center_pixel": [
+                1845,
+                3050
+            ]
+        },
+        {
+            "label": "lamp",
+            "confidence": 0.6,
+            "width_m": 1.55,
+            "height_m": 0.95,
+            "elevation_m": 1.03,
+            "distance_m": 1.4,
+            "center_pixel": [
+                1615,
+                1443
+            ]
+        },
+        {
+            "label": "lamp",
+            "confidence": 0.58,
+            "width_m": 1.55,
+            "height_m": 0.47,
+            "elevation_m": 1.03,
+            "distance_m": 1.4,
+            "center_pixel": [
+                1616,
+                1607
+            ]
+        },
+        {
+            "label": "shelf",
+            "confidence": 0.58,
+            "width_m": 0.91,
+            "height_m": 1.95,
+            "elevation_m": 0.0,
+            "distance_m": 1.4,
+            "center_pixel": [
+                810,
+                2372
+            ]
+        },
+        {
+            "label": "rug",
+            "confidence": 0.52,
+            "width_m": 1.22,
+            "height_m": 0.6,
+            "elevation_m": 0.32,
+            "distance_m": 1.4,
+            "center_pixel": [
+                331,
+                3480
+            ]
+        },
+        {
+            "label": "shelf",
+            "confidence": 0.41,
+            "width_m": 1.46,
+            "height_m": 1.94,
+            "elevation_m": 0.0,
+            "distance_m": 1.4,
+            "center_pixel": [
+                935,
+                2373
+            ]
+        },
+        {
+            "label": "sideboard",
+            "confidence": 0.31,
+            "width_m": 1.17,
+            "height_m": 0.7,
+            "elevation_m": 0.0,
+            "distance_m": 1.4,
+            "center_pixel": [
+                418,
+                2814
+            ]
+        },
+        {
+            "label": "rug",
+            "confidence": 0.26,
+            "width_m": 6.48,
+            "height_m": 0.9,
+            "elevation_m": 0.33,
+            "distance_m": 1.4,
+            "center_pixel": [
+                1532,
+                3386
+            ]
+        }
+    ],
+    "status": "success",
+    "userId": "54ef533b-808c-4add-84a5-4243ce84448a"
 }

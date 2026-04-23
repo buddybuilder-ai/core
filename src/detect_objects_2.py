@@ -37,10 +37,14 @@ try:
     else:
         INPUT_IMAGE_PATH = DEFAULT_IMAGE
 
+    # Argument 3: User ID (Optional)
+    USER_ID = sys.argv[3] if len(sys.argv) > 3 else None
+
 except Exception as e:
     print(f"⚠️ Argument Error: {e}")
     TARGET_HEIGHT = DEFAULT_HEIGHT
     INPUT_IMAGE_PATH = DEFAULT_IMAGE
+    USER_ID = None
 
 # กำหนดขีดจำกัดขนาดมาตรฐานสำหรับเฟอร์นิเจอร์แต่ละชนิด
 STANDARD_LIMITS = {
@@ -121,7 +125,7 @@ yolo_model.set_classes(
 
 
 # --- 3. PROCESSING FUNCTION ---
-def process_with_elevation(img_path: str, output_json: str, user_h: float) -> None:
+def process_with_elevation(img_path: str, output_json: str, user_h: float, user_id: str | None = None) -> None:
     if not os.path.exists(img_path):
         print(f"❌ Error: Image not found at {img_path}")
         sys.exit(1)
@@ -196,8 +200,6 @@ def process_with_elevation(img_path: str, output_json: str, user_h: float) -> No
             print(f"✅ Found {label:15}: {w_m:.2f}x{h_m:.2f}m at {elevation_m:.2f}m")
 
     final_data = {
-        "project": "BuddyBuilder.ai",
-        "student_id": "66073169",
         "room_summary": {
             "applied_height_m": user_h,
             "scale_factor": round(scale_factor, 2),
@@ -206,6 +208,9 @@ def process_with_elevation(img_path: str, output_json: str, user_h: float) -> No
         "objects": objects_3d,
         "status": "success",
     }
+    
+    if user_id:
+        final_data["userId"] = user_id
 
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(final_data, f, indent=4)
@@ -216,4 +221,4 @@ def process_with_elevation(img_path: str, output_json: str, user_h: float) -> No
 # บันทึกผลลัพธ์ไว้ที่โฟลเดอร์ assets ของ Root เสมอเพื่อให้ Frontend เข้าถึงได้
 output_json_path = os.path.join(BASE_DIR, "assets", "my_room_2_data.json")
 
-process_with_elevation(INPUT_IMAGE_PATH, output_json_path, TARGET_HEIGHT)
+process_with_elevation(INPUT_IMAGE_PATH, output_json_path, TARGET_HEIGHT, USER_ID)
