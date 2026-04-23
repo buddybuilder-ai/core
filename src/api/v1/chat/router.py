@@ -419,9 +419,14 @@ def _get_default_system_prompt(mode: str) -> str:
 
 @router.post("/process-single-image")
 async def process_single_image(
-    image: UploadFile = File(...), target_height: str = Form("2.5")
+    image: UploadFile = File(...), 
+    target_height: str | None = Form(None),
+    height: str | None = Form(None),
+    roomHeight: str | None = Form(None)
 ) -> dict[str, Any]:
     """API for processing a single image with AI to detect 3D objects."""
+    final_height = target_height or height or roomHeight or "2.5"
+    
     # 1. ระบุพาธ Root ของโปรเจกต์
     base_dir = os.path.abspath(os.getcwd())
     assets_dir = os.path.join(base_dir, "assets")
@@ -436,10 +441,10 @@ async def process_single_image(
     # 3. สั่งรัน AI Script (detect_objects_2.py)
     try:
         import sys
-        print(f"🚀 AI Starting: height={target_height}m, image={temp_image_path}")
+        print(f"🚀 AI Starting: height={final_height}m, image={temp_image_path}")
         script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
         subprocess.run(
-            [sys.executable, script_path, str(target_height), temp_image_path],
+            [sys.executable, script_path, str(final_height), temp_image_path],
             check=True,
             capture_output=True,
             text=True,
@@ -539,9 +544,13 @@ async def check_upload_status(sessionId: str = Query(...)):
 async def mobile_upload(
     sessionId: str, 
     image: UploadFile = File(...), 
-    target_height: str = Form("2.5")
+    target_height: str | None = Form(None),
+    height: str | None = Form(None),
+    roomHeight: str | None = Form(None)
 ) -> dict[str, Any]:
     """รับรูปจากมือถือ รัน AI และเก็บผลลัพธ์ลง session"""
+
+    final_height = target_height or height or roomHeight or "2.5"
 
     upload_sessions[sessionId] = {"status": "processing"}
     
@@ -576,7 +585,7 @@ async def mobile_upload(
         print(f"📸 Image: {temp_image_path}")
 
         result = subprocess.run(
-            [sys.executable, script_path, str(target_height), temp_image_path],
+            [sys.executable, script_path, str(final_height), temp_image_path],
             check=True,
             capture_output=True,
             text=True,
