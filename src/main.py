@@ -40,7 +40,7 @@ logging.basicConfig(
 
 # Set specific loggers
 logging.getLogger("src.modules.layout").setLevel(logging.INFO)
-logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -53,26 +53,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     print(f"Starting {settings.APP_NAME}...")
 
-    if sys.platform == "darwin":
-        # macOS: skip eager preload — BGE-M3 loads in a background thread which
-        # can hang due to torch initialisation + FSEvents interference.
-        # The vectorstore loads lazily on the first request instead.
-        print("  macOS detected — vectorstore will load on first request")
-    else:
-        print("  Loading embedding model (bge-m3)...", flush=True)
-        try:
-            loop = asyncio.get_running_loop()
-            from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
+    print("  Loading embedding model (bge-m3)...", flush=True)
+    try:
+        loop = asyncio.get_running_loop()
+        from src.modules.layout.infrastructure.vectorstore_service import get_cached_vectorstore
 
-            await loop.run_in_executor(
-                None,
-                get_cached_vectorstore,
-                settings.CHROMA_DB_PATH,
-                settings.EMBEDDING_MODEL_LOCAL,
-            )
-            print("  Vectorstore + embedding model ready ✓")
-        except Exception as exc:
-            print(f"  Vectorstore preload skipped: {exc}")
+        await loop.run_in_executor(
+            None,
+            get_cached_vectorstore,
+            settings.CHROMA_DB_PATH,
+            settings.EMBEDDING_MODEL_LOCAL,
+        )
+        print("  Vectorstore + embedding model ready ✓", flush=True)
+    except Exception as exc:
+        print(f"  Vectorstore preload skipped: {exc}", flush=True)
 
     yield
     # Shutdown
