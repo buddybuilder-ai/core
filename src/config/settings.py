@@ -123,6 +123,9 @@ class Settings(BaseSettings):
     MAX_HISTORY: int = 10
     """Number of conversation rounds (user+assistant pairs) to keep in LLM prompt."""
 
+    RAG_MAX_TOKENS: int = 2000
+    """Maximum tokens for RAG LLM response."""
+
     # ==========================================================================
     # Security / JWT Auth
     # ==========================================================================

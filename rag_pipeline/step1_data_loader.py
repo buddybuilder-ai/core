@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List
 
 
-DATA_RAW_PATH = Path("data/raw")
+DATA_RAW_PATH = Path(__file__).parent.parent / "data" / "raw"
 
 
 def _normalize_text(text: str) -> str:
@@ -143,7 +143,7 @@ def load_all_documents() -> "List[Document]":
                     print(f" โหลด JSON: {file_path.name}")
                     all_docs.extend(load_json(file_str))
 
-            except Exception as e:
+            except (OSError, ValueError, UnicodeDecodeError, RuntimeError) as e:
                 print(f" ไม่สามารถโหลด {file_path.name}: {e}")
 
     print(f"\n โหลดเอกสารทั้งหมด: {len(all_docs)} documents")

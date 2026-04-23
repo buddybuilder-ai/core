@@ -74,3 +74,4 @@ alembic/versions/*.pyc
 /rag_pipeline/exports
 /rag_pipeline/exports
 /rag_pipeline/vectorstore/chroma_db
+rag_pipeline/.claude/settings.local.json

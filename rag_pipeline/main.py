@@ -5,22 +5,21 @@ RAG Vectorstore Builder — Rebuild Entry Point
 สำหรับทดสอบ RAG แบบ interactive ให้ใช้:
   cd .. && python test_rag_chat.py   (หรือ make rag-test-chat)
 """
+import os
 import sys
 import argparse
 from pathlib import Path
 
-# Patch importlib.metadata before any heavy imports.
-# transformers calls packages_distributions() at import time; on macOS with
-# miniconda some package metadata files are unreadable → OSError [Errno 89].
-# transformers calls packages_distributions() at import time.
-# On macOS+miniconda this crashes with OSError [Errno 89] on some metadata files.
-# Fix: build the mapping cheaply using find_spec (no actual import) so
-# transformers can check package availability without importing torch/tf/etc.
+# Patch importlib.metadata before heavy imports.
+# transformers calls packages_distributions() at import time; on macOS+miniconda
+# some package metadata files are unreadable → OSError [Errno 89].
+# Build the mapping cheaply with find_spec, then restore the original after imports.
 import importlib.metadata as _im
 import importlib.util as _ilu
 _heavy = ["torch", "tensorflow", "jax", "flax", "tokenizers", "sentencepiece",
           "accelerate", "peft", "safetensors", "transformers", "sentence_transformers"]
 _pkg_map = {p: [p] for p in _heavy if _ilu.find_spec(p) is not None}
+_orig_packages_distributions = _im.packages_distributions
 _im.packages_distributions = lambda: _pkg_map
 
 # print ก่อน import อื่นๆ เพื่อให้รู้ว่า process เริ่มทำงานแล้ว
@@ -40,6 +39,8 @@ print("  [3/3] โหลด vectorstore (torch อาจช้า)...", end="", 
 from step3_vectorstore import create_vectorstore
 print(" ✓\n", flush=True)
 
+_im.packages_distributions = _orig_packages_distributions  # restore after heavy imports
+
 
 def main():
     """Rebuild vectorstore และแสดงคำแนะนำสำหรับ interactive testing"""
@@ -55,7 +56,6 @@ def main():
     print(f"  RAG Vectorstore Builder  |  method={args.method.upper()}  |  llm-context={args.llm_context}", flush=True)
     print("=" * 80 + "\n", flush=True)
 
-    import os
     chroma_path = os.getenv("CHROMA_DB_PATH", "./vectorstore/chroma_db")
     vector_store_exists = Path(chroma_path).exists()
 
@@ -74,6 +74,7 @@ def main():
         # Step 2
         print(f"[ Step 2 ] Chunking  method={args.method}  llm-context={args.llm_context}", flush=True)
 
+        chunks = []
         if args.method == "standard":
             from step2_text_splitter import split_documents
             chunks = split_documents(docs)

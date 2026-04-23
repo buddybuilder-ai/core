@@ -223,7 +223,9 @@ def add_context_to_chunk(
 
     except Exception as e:
         # \n เพื่อ break partial line ที่ caller print ไว้ด้วย end=""
-        print(f"\n  ⚠  LLM error: {e} → fallback keyword classify")
+        # จับ Exception กว้างเพราะ LLM client หลาย provider raise ต่าง type กัน
+        # (httpx, langchain, ollama) แต่ทุก path fallback อย่างชัดเจน ไม่ swallow
+        print(f"\n  ⚠  LLM error ({type(e).__name__}): {e} → fallback keyword classify")
         chunk.page_content = f"เอกสาร: {document_title}\n\n{chunk.page_content}"
         chunk.metadata["knowledge_type"] = _keyword_classify(chunk.page_content)
         chunk.metadata["has_llm_context"] = False

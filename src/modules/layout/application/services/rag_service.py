@@ -507,9 +507,19 @@ class FengShuiRAGService:
             if content and role in ("user", "assistant"):
                 messages.append({"role": role, "content": content})
 
-        # Current turn: RAG context + question
+        # Current turn: detected kua + RAG context + question
+        kua_num = FengShuiRAGService._extract_kua_from_history(conversation_history)
+        detected_kua = (
+            f"กัว {kua_num} (พบจากการสนทนาก่อนหน้า)"
+            if kua_num
+            else "[ไม่พบเลขกัวในประวัติ — ใช้หลักทั่วไป]"
+        )
         context_text = context if context else "[ไม่มีข้อมูลเพิ่มเติมจากฐานความรู้]"
-        user_content = f"[ข้อมูลอ้างอิง]\n{context_text}\n\n[คำถาม]\n{question}"
+        user_content = (
+            f"[เลขกัวที่ตรวจพบ: {detected_kua}]\n\n"
+            f"[ข้อมูลอ้างอิง]\n{context_text}\n\n"
+            f"[คำถาม]\n{question}"
+        )
         messages.append({"role": "user", "content": user_content})
 
         _rlog(f"  [RAG] Prompt: {len(messages)} messages ({len(conversation_history)} history + system + current)")
@@ -629,7 +639,7 @@ class FengShuiRAGService:
                         "model": model,
                         "messages": messages,
                         "temperature": settings.LLM_TEMPERATURE_RAG,
-                        "max_tokens": 1200,
+                        "max_tokens": settings.RAG_MAX_TOKENS,
                     },
                     timeout=60.0,
                 )
@@ -732,7 +742,7 @@ class FengShuiRAGService:
                         "model": model,
                         "messages": messages,
                         "temperature": settings.LLM_TEMPERATURE_RAG,
-                        "max_tokens": 1200,
+                        "max_tokens": settings.RAG_MAX_TOKENS,
                         "stream": True,
                     },
                 ) as response:
