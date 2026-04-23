@@ -150,7 +150,7 @@ class ConversationRAGChain:
         self.chain = (
             {
                 "context": lambda x: format_documents(
-                    self.retriever.invoke(x["question"])  # ดึง docs จาก vectorstore
+                    self.retriever.invoke(self._enrich_query(x["question"], x["chat_history"]))
                 ),
                 "chat_history": lambda x: format_chat_history(x["chat_history"]),
                 "detected_kua": lambda x: self._extract_kua_from_history(x["chat_history"]),
@@ -199,6 +199,14 @@ class ConversationRAGChain:
                 return True
 
         return False
+
+    def _enrich_query(self, question: str, chat_history: List[Tuple[str, str]]) -> str:
+        """Prepend kua number to retrieval query so vectorstore returns the correct
+        gua_directions_kuaX document instead of generic direction docs."""
+        kua_str = self._extract_kua_from_history(chat_history)
+        if "[ไม่พบ" in kua_str:
+            return question
+        return f"{kua_str} {question}"
 
     def _extract_kua_from_history(self, chat_history: List[Tuple[str, str]]) -> str:
         """สแกนหาเลขกัวล่าสุดจาก AI responses ใน chat history"""

@@ -584,8 +584,13 @@ class FengShuiRAGService:
         # --- Classify query type then retrieve filtered context ---
         knowledge_type = await self._classify_query(question)
         retrieval_query = self._enrich_retrieval_query(question, history)
+        # Only reuse prefetched docs (fetched without kua context) when the query
+        # was NOT enriched — otherwise the kua-specific enrichment would be silently ignored.
+        reuse_prefetched = retrieval_query == question
         context, source_docs = self._retrieve_context(
-            retrieval_query, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
+            retrieval_query,
+            prefetched_docs=prefetched_docs if reuse_prefetched else None,
+            knowledge_type=knowledge_type,
         )
 
         # --- Build prompt messages ---
@@ -704,8 +709,11 @@ class FengShuiRAGService:
 
         knowledge_type = await self._classify_query(question)
         retrieval_query = self._enrich_retrieval_query(question, history)
+        reuse_prefetched = retrieval_query == question
         context, source_docs = self._retrieve_context(
-            retrieval_query, prefetched_docs=prefetched_docs or None, knowledge_type=knowledge_type
+            retrieval_query,
+            prefetched_docs=prefetched_docs if reuse_prefetched else None,
+            knowledge_type=knowledge_type,
         )
         messages = self._build_messages(question_for_llm, context, history, mode)
 
