@@ -24,7 +24,6 @@ data/raw/  ──►  step1  ──►  step2*  ──►  step3  ──►  vec
 | 1 | `step1_data_loader.py` | โหลดไฟล์ดิบ → `List[Document]` |
 | 2 | `step2_text_splitter.py` | แบ่ง chunk แบบ standard (ไม่มี LLM) |
 | 2b | `step2b_contextual_chunking.py` | แบ่ง chunk + เติม context นำหน้า |
-| 2c | `step2c_hypothetical_questions.py` | แบ่ง chunk + prepend คำถามสมมติ (HyDE) |
 | 3 | `step3_vectorstore.py` | embed → บันทึกลง ChromaDB |
 | 4b | `step4b_rag_with_memory.py` | RAG chain พร้อม conversation memory (dev/test) |
 | — | `main.py` | entry point สำหรับ rebuild vectorstore |
@@ -58,14 +57,12 @@ LLM_PROVIDER, _, LLM_MODEL_NAME = _LLM_MODEL_RAW.partition("/")
 |--------|---------|-----------|
 | `TEMPERATURE` | `0.3` | ความ creative ของ LLM (0=ตอบตรง, 1=สร้างสรรค์) |
 | `CONTEXTUAL_TEMPERATURE` | `0.2` | Temperature สำหรับ step2b — ต่ำกว่าเพราะต้องการ summary แม่นยำ |
-| `QUESTION_GEN_TEMPERATURE` | `0.4` | Temperature สำหรับ step2c — ปานกลาง เพื่อให้คำถามหลากหลาย |
 | `RELEVANCE_THRESHOLD` | `0.35` | L2 distance สูงสุดที่ถือว่า "เกี่ยวข้อง" (0=identical, ~1.4=ไม่เกี่ยว) |
 | `TOP_K` | `5` | จำนวน chunks ที่ดึงต่อ query |
 | `SEARCH_TYPE` | `mmr` | วิธีค้นหา: `mmr` (หลากหลาย) หรือ `similarity` (แม่นยำ) |
 | `CHUNK_SIZE` | `1000` | ขนาด chunk (ตัวอักษร) |
 | `CHUNK_OVERLAP` | `200` | ส่วนทับซ้อนระหว่าง chunk เพื่อไม่ให้ขาดบริบท |
 | `MAX_HISTORY` | `10` | จำนวนรอบสนทนาสูงสุดที่เก็บใน memory |
-| `QUESTIONS_PER_CHUNK` | `3` | จำนวนคำถามสมมติต่อ chunk (step2c) |
 
 ### `print_config()`
 
@@ -354,72 +351,6 @@ python main.py --method contextual --llm-context
 
 ---
 
-## `step2c_hypothetical_questions.py` — Hypothetical Document Embeddings (HyDE)
-
-แนวคิด HyDE: Query ของ user มักมีรูปแบบเป็น "คำถาม"
-แต่ chunk ในฐานข้อมูลมีรูปแบบเป็น "เนื้อหา/คำตอบ"
-→ embedding ทั้งสองอยู่ใน vector space ที่ห่างกัน แม้จะพูดถึงเรื่องเดียวกัน
-
-วิธีแก้: แทนที่จะ embed เนื้อหาตรงๆ ให้สร้าง "คำถามสมมติ" ที่น่าจะ match กับ chunk นั้น แล้ว embed คำถามแทน
-
-ตัวอย่าง:
-- chunk: `"ห้ามวางเตียงให้หันหัวออกประตู เพราะพลังงานจะไหลออก"`
-- คำถามสมมติ: `"วางเตียงหันหัวออกประตูได้ไหม"`, `"ทิศเตียงกับประตูห้ามวางอย่างไร"`
-- เมื่อ user ถาม: `"วางเตียงตรงประตูดีไหม"` → embedding ใกล้กับคำถามสมมติมากกว่าเนื้อหาดิบ
-
-### `get_question_llm()`
-
-```python
-def get_question_llm():
-```
-
-สร้าง LLM สำหรับ generate คำถามสมมติ
-ใช้ `QUESTION_GEN_TEMPERATURE` (default 0.4) ปานกลาง — ต้องการความหลากหลายพอ แต่ยังต้องตรงประเด็น
-ปัจจุบันรองรับเฉพาะ `ollama` (step2c ออกแบบมาสำหรับ local LLM)
-
-### `generate_questions_from_chunk(chunk, num_questions)`
-
-```python
-def generate_questions_from_chunk(chunk: Document, num_questions: int = 3) -> List[str]:
-```
-
-ส่ง chunk ให้ LLM สร้างคำถาม `num_questions` ข้อ
-จำกัด input ที่ 800 ตัวอักษรเพื่อประหยัด token และให้คำถามไม่กว้างเกินไป
-
-**Post-processing:**
-```python
-questions = [q.lstrip('0123456789.- ') for q in questions]
-```
-ลบเลขข้อและ bullet ที่ LLM อาจใส่มาแม้จะสั่งห้ามแล้ว (เช่น `"1. คำถาม"` → `"คำถาม"`)
-
-ถ้า LLM ล้มเหลว → คืน `[]` (list ว่าง) ไม่ throw exception — caller จะ fallback เป็น chunk เดิม
-
-### `create_qa_chunks(documents, questions_per_chunk)`
-
-```python
-def create_qa_chunks(documents: List[Document], questions_per_chunk: int = QUESTIONS_PER_CHUNK) -> List[Document]:
-```
-
-Pipeline หลักของ step2c:
-1. แบ่ง documents → chunks ด้วย `RecursiveCharacterTextSplitter`
-2. วนลูปทุก chunk → เรียก `generate_questions_from_chunk()`
-3. ถ้าได้คำถาม → สร้าง chunk ใหม่รูปแบบ:
-
-```
-คำถามที่เกี่ยวข้อง:
-- คำถาม 1
-- คำถาม 2
-- คำถาม 3
-
-เนื้อหา:
-<เนื้อหาเดิม>
-```
-
-4. ถ้าไม่ได้คำถาม (LLM ล้มเหลว) → ใช้ chunk เดิมโดยไม่ transform
-5. บันทึก `metadata["has_questions"] = True/False` ไว้ตรวจสอบ
-
----
-
 ## `step3_vectorstore.py` — ChromaDB Vector Store
 
 ### `get_embeddings()`
@@ -671,9 +602,8 @@ python main.py --rebuild
 # เลือก method
 python main.py --rebuild --method standard       # เร็วสุด ไม่ transform
 python main.py --rebuild --method contextual     # เติม context (แนะนำ)
-python main.py --rebuild --method questions      # HyDE (ต้องมี Ollama)
 
-# contextual + LLM summary (ดีสุด แต่ต้องมี Ollama)
+# contextual + LLM summary (ดีสุด แต่ต้องมี LLM)
 python main.py --rebuild --method contextual --llm-context
 ```
 
@@ -773,7 +703,6 @@ step1_data_loader.py                                            │
    (เลือก 1 อย่าง)                                              │
    step2_text_splitter.py      ─── split_documents()            │
    step2b_contextual_chunking.py ─ split_documents_with_context()│
-   step2c_hypothetical_questions.py ─ create_qa_chunks()        │
           │                                                     │
           ▼                                                     │
 step3_vectorstore.py                                            │
