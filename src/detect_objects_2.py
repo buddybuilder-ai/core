@@ -82,7 +82,7 @@ yolo_model.set_classes(
         "bed",
         "bunk bed",
         "bed frame",
-        "sofa bed",
+        # "sofa bed",
         "nightstand",
         "dresser",
         # โซนนั่งเล่น (Living Zone)
@@ -94,13 +94,13 @@ yolo_model.set_classes(
         # โซนทำงาน & ออฟฟิศ (Working/Office Zone)
         "desk",
         "computer desk",
-        "folding desk",
+        # "folding desk",
         "chair",
         "office chair",
         "filing cabinet",
         # โซนทานอาหาร (Dining Zone)
         "dining table",
-        "compact dining",
+        # "compact dining",
         "dining chair",
         "sideboard",
         # โซนครัว (Kitchen Zone)
@@ -109,7 +109,7 @@ yolo_model.set_classes(
         "microwave stand",
         # เก็บของ (Storage)
         "wardrobe",
-        "compact wardrobe",
+        # "compact wardrobe",
         "bookshelf",
         "shelf",
         "shoe cabinet",
@@ -117,6 +117,8 @@ yolo_model.set_classes(
         # เครื่องตกแต่ง & ทั่วไป (Decor/General)
         "plant",
         "lamp",
+        "ceiling light", # เพิ่มคำนี้เข้าไป
+        "pendant lamp",  # หรือคำนี้สำหรับโคมไฟระย้า
         "rug",
         "door",
         "monitor",
@@ -134,6 +136,19 @@ def process_with_elevation(img_path: str, output_json: str, user_h: float, user_
     w_img, h_img = img_pil.size
 
     yolo_results = yolo_model(img_path)
+
+    # for i, result in enumerate(yolo_results):
+    #     # วาดกรอบและป้ายกำกับลงบนรูป
+    #     annotated_frame = result.plot() 
+        
+    #     # กำหนด Path สำหรับเซฟรูป (เซฟไว้ในโฟลเดอร์ assets)
+    #     debug_image_path = os.path.join(assets_dir, f"debug_detection_{i}.jpg")
+        
+    #     # แปลงจาก BGR (OpenCV) เป็น RGB แล้วบันทึก
+    #     Image.fromarray(annotated_frame[..., ::-1]).save(debug_image_path)
+        
+    #     print(f"📸 Debug image saved to: {debug_image_path}")
+
     with torch.no_grad():
         depth_map = zoe_model.infer_pil(img_pil)
 
