@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from PIL import Image
 from ultralytics import YOLOWorld
+import matplotlib.pyplot as plt
 
 # --- 1. CONFIGURATION & ARGUMENT HANDLING ---
 DEFAULT_HEIGHT = 2.5
@@ -137,20 +138,30 @@ def process_with_elevation(img_path: str, output_json: str, user_h: float, user_
 
     yolo_results = yolo_model(img_path)
 
-    # for i, result in enumerate(yolo_results):
-    #     # วาดกรอบและป้ายกำกับลงบนรูป
-    #     annotated_frame = result.plot() 
+    for i, result in enumerate(yolo_results):
+        # วาดกรอบและป้ายกำกับลงบนรูป
+        annotated_frame = result.plot() 
         
-    #     # กำหนด Path สำหรับเซฟรูป (เซฟไว้ในโฟลเดอร์ assets)
-    #     debug_image_path = os.path.join(assets_dir, f"debug_detection_{i}.jpg")
+        # กำหนด Path สำหรับเซฟรูป (เซฟไว้ในโฟลเดอร์ assets)
+        debug_image_path = os.path.join(assets_dir, f"debug_detection_{i}.jpg")
         
-    #     # แปลงจาก BGR (OpenCV) เป็น RGB แล้วบันทึก
-    #     Image.fromarray(annotated_frame[..., ::-1]).save(debug_image_path)
+        # แปลงจาก BGR (OpenCV) เป็น RGB แล้วบันทึก
+        Image.fromarray(annotated_frame[..., ::-1]).save(debug_image_path)
         
-    #     print(f"📸 Debug image saved to: {debug_image_path}")
+        print(f"📸 Debug image saved to: {debug_image_path}")
 
     with torch.no_grad():
         depth_map = zoe_model.infer_pil(img_pil)
+
+        plt.figure(figsize=(10, 10))
+        plt.imshow(depth_map, cmap='magma') # 'magma' หรือ 'plasma' จะเห็นความลึกชัดมาก
+        plt.axis('off')
+        
+        depth_debug_path = os.path.join(assets_dir, "debug_depth.jpg")
+        plt.savefig(depth_debug_path, bbox_inches='tight', pad_inches=0)
+        plt.close()
+        
+        print(f"📏 Depth map (Visual) saved to: {depth_debug_path}")
 
     # Get depth map dimensions
     h_depth, w_depth = depth_map.shape
@@ -200,6 +211,13 @@ def process_with_elevation(img_path: str, output_json: str, user_h: float, user_
                     h_m = limits["max_h"]
                 if limits["default_elevation"] == 0 and elevation_m < 0.3:
                     elevation_m = 0.0
+
+            # --- ตัวอย่างการ Log เพื่อดูการทำงานร่วมกัน ---
+            print(f"\n🔍 Analyzing: {label} ({conf:.2f} confidence)")
+            print(f"   [YOLO] Bounding Box (pixels): x1={x1:.0f}, y1={y1:.0f}, x2={x2:.0f}, y2={y2:.0f}")
+            print(f"   [ZOE]  Sampling Depth at Center [{scaled_cx}, {scaled_cy}]: {real_dist:.2f} meters")
+            print(f"   [CALC] Real-world Size: {w_m:.2f}m (W) x {h_m:.2f}m (H)")
+            print(f"   [CALC] Elevation from Floor: {elevation_m:.2f}m")
 
             objects_3d.append(
                 {
