@@ -2,10 +2,10 @@
 Step 4B: RAG Chain with Conversation Memory
 รองรับการจดจำบริบทการสนทนา
 """
+import re
 from typing import List, Tuple
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 # Import centralized config
@@ -117,35 +117,31 @@ class ConversationRAGChain:
         # สร้าง Prompt Template with chat history
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
-            ("human", """## ประวัติการสนทนาก่อนหน้า:
+            ("human", """## ประวัติการสนทนา:
 {chat_history}
 
-## ข้อมูลอ้างอิงจากฐานความรู้:
+## เลขกัวที่ตรวจพบ:
+{detected_kua}
+
+## ข้อมูลอ้างอิง:
 {context}
 
-## คำถามใหม่:
+## คำถาม:
 {question}
 
 ---
- สำคัญ: ตอบเป็นภาษาไทยเท่านั้น ห้ามใช้ตัวอักษรจีนหรือ Pinyin แม้แต่ตัวเดียว
-
-โปรดตอบคำถามโดย:
-1. อ่านข้อมูลอ้างอิงจากทุกภาษา (ไทย/อังกฤษ/จีน)
-2. เข้าใจและสรุปใจความสำคัญ
-3. ตอบเป็นภาษาไทยทั้งหมด 100%
-4. ห้ามคัดลอกตัวอักษรจีนหรืออังกฤษจาก context
-5. สานต่อบทสนทนาอย่างเป็นธรรมชาติ
-
-ตอบเป็นภาษาไทยเท่านั้นครับ""")
+ถ้าพบเลขกัวในส่วน "เลขกัวที่ตรวจพบ" ให้ใช้เป็น ref ตอบคำถามนี้ด้วย
+อ่านข้อมูลอ้างอิงจากทุกภาษา แปลงเป็นคำตอบภาษาไทยล้วน ห้ามคัดลอกตัวอักษรจีนหรืออังกฤษ สานต่อบทสนทนาอย่างเป็นธรรมชาติ""")
         ])
 
         # สร้าง chain
         self.chain = (
             {
                 "context": lambda x: format_documents(
-                    self.retriever.invoke(x["question"])
+                    self.retriever.invoke(self._enrich_query(x["question"], x["chat_history"]))
                 ),
                 "chat_history": lambda x: format_chat_history(x["chat_history"]),
+                "detected_kua": lambda x: self._extract_kua_from_history(x["chat_history"]),
                 "question": lambda x: x["question"]
             }
             | self.prompt
@@ -191,6 +187,30 @@ class ConversationRAGChain:
                 return True
 
         return False
+
+    def _enrich_query(self, question: str, chat_history: List[Tuple[str, str]]) -> str:
+        """Prepend kua number to retrieval query so vectorstore returns the correct
+        gua_directions_kuaX document instead of generic direction docs."""
+        kua_str = self._extract_kua_from_history(chat_history)
+        if "[ไม่พบ" in kua_str:
+            return question
+        return f"{kua_str} {question}"
+
+    def _extract_kua_from_history(self, chat_history: List[Tuple[str, str]]) -> str:
+        """สแกนหาเลขกัวล่าสุดจาก AI responses ใน chat history"""
+        patterns = [
+            r"กัว\s+(\d)",
+            r"เลขกัว\s*[=:]*\s*(\d)",
+            r"ได้กัว\s+(\d)",
+            r"กัว\s*=\s*(\d)",
+            r"กัว\s*(\d)\s*(?:ของคุณ|ครับ|นะครับ|ตะวันออก|ตะวันตก)",
+        ]
+        for _, ai_reply in reversed(chat_history):
+            for pattern in patterns:
+                match = re.search(pattern, ai_reply)
+                if match:
+                    return f"กัว {match.group(1)} (พบจากการสนทนาก่อนหน้า)"
+        return "[ไม่พบเลขกัวในประวัติ — ใช้หลักทั่วไป]"
 
     def _has_domain_keywords(self, question: str, check_history: bool = True) -> bool:
         """
@@ -271,8 +291,8 @@ class ConversationRAGChain:
             return is_relevant
 
         except Exception as e:
-            print(f"    Relevance check failed: {e}")
-            return True  # ถ้า error ให้ผ่านไปก่อน
+            print(f"    Relevance check failed ({type(e).__name__}): {e}")
+            return False  # fail closed — ถ้า vectorstore มีปัญหา อย่าส่งต่อไปให้ LLM
 
     def invoke(self, question: str) -> str:
         """

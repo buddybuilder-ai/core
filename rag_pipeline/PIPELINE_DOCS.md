@@ -24,7 +24,6 @@ data/raw/  ──►  step1  ──►  step2*  ──►  step3  ──►  vec
 | 1 | `step1_data_loader.py` | โหลดไฟล์ดิบ → `List[Document]` |
 | 2 | `step2_text_splitter.py` | แบ่ง chunk แบบ standard (ไม่มี LLM) |
 | 2b | `step2b_contextual_chunking.py` | แบ่ง chunk + เติม context นำหน้า |
-| 2c | `step2c_hypothetical_questions.py` | แบ่ง chunk + prepend คำถามสมมติ (HyDE) |
 | 3 | `step3_vectorstore.py` | embed → บันทึกลง ChromaDB |
 | 4b | `step4b_rag_with_memory.py` | RAG chain พร้อม conversation memory (dev/test) |
 | — | `main.py` | entry point สำหรับ rebuild vectorstore |
@@ -58,14 +57,12 @@ LLM_PROVIDER, _, LLM_MODEL_NAME = _LLM_MODEL_RAW.partition("/")
 |--------|---------|-----------|
 | `TEMPERATURE` | `0.3` | ความ creative ของ LLM (0=ตอบตรง, 1=สร้างสรรค์) |
 | `CONTEXTUAL_TEMPERATURE` | `0.2` | Temperature สำหรับ step2b — ต่ำกว่าเพราะต้องการ summary แม่นยำ |
-| `QUESTION_GEN_TEMPERATURE` | `0.4` | Temperature สำหรับ step2c — ปานกลาง เพื่อให้คำถามหลากหลาย |
 | `RELEVANCE_THRESHOLD` | `0.35` | L2 distance สูงสุดที่ถือว่า "เกี่ยวข้อง" (0=identical, ~1.4=ไม่เกี่ยว) |
 | `TOP_K` | `5` | จำนวน chunks ที่ดึงต่อ query |
 | `SEARCH_TYPE` | `mmr` | วิธีค้นหา: `mmr` (หลากหลาย) หรือ `similarity` (แม่นยำ) |
 | `CHUNK_SIZE` | `1000` | ขนาด chunk (ตัวอักษร) |
 | `CHUNK_OVERLAP` | `200` | ส่วนทับซ้อนระหว่าง chunk เพื่อไม่ให้ขาดบริบท |
 | `MAX_HISTORY` | `10` | จำนวนรอบสนทนาสูงสุดที่เก็บใน memory |
-| `QUESTIONS_PER_CHUNK` | `3` | จำนวนคำถามสมมติต่อ chunk (step2c) |
 
 ### `print_config()`
 
@@ -354,72 +351,6 @@ python main.py --method contextual --llm-context
 
 ---
 
-## `step2c_hypothetical_questions.py` — Hypothetical Document Embeddings (HyDE)
-
-แนวคิด HyDE: Query ของ user มักมีรูปแบบเป็น "คำถาม"
-แต่ chunk ในฐานข้อมูลมีรูปแบบเป็น "เนื้อหา/คำตอบ"
-→ embedding ทั้งสองอยู่ใน vector space ที่ห่างกัน แม้จะพูดถึงเรื่องเดียวกัน
-
-วิธีแก้: แทนที่จะ embed เนื้อหาตรงๆ ให้สร้าง "คำถามสมมติ" ที่น่าจะ match กับ chunk นั้น แล้ว embed คำถามแทน
-
-ตัวอย่าง:
-- chunk: `"ห้ามวางเตียงให้หันหัวออกประตู เพราะพลังงานจะไหลออก"`
-- คำถามสมมติ: `"วางเตียงหันหัวออกประตูได้ไหม"`, `"ทิศเตียงกับประตูห้ามวางอย่างไร"`
-- เมื่อ user ถาม: `"วางเตียงตรงประตูดีไหม"` → embedding ใกล้กับคำถามสมมติมากกว่าเนื้อหาดิบ
-
-### `get_question_llm()`
-
-```python
-def get_question_llm():
-```
-
-สร้าง LLM สำหรับ generate คำถามสมมติ
-ใช้ `QUESTION_GEN_TEMPERATURE` (default 0.4) ปานกลาง — ต้องการความหลากหลายพอ แต่ยังต้องตรงประเด็น
-ปัจจุบันรองรับเฉพาะ `ollama` (step2c ออกแบบมาสำหรับ local LLM)
-
-### `generate_questions_from_chunk(chunk, num_questions)`
-
-```python
-def generate_questions_from_chunk(chunk: Document, num_questions: int = 3) -> List[str]:
-```
-
-ส่ง chunk ให้ LLM สร้างคำถาม `num_questions` ข้อ
-จำกัด input ที่ 800 ตัวอักษรเพื่อประหยัด token และให้คำถามไม่กว้างเกินไป
-
-**Post-processing:**
-```python
-questions = [q.lstrip('0123456789.- ') for q in questions]
-```
-ลบเลขข้อและ bullet ที่ LLM อาจใส่มาแม้จะสั่งห้ามแล้ว (เช่น `"1. คำถาม"` → `"คำถาม"`)
-
-ถ้า LLM ล้มเหลว → คืน `[]` (list ว่าง) ไม่ throw exception — caller จะ fallback เป็น chunk เดิม
-
-### `create_qa_chunks(documents, questions_per_chunk)`
-
-```python
-def create_qa_chunks(documents: List[Document], questions_per_chunk: int = QUESTIONS_PER_CHUNK) -> List[Document]:
-```
-
-Pipeline หลักของ step2c:
-1. แบ่ง documents → chunks ด้วย `RecursiveCharacterTextSplitter`
-2. วนลูปทุก chunk → เรียก `generate_questions_from_chunk()`
-3. ถ้าได้คำถาม → สร้าง chunk ใหม่รูปแบบ:
-
-```
-คำถามที่เกี่ยวข้อง:
-- คำถาม 1
-- คำถาม 2
-- คำถาม 3
-
-เนื้อหา:
-<เนื้อหาเดิม>
-```
-
-4. ถ้าไม่ได้คำถาม (LLM ล้มเหลว) → ใช้ chunk เดิมโดยไม่ transform
-5. บันทึก `metadata["has_questions"] = True/False` ไว้ตรวจสอบ
-
----
-
 ## `step3_vectorstore.py` — ChromaDB Vector Store
 
 ### `get_embeddings()`
@@ -671,9 +602,8 @@ python main.py --rebuild
 # เลือก method
 python main.py --rebuild --method standard       # เร็วสุด ไม่ transform
 python main.py --rebuild --method contextual     # เติม context (แนะนำ)
-python main.py --rebuild --method questions      # HyDE (ต้องมี Ollama)
 
-# contextual + LLM summary (ดีสุด แต่ต้องมี Ollama)
+# contextual + LLM summary (ดีสุด แต่ต้องมี LLM)
 python main.py --rebuild --method contextual --llm-context
 ```
 
@@ -755,6 +685,90 @@ Interactive tool หลัก — รันด้วย `python check_vectordb.p
 
 ---
 
+## `rag_service.py` — FengShuiRAGService (Production)
+
+> ไฟล์นี้คือ production path ของ RAG — stateless เหมาะกับ FastAPI
+> อยู่ที่ `core/src/modules/layout/application/services/rag_service.py`
+
+### Relevance Pipeline (2 Layer)
+
+```
+User Prompt
+    │
+    ▼
+Layer 1: _has_domain_keywords()          ← keyword + fuzzy + history match
+    │  fail → OUT_OF_SCOPE_MSG
+    ▼
+Layer 2: similarity_search_with_score()  ← ไม่มี metadata filter (gate เท่านั้น)
+    │  L2 > threshold → OUT_OF_SCOPE_MSG
+    ▼
+_classify_query()          ← LLM classify: feng_shui / interior_design / both
+    │
+    ▼
+_enrich_retrieval_query()  ← inject Kua number จาก history ถ้ามี
+    │
+    ▼
+_retrieve_context()        ← ดึง docs พร้อม metadata filter ตาม knowledge_type
+    │
+    ▼
+_build_messages() → LLM call → answer
+```
+
+### Metadata Filter — จุดสำคัญ
+
+**Layer 2** (`_check_relevance`) ค้นหา **ไม่มี filter** — ใช้เพียงตรวจ domain relevance
+**Actual retrieval** (`_retrieve_context`) apply filter ตาม `knowledge_type`:
+
+```python
+meta_filter = (
+    {"knowledge_type": {"$in": [knowledge_type, "both"]}}
+    if knowledge_type != "both"
+    else None
+)
+```
+
+| `knowledge_type` | filter applied |
+|------------------|----------------|
+| `feng_shui` | เฉพาะ docs ที่มี `knowledge_type = feng_shui` หรือ `both` |
+| `interior_design` | เฉพาะ docs ที่มี `knowledge_type = interior_design` หรือ `both` |
+| `both` | ไม่มี filter — ดึงทุก docs |
+
+**Fallback:** ถ้า filter คืน 0 docs → retry โดยไม่มี filter อัตโนมัติ (line 411-416)
+
+### `_classify_query()` — Query Type Classifier
+
+ส่ง question ให้ LLM ตัดสินใจว่าเป็น `feng_shui` / `interior_design` / `both`
+
+**Fallback:** HTTP error หรือ LLM ตาย → คืน `"both"` (ไม่ filter = ปลอดภัยกว่า `"feng_shui"`)
+
+> แก้ไข 2026-04-24: fallback เดิมคืน `"feng_shui"` ทำให้ filter แคบเกินไปเมื่อ LLM ตาย
+> เปลี่ยนเป็น `"both"` แล้ว
+
+### Kua Query Enrichment
+
+ถ้า history มีเลขกัวอยู่แล้วและ query ไม่ได้พูดถึง:
+```
+"ทิศที่เสริมเรื่องความรัก"  →  "กัว 4 ทิศที่เสริมเรื่องความรัก"
+```
+ทำให้ BGE-M3 ดึง gua-specific docs แทน generic direction docs
+
+**ถ้า query ถูก enrich** → `reuse_prefetched = False` → ทำ filtered search ใหม่เสมอ
+**ถ้าไม่ enrich + `knowledge_type = "both"`** → ใช้ prefetched docs จาก Layer 2 ต่อได้
+
+### เช็ค ChromaDB มี `knowledge_type` field ไหม
+
+ถ้า documents ถูก ingest โดยไม่มี field นี้ → filter ไม่มีผล → fallback ทุกครั้ง:
+
+```python
+vs = get_cached_vectorstore(...)
+sample = vs.get(limit=3, include=["metadatas"])
+print(sample["metadatas"])
+# ต้องเห็น: [{"knowledge_type": "feng_shui", ...}, ...]
+# ถ้าไม่มี knowledge_type → ต้อง re-ingest ด้วย step2b
+```
+
+---
+
 ## การไหลของข้อมูลระหว่างไฟล์
 
 ```
@@ -773,7 +787,6 @@ step1_data_loader.py                                            │
    (เลือก 1 อย่าง)                                              │
    step2_text_splitter.py      ─── split_documents()            │
    step2b_contextual_chunking.py ─ split_documents_with_context()│
-   step2c_hypothetical_questions.py ─ create_qa_chunks()        │
           │                                                     │
           ▼                                                     │
 step3_vectorstore.py                                            │
