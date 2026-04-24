@@ -74,7 +74,7 @@ switch ($Command.ToLower()) {
     }
     "run" {
         Write-Host "Starting development server..." -ForegroundColor Cyan
-        uvicorn src.main:app --reload --host 0.0.0.0 --port 8002
+        uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
     }
     "docker-build" {
         Write-Host "Building Docker image..." -ForegroundColor Cyan

@@ -1,17 +1,10 @@
 """Chat API endpoints for RAG conversational AI."""
 
-import json
-import os
-import subprocess
-import uuid
-import asyncio
-import sys
 from collections.abc import AsyncGenerator
-from typing import Any, cast ,Dict
-import socket
+from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, Path
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.config.settings import get_settings
@@ -24,11 +17,12 @@ from src.schemas.chat_stream import ChatStreamRequest
 router = APIRouter(prefix="/chat", tags=["Chat"])
 settings = get_settings()
 
-upload_sessions: Dict[str, Any] = {}
-
 
 async def get_chat_service() -> Any:
-    """Dependency injection stub for chat service."""
+    """Dependency injection stub for chat service.
+
+    Will be replaced with actual service injection later.
+    """
     return None
 
 
@@ -37,7 +31,15 @@ async def send_message(
     request: ChatRequest,
     service: Any = Depends(get_chat_service),
 ) -> ChatResponse:
-    """Send a message to the chat AI using LLM."""
+    """Send a message to the chat AI using LLM.
+
+    Args:
+        request: Chat request with text and mode.
+        service: Injected chat service (stub for now).
+
+    Returns:
+        ChatResponse with AI answer and source documents.
+    """
     try:
         from src.modules.layout.application.services.rag_service import FengShuiRAGService
         from src.schemas.chat import SourceDocument
@@ -68,7 +70,22 @@ async def send_message(
 
 @router.post("/stream")
 async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
-    """Route user message and stream SSE events based on classified intent."""
+    """Route user message and stream SSE events based on classified intent.
+
+    The router agent classifies the message into one of:
+    - new_layout: triggers the full 5-step pipeline
+    - modify:     triggers ModifierAgent for incremental layout changes
+    - explain:    runs ExplainerStep on the current layout
+    - question:   answers directly via LLM (no layout generation)
+
+    All paths stream SSE events in the same format as /layout/generate/stream.
+
+    Args:
+        request: ChatStreamRequest with message, layout context, and room spec.
+
+    Returns:
+        SSE stream of events.
+    """
 
     async def event_generator() -> AsyncGenerator[str, None]:
         from src.modules.layout.application.agent.personality import detect_mode_switch, detect_mood
@@ -80,7 +97,10 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
         from src.modules.layout.application.services.clarification_gate import get_pending_questions
         from src.modules.layout.infrastructure.llm.router_agent import RouterAgent
 
+        # Detect user mood from the message (keyword-based, no LLM call)
         mood = detect_mood(request.message)
+
+        # --- 1. Classify intent ---
         router_agent = RouterAgent()
         result = await router_agent.classify(
             message=request.message,
@@ -114,10 +134,6 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             return
 
         # --- 1b. Clarification gate (stateless — skipped when answers present) ---
-        from src.modules.layout.application.services.clarification_gate import (
-            get_pending_questions,
-        )
-
         pending_questions = get_pending_questions(
             intent=result.intent,
             clarification_answers=request.clarification_answers,
@@ -258,8 +274,14 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
                     data={"error": "room_spec is required for new_layout intent"},
                 ).to_sse()
                 return
+            room_spec = _apply_clarification_answers(
+                dict(request.room_spec), request.clarification_answers
+            )
+            prefs = dict(room_spec.get("user_preferences") or {})
+            prefs["user_message"] = request.message
+            room_spec["user_preferences"] = prefs
             orchestrator = PipelineOrchestrator(PipelineConfig())
-            async for event in orchestrator.run(request.room_spec, mode=request.mode):
+            async for event in orchestrator.run(room_spec, mode=request.mode):
                 yield event.to_sse()
 
         elif result.intent == "modify":
@@ -291,8 +313,6 @@ async def chat_stream(request: ChatStreamRequest) -> StreamingResponse:
             rearrange_prefs = dict(rearrange_room_spec.get("user_preferences") or {})
             rearrange_prefs["user_message"] = request.message
             rearrange_room_spec["user_preferences"] = rearrange_prefs
-
-            from src.modules.layout.application.modifier.rearrange_agent import RearrangeAgent
             agent = RearrangeAgent()
             async for event in agent.apply(
                 current_layout=request.current_layout,
@@ -410,226 +430,18 @@ async def _answer_question(
 def _get_default_system_prompt(mode: str) -> str:
     """Get default system prompt based on chat mode."""
     prompts = {
-        "mentor": ("You are a professional feng shui master and interior designer. Thai tone."),
-        "buddy": ("You are a friendly interior design assistant. Thai tone."),
-        "fun": ("You are an energetic, fun design buddy. Thai tone."),
+        "mentor": (
+            "You are a professional feng shui master and interior designer. "
+            "Provide detailed, educational explanations with formal tone in Thai. "
+            "Be knowledgeable and thorough."
+        ),
+        "buddy": (
+            "You are a friendly interior design assistant. "
+            "Use casual, warm tone in Thai. Be conversational and approachable."
+        ),
+        "fun": (
+            "You are an energetic, fun design buddy. "
+            "Use playful, exciting tone in Thai. Be entertaining while informative."
+        ),
     }
     return prompts.get(mode, prompts["buddy"])
-
-
-@router.post("/process-single-image")
-async def process_single_image(
-    image: UploadFile = File(...),
-    target_height: str | None = Form(None),
-    height: str | None = Form(None),
-    roomHeight: str | None = Form(None),
-    userId: str | None = Form(None)
-) -> dict[str, Any]:
-    """API for processing a single image with AI to detect 3D objects."""
-    final_height = target_height or height or roomHeight or "2.5"
-
-    # 1. ระบุพาธ Root ของโปรเจกต์
-    base_dir = os.path.abspath(os.getcwd())
-    assets_dir = os.path.join(base_dir, "assets")
-    os.makedirs(assets_dir, exist_ok=True)
-
-    # 2. บันทึกรูปภาพที่อัปโหลดมาลงใน assets
-    file_id = uuid.uuid4().hex
-    temp_image_path = os.path.join(assets_dir, f"{file_id}.jpg")
-    with open(temp_image_path, "wb") as buffer:
-        buffer.write(await image.read())
-
-    # 3. สั่งรัน AI Script (detect_objects_2.py)
-    try:
-        import sys
-        print(f"🚀 AI Starting: height={final_height}m, image={temp_image_path}")
-        script_path = os.path.join(base_dir, "src", "detect_objects_2.py")
-        cmd = [sys.executable, script_path, str(final_height), temp_image_path]
-        if userId:
-            cmd.append(userId)
-
-        subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8"
-        )
-        # 4. อ่านไฟล์ JSON ที่ AI สร้างขึ้นใน assets
-        json_path = os.path.join(assets_dir, "my_room_2_data.json")
-        if os.path.exists(json_path):
-            with open(json_path, encoding="utf-8") as f:
-                return cast(dict[str, Any], json.load(f))
-
-        return {"status": "error", "message": "AI completed but JSON output was not found"}
-
-    except subprocess.CalledProcessError as e:
-        print(f"❌ AI Script Error (Stderr): {e.stderr}")
-        return {"status": "error", "message": f"AI Error: {e.stderr}"}
-    except Exception as e:
-        print(f"❌ Server Exception: {str(e)}")
-        return {"status": "error", "message": str(e)}
-    finally:
-        # 5. ลบไฟล์รูปภาพทิ้งเพื่อไม่ให้เปลืองพื้นที่
-        if os.path.exists(temp_image_path):
-            try:
-                os.remove(temp_image_path)
-            except Exception as cleanup_error:
-                print(f"⚠️ Failed to clean up temporary image: {cleanup_error}")
-
-
-@router.get("/get-ip")
-async def get_ip():
-    """
-    ดึง Local IP Address ของเครื่องคอมพิวเตอร์ (เช่น 192.168.1.XX)
-    เพื่อให้มือถือในวง Wi-Fi เดียวกันสามารถเชื่อมต่อได้
-    """
-    try:
-        # สร้าง socket เพื่อเชื่อมต่อออกไปข้างนอกชั่วคราว (ไม่ได้ส่งข้อมูลจริง)
-        # เพื่อดูว่าเครื่องเราใช้ IP ไหนในการออกสู่ Network
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip_address = s.getsockname()[0]
-        s.close()
-    except Exception:
-        # ถ้าดึงไม่ได้จริงๆ ให้ถอยกลับไปใช้ localhost
-        ip_address = "127.0.0.1"
-    
-    return {"ipAddress": ip_address}
-
-
-@router.get("/check-upload-status")
-async def check_upload_status(sessionId: str = Query(...)):
-    """
-    Endpoint สำหรับให้ Frontend (PC) คอยเช็คสถานะการอัปโหลดและประมวลผลจากมือถือ
-    """
-    # 1. ถ้ายังไม่มี sessionId นี้ในระบบ (มือถือยังไม่ได้เริ่มส่งอะไรมา)
-    if sessionId not in upload_sessions:
-        return {
-            "status": "pending", 
-            "message": "Waiting for mobile connection...",
-            "isProcessing": False
-        }
-    
-    # 2. ดึงข้อมูล Session ปัจจุบัน
-    session_data = upload_sessions.get(sessionId)
-    status = session_data.get("status")
-
-    # 3. จัดการสถานะการตอบกลับ
-    if status == "processing":
-        return {
-            "status": "processing",
-            "isProcessing": True,
-            "message": "AI is analyzing your room..."
-        }
-    
-    elif status == "success":
-        return {
-            "status": "success",
-            "isProcessing": False,
-            "objects": session_data.get("objects", []),
-            "room_summary": session_data.get("room_summary", {}),
-            "message": "AI processing completed!"
-        }
-    
-    elif status == "error":
-        return {
-            "status": "error",
-            "isProcessing": False,
-            "message": session_data.get("message", "An error occurred during processing")
-        }
-
-    return session_data
-
-
-
-
-@router.post("/mobile-upload/{sessionId}")
-async def mobile_upload(
-    sessionId: str, 
-    image: UploadFile = File(...), 
-    target_height: str | None = Form(None),
-    height: str | None = Form(None),
-    roomHeight: str | None = Form(None),
-    userId: str | None = Form(None)
-) -> dict[str, Any]:
-    """รับรูปจากมือถือ รัน AI และเก็บผลลัพธ์ลง session"""
-
-    final_height = target_height or height or roomHeight or "2.5"
-
-    upload_sessions[sessionId] = {"status": "processing"}
-    
-    # --- 1. จัดการเรื่อง Path (แก้ไขจุดที่พัง) ---
-    # current_dir คือ core/src/api/v1/chat/
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # root_dir คือ core/ (ถอยออกมา 4 ชั้น)
-    root_dir = os.path.abspath(os.path.join(current_dir, "../../../../")) 
-    
-    # assets_dir คือ core/assets/ (สำหรับเก็บไฟล์)
-    assets_dir = os.path.join(root_dir, "assets")
-    os.makedirs(assets_dir, exist_ok=True)
-
-    # script_path คือ core/src/detect_objects_2.py (ชี้ไปที่ตัวสคริปต์)
-    # **ตรวจสอบอีกครั้ง: ถ้าไฟล์ AI อยู่ใน src/ ให้ใช้ path นี้**
-    script_path = os.path.join(root_dir, "src", "detect_objects_2.py")
-
-    # 2. บันทึกรูปภาพ
-    file_id = f"mobile_{sessionId}"
-    temp_image_path = os.path.join(assets_dir, f"{file_id}.jpg")
-    
-    with open(temp_image_path, "wb") as buffer:
-        buffer.write(await image.read())
-
-    # ตั้งสถานะสำหรับ Polling
-    upload_sessions[sessionId] = {"status": "processing"}
-
-    try:
-        # 3. รัน AI Script
-        print(f"🚀 Running AI: {script_path}")
-        print(f"📸 Image: {temp_image_path}")
-
-        cmd = [sys.executable, script_path, str(final_height), temp_image_path]
-        if userId:
-            cmd.append(userId)
-
-        result = subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8"
-        )
-
-        # 4. อ่านไฟล์ JSON ที่ AI สร้าง (อ้างอิงจาก assets_dir)
-        json_path = os.path.join(assets_dir, "my_room_2_data.json")
-        
-        if os.path.exists(json_path):
-            with open(json_path, encoding="utf-8") as f:
-                ai_data = json.load(f)
-                
-                upload_sessions[sessionId] = {
-                    "status": "success",
-                    "objects": ai_data.get("objects", []),
-                    "room_summary": ai_data.get("room_summary", {})
-                }
-                return {"status": "success", "message": "Processed successfully"}
-        
-        raise Exception(f"AI JSON not found at: {json_path}")
-
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr if e.stderr else e.stdout
-        print(f"❌ AI Error: {error_msg}")
-        upload_sessions[sessionId] = {"status": "error", "message": error_msg}
-        return {"status": "error", "message": error_msg}
-    except Exception as e:
-        print(f"❌ Exception: {str(e)}")
-        upload_sessions[sessionId] = {"status": "error", "message": str(e)}
-        return {"status": "error", "message": str(e)}
-    finally:
-        # ลบไฟล์รูปชั่วคราว
-        if os.path.exists(temp_image_path):
-            try:
-                os.remove(temp_image_path)
-            except:
-                pass
