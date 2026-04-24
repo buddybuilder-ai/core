@@ -75,17 +75,13 @@ Always prioritize:
 
 Respond in a structured manner and explain your Feng Shui reasoning for each placement decision."""
 
-LAYOUT_PLANNING_PROMPT = """Based on the room analysis, select and prioritise furniture for placement.
+LAYOUT_PLANNING_PROMPT = """Based on the room analysis, place furniture following Feng Shui principles.
 
-## YOUR TASK (SIMPLIFIED)
-You only need to decide:
-1. Which furniture to place (use ALL items from the Available Furniture list)
-2. The placement priority order (1 = most important, placed first)
-3. The furniture_type category for each item
-
-The system will automatically determine wall placement, alignment, and facing
-based on feng shui rules. You do NOT need to specify target_wall, alignment,
-offset_from_wall, or facing — those will be computed by code.
+## YOUR TASK
+For each furniture item you must decide:
+1. The placement priority order (1 = most important, placed first)
+2. The furniture_type category
+3. **target_wall** — choose ONE wall from the "valid_walls" list in the Wall Constraints section below
 
 ## Placement Schema
 Each item must use this JSON structure:
@@ -94,9 +90,17 @@ Each item must use this JSON structure:
   "furniture_id": "<COPY EXACTLY from Available Furniture list>",
   "furniture_type": "<category: bed|sofa_bed|desk|sofa|wardrobe|compact_wardrobe|chair|nightstand|bookshelf|tv_stand|mirror|plant|coffee_table|area_rug|shoe_cabinet|coat_rack|room_divider|...>",
   "size": {{"w": <width_meters>, "l": <depth_meters>, "h": <height_meters>}},
-  "priority": <int_1_is_first>
+  "priority": <int_1_is_first>,
+  "target_wall": "<wall from valid_walls list: north|south|east|west|center>"
 }}
 ```
+
+## Wall Selection Rules
+- You MUST choose `target_wall` from the `valid_walls` list for that item
+- Prefer the `preferred` wall — it is the Kua/command-position recommendation
+- Avoid the `preferred` wall only if you have a strong aesthetic or chi-flow reason
+- Never choose a wall not in `valid_walls` — it will be rejected and the preferred will be used instead
+- Aim for balance: distribute furniture across different walls when possible
 
 ## Priority Guidelines
 - Bedroom: bed (1) → nightstand (2) → wardrobe (3) → desk (4) → others
@@ -108,11 +112,11 @@ Each item must use this JSON structure:
 ```json
 {{
   "placements": [
-    {{"furniture_id": "bed_01", "furniture_type": "bed", "size": {{"w": 2.0, "l": 1.9, "h": 0.5}}, "priority": 1}},
-    {{"furniture_id": "wardrobe_01", "furniture_type": "wardrobe", "size": {{"w": 1.2, "l": 0.6, "h": 2.0}}, "priority": 2}},
-    {{"furniture_id": "desk_01", "furniture_type": "desk", "size": {{"w": 1.2, "l": 0.6, "h": 0.75}}, "priority": 3}}
+    {{"furniture_id": "bed_01", "furniture_type": "bed", "size": {{"w": 2.0, "l": 1.9, "h": 0.5}}, "priority": 1, "target_wall": "north"}},
+    {{"furniture_id": "wardrobe_01", "furniture_type": "wardrobe", "size": {{"w": 1.2, "l": 0.6, "h": 2.0}}, "priority": 2, "target_wall": "east"}},
+    {{"furniture_id": "desk_01", "furniture_type": "desk", "size": {{"w": 1.2, "l": 0.6, "h": 0.75}}, "priority": 3, "target_wall": "west"}}
   ],
-  "chi_flow_notes": "Bed first for command position, wardrobe and desk on remaining walls.",
+  "chi_flow_notes": "Bed on north command wall (Kua), wardrobe east, desk west for good light.",
   "warnings": []
 }}
 ```
@@ -121,12 +125,12 @@ Each item must use this JSON structure:
 ```json
 {{
   "placements": [
-    {{"furniture_id": "sofa_bed_001", "furniture_type": "sofa_bed", "size": {{"w": 1.9, "l": 0.95, "h": 0.85}}, "priority": 1}},
-    {{"furniture_id": "compact_wardrobe_001", "furniture_type": "compact_wardrobe", "size": {{"w": 1.0, "l": 0.55, "h": 2.0}}, "priority": 2}},
-    {{"furniture_id": "folding_desk_001", "furniture_type": "folding_desk", "size": {{"w": 1.0, "l": 0.5, "h": 0.75}}, "priority": 3}},
-    {{"furniture_id": "room_divider_001", "furniture_type": "room_divider", "size": {{"w": 1.5, "l": 0.05, "h": 1.7}}, "priority": 4}}
+    {{"furniture_id": "sofa_bed_001", "furniture_type": "sofa_bed", "size": {{"w": 1.9, "l": 0.95, "h": 0.85}}, "priority": 1, "target_wall": "north"}},
+    {{"furniture_id": "compact_wardrobe_001", "furniture_type": "compact_wardrobe", "size": {{"w": 1.0, "l": 0.55, "h": 2.0}}, "priority": 2, "target_wall": "east"}},
+    {{"furniture_id": "folding_desk_001", "furniture_type": "folding_desk", "size": {{"w": 1.0, "l": 0.5, "h": 0.75}}, "priority": 3, "target_wall": "west"}},
+    {{"furniture_id": "room_divider_001", "furniture_type": "room_divider", "size": {{"w": 1.5, "l": 0.05, "h": 1.7}}, "priority": 4, "target_wall": "center"}}
   ],
-  "chi_flow_notes": "Sofa-bed as primary piece, wardrobe adjacent, desk on side wall.",
+  "chi_flow_notes": "Sofa-bed command position north, storage east, desk west for natural light.",
   "warnings": []
 }}
 ```
@@ -141,6 +145,8 @@ Room Information:
 Available Furniture:
 {furniture_list}
 
+{valid_walls_section}
+
 {user_preferences_section}
 
 ## CRITICAL: furniture_id Rules
@@ -148,7 +154,7 @@ Available Furniture:
 - Do NOT shorten, rename, or invent IDs
 - You MUST include ALL items from the Available Furniture list
 
-Output ONLY valid JSON with the schema above — no wall assignments needed.
+Output ONLY valid JSON with the schema above.
 
 {extra_context}"""
 
@@ -226,23 +232,50 @@ _ROT_TO_DIR = {0: "south", 90: "east", 180: "north", 270: "west"}
 _DIR_TH = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก"}
 _BED_TYPES = {"bed", "sofa_bed", "sofa-bed"}
 
+# Scene-wall → compass when room direction = north (identity).
+# When direction ≠ north we rotate the mapping so the label matches what the
+# user sees in the 3D scene (same logic as frontend rotateDir()).
+_DIRECTION_CYCLE = ["north", "east", "south", "west"]
 
-def _build_items_summary(items: list) -> str:
+
+def _scene_wall_to_compass(scene_wall: str, room_direction: str) -> str:
+    """Convert a scene wall name to the real compass direction the user sees.
+
+    room_direction = which compass direction the scene's "north wall" faces.
+    e.g. direction="east" means scene-north = compass-east,
+         scene-east = compass-south, scene-south = compass-west, etc.
+    """
+    if scene_wall not in _DIRECTION_CYCLE:
+        return scene_wall  # "center" or unknown — return as-is
+    if room_direction not in _DIRECTION_CYCLE:
+        return scene_wall
+    base_idx = _DIRECTION_CYCLE.index(room_direction)
+    wall_idx = _DIRECTION_CYCLE.index(scene_wall)
+    compass_idx = (base_idx + wall_idx) % 4
+    return _DIRECTION_CYCLE[compass_idx]
+
+
+def _build_items_summary(items: list, room_direction: str = "north") -> str:
     """Build Thai items summary with correct directional language per furniture type.
 
     Beds: "หัวนอนทิศ X" (wall = headboard side).
     Others: "หันหน้าทิศ X" (facing direction from rotation).
+    Wall names are converted to real compass directions using room_direction.
     """
     lines = []
     for i in items:
         name = i.get("name", i.get("furniture_id", "item"))
-        wall = i.get("wall", "")
+        scene_wall = i.get("wall", "")
         rot = (i.get("rotation") or 0) % 360
         ftype = (i.get("furniture_type") or i.get("category") or "").lower().replace("-", "_")
         fid = (i.get("furniture_id") or i.get("id") or "").lower()
-        wall_th = _WALL_TH.get(wall, "")
-        facing_dir = _ROT_TO_DIR.get(rot, "")
-        facing_th = _DIR_TH.get(facing_dir, "")
+        # Convert scene wall → real compass direction
+        compass_wall = _scene_wall_to_compass(scene_wall, room_direction)
+        wall_th = _WALL_TH.get(compass_wall, "")
+        # Rotation describes scene facing; also remap to compass
+        scene_facing = _ROT_TO_DIR.get(rot, "")
+        compass_facing = _scene_wall_to_compass(scene_facing, room_direction) if scene_facing else ""
+        facing_th = _DIR_TH.get(compass_facing, "")
         is_bed = ftype in _BED_TYPES or any(t in fid for t in ("bed", "sofa_bed", "sofa-bed"))
         if is_bed and wall_th:
             lines.append(f"{name}: หัวนอนทิศ{wall_th}")
@@ -258,15 +291,17 @@ def _build_items_summary(items: list) -> str:
 
 
 EXPLANATION_PROMPT = """\
-คุณคือที่ปรึกษาฮวงจุ้ยที่พูดอบอุ่น น่าเชื่อถือ ตอบเป็นภาษาไทย 50-70 คำ
+คุณคือที่ปรึกษาฮวงจุ้ยที่พูดอบอุ่น น่าเชื่อถือ ตอบเป็นภาษาไทย 50-80 คำ
 
 การจัดวางเฟอร์นิเจอร์:
 {layout_summary}
 
-{kua_line}
+ข้อมูลกัว: {kua_line}
 ปัญหาคงค้าง: {remaining_issues}
 
 อธิบายการจัดห้องนี้สั้นๆ โดยอ้างอิงตำแหน่งจริงของเฟอร์นิเจอร์ที่จัดไป บอกเหตุผลด้านฮวงจุ้ยว่าทำไมถึงวางแบบนี้
+- ถ้า "ข้อมูลกัว" มีเลขกัวและทิศอยู่แล้ว: ใช้ข้อมูลนั้นอธิบาย ห้ามถามปีเกิดหรือเพศซ้ำอีก
+- ถ้า "ข้อมูลกัว" เป็นการแนะนำให้กรอก: ให้ต่อท้าย response ด้วยประโยคสั้นๆ ว่า "ถ้าบอกปีเกิดและเพศ จะช่วยปรับทิศหัวเตียงให้เข้ากับคุณมากขึ้นนะคะ"
 
 ห้าม JSON ห้าม bullet list ตอบเป็นร้อยแก้วเท่านั้น\
 """

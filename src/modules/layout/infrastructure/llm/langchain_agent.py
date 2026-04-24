@@ -235,6 +235,70 @@ class FengShuiLLMAgent:
                     lines.append(f"- {k}: {v}")
             user_preferences_section = "\n".join(lines) + "\n"
 
+        # Compute valid walls per furniture item so LLM can make informed choices.
+        # Normalize furniture_list to the shape compute_valid_walls() expects:
+        # {furniture_id, furniture_type, size: {w, l, h}, priority}
+        import re as _re
+
+        def _ftype_from_id(fid: str) -> str:
+            tokens = _re.split(r"[-_\s]+", fid.lower())
+            _COMPOUND = {
+                ("sofa", "bed"): "sofa_bed", ("tv", "stand"): "tv_stand",
+                ("coffee", "table"): "coffee_table", ("shoe", "cabinet"): "shoe_cabinet",
+                ("coat", "rack"): "coat_rack", ("room", "divider"): "room_divider",
+                ("compact", "wardrobe"): "compact_wardrobe", ("folding", "desk"): "folding_desk",
+                ("area", "rug"): "area_rug", ("floor", "lamp"): "floor_lamp",
+                ("mini", "fridge"): "mini_fridge",
+            }
+            if len(tokens) >= 2 and (tokens[0], tokens[1]) in _COMPOUND:
+                return _COMPOUND[(tokens[0], tokens[1])]
+            return tokens[0] if tokens else "unknown"
+
+        normalized_for_walls = [
+            {
+                "furniture_id": item.get("id", item.get("furniture_id", "")),
+                "furniture_type": item.get("category", _ftype_from_id(item.get("id", ""))),
+                "size": {
+                    "w": float(item.get("width", item.get("size", {}).get("w", 1.0))),
+                    "l": float(item.get("depth", item.get("size", {}).get("l", 1.0))),
+                    "h": float(item.get("height", item.get("size", {}).get("h", 1.0))),
+                },
+                "priority": item.get("priority", 99),
+            }
+            for item in furniture_list
+        ]
+        room_spec = {
+            "width": width,
+            "depth": depth,
+            "doors": doors,
+            "windows": windows,
+            "user_preferences": user_preferences or {},
+        }
+        wall_assigner = WallAssigner()
+        valid_walls_map = wall_assigner.compute_valid_walls(normalized_for_walls, room_spec)
+
+        # Compute Kua-reserved wall for bed so LLM avoids putting other furniture there
+        kua_bed_wall: str | None = None
+        _prefs = user_preferences or {}
+        _birth = _prefs.get("birth_year")
+        _gender = _prefs.get("gender", "")
+        if _birth and _gender:
+            try:
+                from src.modules.layout.application.services.kua_calculator import (
+                    calculate_kua,
+                    detect_kua_priority,
+                    kua_best_direction_info,
+                )
+                _kua = calculate_kua(int(_birth), _gender)
+                _priority = detect_kua_priority(_prefs.get("user_message", ""))
+                kua_bed_wall = kua_best_direction_info(_kua, _priority)["wall"]
+            except Exception:
+                pass
+
+        valid_walls_section = self._format_valid_walls_section(
+            valid_walls_map, kua_bed_wall=kua_bed_wall
+        )
+
         prompt = LAYOUT_PLANNING_PROMPT.format(
             room_type=room_type,
             width=width,
@@ -244,6 +308,7 @@ class FengShuiLLMAgent:
             furniture_list=self._format_furniture_list(furniture_list),
             extra_context=extra_context,
             user_preferences_section=user_preferences_section,
+            valid_walls_section=valid_walls_section,
         )
 
         output_schema = {
@@ -253,6 +318,7 @@ class FengShuiLLMAgent:
                     "furniture_type": "string - bed|desk|sofa|wardrobe|chair|...",
                     "size": {"w": "float", "l": "float", "h": "float"},
                     "priority": "int (1=first)",
+                    "target_wall": "string - north|south|east|west|center (from valid_walls)",
                 }
             ],
             "chi_flow_notes": "string - notes about energy flow",
@@ -272,12 +338,65 @@ class FengShuiLLMAgent:
                 self._convert_xyz_to_semantic(p, width, depth) for p in raw_placements
             ]
 
-        # Validate each placement; skip invalid ones
+        # Validate each placement; validate LLM's target_wall against constraints.
+        # Track physical wall usage (meters consumed) to prevent overflow.
+        _WALL_TYPES = {"north", "south", "east", "west"}
+        _GAP = 0.1  # minimum gap between items on same wall
+        wall_used_m: dict[str, float] = {w: 0.0 for w in _WALL_TYPES}  # wall → total width used
+
+        def _wall_len(wall: str) -> float:
+            return width if wall in ("north", "south") else depth
+
+        def _fits_on_wall(wall: str, item_w: float) -> bool:
+            remaining = _wall_len(wall) - wall_used_m.get(wall, 0.0) - _GAP
+            return remaining >= item_w
+
+        # Sort by priority so primary items (bed) are validated first
+        raw_placements_sorted = sorted(raw_placements, key=lambda x: x.get("priority", 99))
+
         valid: list[dict[str, Any]] = []
-        for raw in raw_placements:
+        for raw in raw_placements_sorted:
             try:
-                # Fill defaults for fields the LLM no longer provides
-                raw.setdefault("target_wall", "center")
+                fid = raw.get("furniture_id", "<unknown>")
+                constraints = valid_walls_map.get(fid)
+                item_w = float(raw.get("size", {}).get("w", 1.0))
+
+                # Validate or replace target_wall from LLM
+                llm_wall = raw.get("target_wall", "")
+                if constraints:
+                    allowed = constraints.get("valid_walls", [])
+                    preferred = constraints.get("preferred", "center")
+
+                    def _pick_best(candidates: list[str]) -> str | None:
+                        """Return first candidate wall that has physical capacity."""
+                        for w in candidates:
+                            if w not in _WALL_TYPES or _fits_on_wall(w, item_w):
+                                return w
+                        return None
+
+                    if llm_wall in allowed and (llm_wall not in _WALL_TYPES or _fits_on_wall(llm_wall, item_w)):
+                        logger.info(f"plan_layout: {fid!r} LLM chose wall={llm_wall!r} (valid, fits)")
+                        chosen_wall = llm_wall
+                    elif llm_wall in allowed:
+                        # LLM wall valid but no physical space — try other allowed walls
+                        alt = _pick_best([w for w in allowed if w != llm_wall]) or preferred
+                        logger.info(f"plan_layout: {fid!r} LLM wall={llm_wall!r} full → {alt!r}")
+                        chosen_wall = alt
+                    else:
+                        # LLM wall not in allowed — use preferred or best alternative
+                        alt = _pick_best([preferred] + [w for w in allowed if w != preferred]) or preferred
+                        logger.info(f"plan_layout: {fid!r} LLM wall={llm_wall!r} invalid → {alt!r}")
+                        chosen_wall = alt
+
+                    raw["target_wall"] = chosen_wall
+                else:
+                    chosen_wall = raw.get("target_wall", "center")
+                    raw.setdefault("target_wall", "center")
+
+                # Track physical wall usage
+                if raw["target_wall"] in _WALL_TYPES:
+                    wall_used_m[raw["target_wall"]] = wall_used_m.get(raw["target_wall"], 0.0) + item_w + _GAP
+
                 raw.setdefault("alignment", "center")
                 raw.setdefault("offset_from_wall", 0.05)
                 schema = SemanticPlacementSchema.model_validate(raw)
@@ -286,16 +405,15 @@ class FengShuiLLMAgent:
                 fid = raw.get("furniture_id", "<unknown>")
                 logger.warning(f"plan_layout: skipping invalid placement {fid!r}: {exc}")
 
-        # Let WallAssigner determine walls deterministically
-        room_spec = {
-            "width": width,
-            "depth": depth,
-            "doors": doors,
-            "windows": windows,
-        }
-        wall_assigner = WallAssigner()
-        valid = wall_assigner.assign(valid, room_spec)
-        logger.info(f"plan_layout: WallAssigner assigned walls for {len(valid)} items")
+        # Restore original priority order
+        id_to_valid = {p["furniture_id"]: p for p in valid}
+        valid = [id_to_valid[r["furniture_id"]] for r in raw_placements if r.get("furniture_id") in id_to_valid]
+
+        # Apply WallAssigner for positioning details (alignment, offset, facing)
+        # Pass llm_walls so assign() respects LLM's wall choices where safe
+        llm_walls = {p["furniture_id"]: p["target_wall"] for p in valid if p.get("target_wall")}
+        valid = wall_assigner.assign(valid, room_spec, llm_walls=llm_walls)
+        logger.info(f"plan_layout: WallAssigner positioned {len(valid)} items")
 
         response.content["placements"] = valid
         return response
@@ -615,6 +733,43 @@ IMPORTANT: Respond ONLY with the JSON object, no additional text."""
                 f"element: {item.get('feng_shui_element', 'unknown')}, "
                 f"budget: {item.get('budget_level')})"
             )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_valid_walls_section(
+        valid_walls_map: dict[str, dict[str, Any]],
+        kua_bed_wall: str | None = None,
+    ) -> str:
+        """Format valid_walls constraints into a readable prompt section for LLM."""
+        if not valid_walls_map:
+            return ""
+        lines = [
+            "## Wall Constraints",
+            "Choose target_wall from valid_walls for each item.",
+            "IMPORTANT: Distribute furniture across different walls — avoid putting more than 2 large items on the same wall.",
+            "If preferred walls conflict (same wall for multiple items), use a different valid wall for secondary items.",
+        ]
+        if kua_bed_wall:
+            lines.append(
+                f"KUA RULE: The bed WILL be placed on the {kua_bed_wall!r} wall (Kua auspicious direction). "
+                f"Do NOT assign other large furniture (wardrobe, desk, sofa) to the {kua_bed_wall!r} wall — "
+                f"choose a different wall from their valid_walls list."
+            )
+        lines.append("")
+        for fid, info in valid_walls_map.items():
+            valid = info.get("valid_walls", [])
+            preferred = info.get("preferred", "")
+            forbidden = info.get("forbidden", [])
+            reason = info.get("reason", "")
+            line = f'- "{fid}": valid_walls={valid}'
+            if preferred:
+                line += f', preferred="{preferred}"'
+            if forbidden:
+                line += f", forbidden={forbidden}"
+            if reason:
+                line += f" — {reason}"
+            lines.append(line)
+        lines.append("")
         return "\n".join(lines)
 
     def _format_furniture_list(self, furniture: list[dict[str, Any]]) -> str:
