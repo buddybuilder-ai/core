@@ -76,8 +76,6 @@ class Settings(BaseSettings):
     # ==========================================================================
     # RAG LLM Temperature
     # ==========================================================================
-    LLM_MODEL_RAG: str = "anthropic/claude-3.5-sonnet"
-    """legacy OpenRouter model (ใช้เมื่อ LLM_PROVIDER=openrouter)"""
     LLM_TEMPERATURE_RAG: float = 0.7
 
     # ==========================================================================
@@ -99,6 +97,9 @@ class Settings(BaseSettings):
     # ==========================================================================
     CHROMA_DB_PATH: str = "../feng-shui-rag/vectorstore/chroma_db"
     """Path to local ChromaDB persistence directory (feng-shui RAG vectorstore)."""
+    CHROMA_HOST: str = "localhost"
+    CHROMA_PORT: int = 8000
+    CHROMA_COLLECTION: str = "feng_shui_rag"
 
     # ==========================================================================
     # Embedding Model
@@ -126,18 +127,6 @@ class Settings(BaseSettings):
     """Maximum tokens for RAG LLM response."""
 
     # ==========================================================================
-    # RAG Configuration  ← ตั้งค่าที่ Buddy Builder/.env
-    # ==========================================================================
-    RAG_TOP_K: int = 5
-    """Number of documents to retrieve per query."""
-
-    RAG_SEARCH_TYPE: str = "mmr"
-    """Retrieval search type: 'mmr' (diverse) or 'similarity' (precise)."""
-
-    RAG_RELEVANCE_THRESHOLD: float = 1.0
-    """L2 distance threshold for filtering out-of-scope queries (lower = stricter)."""
-
-    # ==========================================================================
     # Security / JWT Auth
     # ==========================================================================
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
@@ -148,9 +137,6 @@ class Settings(BaseSettings):
     # CORS Settings
     # ==========================================================================
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
-
-    def __init__(self, **data: object) -> None:
-        super().__init__(**data)
 
 
 @lru_cache
