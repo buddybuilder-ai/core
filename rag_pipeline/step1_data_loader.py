@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List
 
 
-DATA_RAW_PATH = Path(__file__).parent.parent / "data" / "raw"
+DATA_RAW_PATH = Path(__file__).parent / "data" / "raw"
 
 
 def _normalize_text(text: str) -> str:

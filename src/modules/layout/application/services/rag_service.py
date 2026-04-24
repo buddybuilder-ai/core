@@ -395,7 +395,7 @@ class FengShuiRAGService:
                 if meta_filter:
                     _rlog(f"  [RAG] Retrieval filter: knowledge_type ∈ [{knowledge_type}, both]")
                 else:
-                    _rlog("  [RAG] Retrieval filter: none (knowledge_type=both)")
+                    _rlog("  [RAG] Retrieval filter: all types (knowledge_type=both)")
                 search_kwargs: dict[str, Any] = {"k": s.RAG_TOP_K}
                 if meta_filter:
                     search_kwargs["filter"] = meta_filter
@@ -433,23 +433,8 @@ class FengShuiRAGService:
             formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
             source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
 
-            formatted_parts: list[str] = []
-            source_docs: list[dict[str, Any]] = []
-            for i, doc in enumerate(docs, 1):
-                source = doc.metadata.get("source", "ฐานความรู้")
-                content = doc.page_content.strip()
-                # Format matches feng-shui-rag format_documents() style
-                formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
-                source_docs.append(
-                    {"content": content[:400], "metadata": dict(doc.metadata)}
-                )
-
-            context = "\n\n---\n\n".join(formatted_parts)
-            return context, source_docs
-
-        # except Exception as exc:
-        #     logger.warning("FengShuiRAGService retrieval failed: %s", exc)
-        #     return "", []
+        context = "\n\n---\n\n".join(formatted_parts)
+        return context, source_docs
 
     # ------------------------------------------------------------------
     # Prompt building
