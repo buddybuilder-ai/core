@@ -396,14 +396,16 @@ class ChromaDbRagSearchTool(BaseRagSearchTool):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _ensure_vectorstore(self) -> Chroma:
+    def _ensure_vectorstore(self) -> "Chroma":
         """Load the vectorstore on first use (lazy initialisation)."""
         if self._vectorstore is None:
             from src.modules.layout.infrastructure.vectorstore_service import (
                 get_cached_vectorstore,
             )
 
-            self._vectorstore = get_cached_vectorstore(self._db_path, self._embedding_model)
+            self._vectorstore = get_cached_vectorstore(
+                self._db_path, self._embedding_model
+            )
         return self._vectorstore
 
     def _is_in_scope(self, query: str) -> bool:
@@ -426,7 +428,7 @@ class ChromaDbRagSearchTool(BaseRagSearchTool):
             return True
 
     @staticmethod
-    def _doc_to_result(doc: object, score: float, index: int) -> RuleSearchResult:
+    def _doc_to_result(doc: "object", score: float, index: int) -> RuleSearchResult:
         """Convert a LangChain Document to a RuleSearchResult.
 
         Because ChromaDB documents come from raw text chunks (not structured
@@ -527,7 +529,7 @@ class ChromaDbRagSearchTool(BaseRagSearchTool):
                     r
                     for r in results
                     if any(f in ftypes_lower for f in r.applicable_furniture)
-                    or not r.applicable_furniture
+                       or not r.applicable_furniture
                 ]
 
             # Apply category filter if requested (post-retrieval)
@@ -576,7 +578,6 @@ class ChromaDbRagSearchTool(BaseRagSearchTool):
 # Module-level helper utilities
 # ---------------------------------------------------------------------------
 
-
 def _infer_category_from_source(source: str) -> str:
     """Guess a RuleCategory value from a source filename."""
     source_lower = source.lower()
@@ -592,23 +593,9 @@ def _infer_category_from_source(source: str) -> str:
 def _extract_furniture_hints(text: str) -> list[str]:
     """Extract furniture type hints mentioned in a text chunk."""
     furniture_keywords = [
-        "bed",
-        "desk",
-        "sofa",
-        "wardrobe",
-        "closet",
-        "chair",
-        "table",
-        "nightstand",
-        "mirror",
-        "shelf",
-        "bookshelf",
-        "เตียง",
-        "โต๊ะ",
-        "ตู้",
-        "เก้าอี้",
-        "โซฟา",
-        "ชั้น",
+        "bed", "desk", "sofa", "wardrobe", "closet", "chair",
+        "table", "nightstand", "mirror", "shelf", "bookshelf",
+        "เตียง", "โต๊ะ", "ตู้", "เก้าอี้", "โซฟา", "ชั้น",
     ]
     text_lower = text.lower()
     return [kw for kw in furniture_keywords if kw in text_lower]
