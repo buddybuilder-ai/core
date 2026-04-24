@@ -36,26 +36,12 @@ if str(_RAG_PIPELINE) not in sys.path:
     sys.path.insert(0, str(_RAG_PIPELINE))
 
 from rag_constants import BEDROOM_KEYWORDS  # noqa: E402, I001
+from rag_constants import CLASSIFY_SYSTEM_PROMPT as _CLASSIFY_SYSTEM_PROMPT  # noqa: E402
 from rag_constants import DOMAIN_KEYWORDS  # noqa: E402
 from rag_constants import EXCLUDE_KEYWORDS  # noqa: E402
 from rag_constants import MODE_ADDITIONS as _MODE_ADDITIONS  # noqa: E402
 from rag_constants import OUT_OF_SCOPE_MSG  # noqa: E402
 from rag_constants import SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE  # noqa: E402
-
-# ---------------------------------------------------------------------------
-# Quick keyword sets for query-type pre-classification (no LLM needed)
-# ---------------------------------------------------------------------------
-_FENG_SHUI_TERMS: frozenset[str] = frozenset([
-    "ฮวงจุ้ย", "feng shui", "fengshui", "กัว", "ming gua", "minggua",
-    "ทิศมงคล", "ทิศหัวนอน", "ทิศนอน", "ทิศเสีย", "ทิศอัปมงคล",
-    "ชี", "chi", "ธาตุ", "ห้าธาตุ", "เลขกัว", "กัวบุคคล", "กัวคน",
-    "พลังงานฮวงจุ้ย", "มิงกัว",
-])
-_INTERIOR_TERMS: frozenset[str] = frozenset([
-    "ตกแต่ง", "interior", "เฟอร์นิเจอร์", "furniture", "สีผนัง",
-    "แสงสว่าง", "lighting", "วอลเปเปอร์", "wallpaper", "ออกแบบ",
-    "design", "decor", "โทนสี", "ทาสี", "วัสดุ", "material",
-])
 
 
 class FengShuiRAGService:
@@ -263,47 +249,44 @@ class FengShuiRAGService:
     async def _classify_query(self, question: str) -> str:
         """Classify the user question as 'feng_shui', 'interior_design', or 'both'.
 
-        Step 1: Fast keyword check — no LLM call needed for clear cases.
-        Step 2: Call LLM_MODEL_ROUTER (gpt-4o-mini) for ambiguous questions.
-        Returns 'both' on any error so retrieval is never blocked.
+        ใช้ LLM หลัก (provider เดียวกับที่ตอบคำถาม) classify ทุกคำถาม
+        ไม่มี keyword hardcode — LLM ตัดสินเองจาก context
+        Fallback: 'feng_shui' (domain default ของแอปนี้) เมื่อ LLM ไม่ตอบ
         """
-        q = question.lower()
-        has_fs = any(kw in q for kw in _FENG_SHUI_TERMS)
-        has_id = any(kw in q for kw in _INTERIOR_TERMS)
+        import httpx
+        from src.config.settings import get_settings
 
-        if has_fs and not has_id:
-            _rlog(f"  [RAG] QueryType: feng_shui (keyword)")
-            return "feng_shui"
-        if has_id and not has_fs:
-            _rlog(f"  [RAG] QueryType: interior_design (keyword)")
-            return "interior_design"
+        s = get_settings()
+        provider = s.LLM_PROVIDER
+        model = s.LLM_MODEL_NAME
 
-        # Ambiguous — call LLM_MODEL_ROUTER for a fast 1-token answer
+        if provider == "ollama":
+            url = f"{s.OLLAMA_BASE_URL}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+        elif provider == "groq":
+            url = f"{s.GROQ_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {s.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            }
+        else:
+            url = f"{s.OPENROUTER_BASE_URL}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {s.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://buddybuilder.ai",
+                "X-Title": "BuddyBuilder AI",
+            }
+
         try:
-            import httpx
-
-            from src.config.settings import get_settings
-
-            s = get_settings()
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.post(
-                    f"{s.OPENROUTER_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {s.OPENROUTER_API_KEY}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://buddybuilder.ai",
-                        "X-Title": "BuddyBuilder AI",
-                    },
+                    url,
+                    headers=headers,
                     json={
-                        "model": s.LLM_MODEL_ROUTER,
+                        "model": model,
                         "messages": [
-                            {
-                                "role": "system",
-                                "content": (
-                                    "จำแนกคำถามต่อไปนี้ว่าเกี่ยวกับอะไรมากที่สุด "
-                                    "ตอบเพียง 1 คำ: feng_shui, interior_design, หรือ both"
-                                ),
-                            },
+                            {"role": "system", "content": _CLASSIFY_SYSTEM_PROMPT},
                             {"role": "user", "content": question},
                         ],
                         "max_tokens": 10,
@@ -316,14 +299,16 @@ class FengShuiRAGService:
                         kt = "feng_shui"
                     elif "interior" in raw:
                         kt = "interior_design"
-                    else:
+                    elif "both" in raw:
                         kt = "both"
-                    _rlog(f"  [RAG] QueryType: {kt} (LLM)")
+                    else:
+                        kt = "feng_shui"
+                    _rlog(f"  [RAG] QueryType: {kt} (LLM/{provider})")
                     return kt
+                _rlog(f"  [RAG] QueryType LLM status={resp.status_code} → both (fallback)")
         except Exception as exc:
-            _rlog(f"  [RAG] QueryType LLM failed ({exc}) → both")
+            _rlog(f"  [RAG] QueryType LLM failed ({exc}) → both (fallback)")
 
-        _rlog("  [RAG] QueryType: both (fallback)")
         return "both"
 
     # ------------------------------------------------------------------
@@ -338,13 +323,27 @@ class FengShuiRAGService:
         in assistant messages. Returns the Kua number string (e.g. '4') or None.
         """
         import re
-        pattern = re.compile(r"กัว\s*[=:]*\s*([1-9])|เลขกัว\s*([1-9])|ได้กัว\s*([1-9])", re.UNICODE)
+        # handle markdown bold variants: **กัว 4**, กัว **4**, **กัว** **4**
+        pattern = re.compile(
+            r"\*{0,2}กัว\*{0,2}\s*[=:]*\s*\*{0,2}([1-9])\*{0,2}"
+            r"|\*{0,2}เลขกัว\*{0,2}\s*\*{0,2}([1-9])\*{0,2}"
+            r"|\*{0,2}ได้กัว\*{0,2}\s*\*{0,2}([1-9])\*{0,2}",
+            re.UNICODE,
+        )
         for turn in reversed(history):
             if turn.get("role") == "assistant":
                 m = pattern.search(turn.get("content", ""))
                 if m:
                     return next(g for g in m.groups() if g is not None)
         return None
+
+    @staticmethod
+    def _has_birth_info(question: str) -> bool:
+        """Return True if question contains birth year + gender — signals กรณี A."""
+        import re
+        has_year = bool(re.search(r"(เกิด|ปี)\s*(ค\.?ศ\.?)?\s*[12]\d{3}", question))
+        has_gender = any(kw in question for kw in ("ชาย", "หญิง", "ผู้ชาย", "ผู้หญิง", "เพศชาย", "เพศหญิง"))
+        return has_year and has_gender
 
     @staticmethod
     def _enrich_retrieval_query(question: str, history: list[dict[str, str]]) -> str:
@@ -403,6 +402,8 @@ class FengShuiRAGService:
                 )
                 if meta_filter:
                     _rlog(f"  [RAG] Retrieval filter: knowledge_type ∈ [{knowledge_type}, both]")
+                else:
+                    _rlog("  [RAG] Retrieval filter: none (knowledge_type=both)")
                 search_kwargs: dict[str, Any] = {"k": s.RAG_TOP_K}
                 if meta_filter:
                     search_kwargs["filter"] = meta_filter
@@ -508,12 +509,14 @@ class FengShuiRAGService:
                 messages.append({"role": role, "content": content})
 
         # Current turn: detected kua + RAG context + question
+        # Check history first, then fall back to scanning current question for birth year+gender
         kua_num = FengShuiRAGService._extract_kua_from_history(conversation_history)
-        detected_kua = (
-            f"กัว {kua_num} (พบจากการสนทนาก่อนหน้า)"
-            if kua_num
-            else "[ไม่พบเลขกัวในประวัติ — ใช้หลักทั่วไป]"
-        )
+        if kua_num:
+            detected_kua = f"กัว {kua_num} (พบจากการสนทนาก่อนหน้า)"
+        elif FengShuiRAGService._has_birth_info(question):
+            detected_kua = "[ข้อความนี้มีปีเกิด+เพศ — กรณี A: คำนวณกัวทันที ห้ามถามซ้ำ]"
+        else:
+            detected_kua = "[ไม่พบเลขกัวในประวัติ — ใช้หลักทั่วไป]"
         context_text = context if context else "[ไม่มีข้อมูลเพิ่มเติมจากฐานความรู้]"
         user_content = (
             f"[เลขกัวที่ตรวจพบ: {detected_kua}]\n\n"

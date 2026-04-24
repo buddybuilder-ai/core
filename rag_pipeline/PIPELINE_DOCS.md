@@ -685,6 +685,90 @@ Interactive tool หลัก — รันด้วย `python check_vectordb.p
 
 ---
 
+## `rag_service.py` — FengShuiRAGService (Production)
+
+> ไฟล์นี้คือ production path ของ RAG — stateless เหมาะกับ FastAPI
+> อยู่ที่ `core/src/modules/layout/application/services/rag_service.py`
+
+### Relevance Pipeline (2 Layer)
+
+```
+User Prompt
+    │
+    ▼
+Layer 1: _has_domain_keywords()          ← keyword + fuzzy + history match
+    │  fail → OUT_OF_SCOPE_MSG
+    ▼
+Layer 2: similarity_search_with_score()  ← ไม่มี metadata filter (gate เท่านั้น)
+    │  L2 > threshold → OUT_OF_SCOPE_MSG
+    ▼
+_classify_query()          ← LLM classify: feng_shui / interior_design / both
+    │
+    ▼
+_enrich_retrieval_query()  ← inject Kua number จาก history ถ้ามี
+    │
+    ▼
+_retrieve_context()        ← ดึง docs พร้อม metadata filter ตาม knowledge_type
+    │
+    ▼
+_build_messages() → LLM call → answer
+```
+
+### Metadata Filter — จุดสำคัญ
+
+**Layer 2** (`_check_relevance`) ค้นหา **ไม่มี filter** — ใช้เพียงตรวจ domain relevance
+**Actual retrieval** (`_retrieve_context`) apply filter ตาม `knowledge_type`:
+
+```python
+meta_filter = (
+    {"knowledge_type": {"$in": [knowledge_type, "both"]}}
+    if knowledge_type != "both"
+    else None
+)
+```
+
+| `knowledge_type` | filter applied |
+|------------------|----------------|
+| `feng_shui` | เฉพาะ docs ที่มี `knowledge_type = feng_shui` หรือ `both` |
+| `interior_design` | เฉพาะ docs ที่มี `knowledge_type = interior_design` หรือ `both` |
+| `both` | ไม่มี filter — ดึงทุก docs |
+
+**Fallback:** ถ้า filter คืน 0 docs → retry โดยไม่มี filter อัตโนมัติ (line 411-416)
+
+### `_classify_query()` — Query Type Classifier
+
+ส่ง question ให้ LLM ตัดสินใจว่าเป็น `feng_shui` / `interior_design` / `both`
+
+**Fallback:** HTTP error หรือ LLM ตาย → คืน `"both"` (ไม่ filter = ปลอดภัยกว่า `"feng_shui"`)
+
+> แก้ไข 2026-04-24: fallback เดิมคืน `"feng_shui"` ทำให้ filter แคบเกินไปเมื่อ LLM ตาย
+> เปลี่ยนเป็น `"both"` แล้ว
+
+### Kua Query Enrichment
+
+ถ้า history มีเลขกัวอยู่แล้วและ query ไม่ได้พูดถึง:
+```
+"ทิศที่เสริมเรื่องความรัก"  →  "กัว 4 ทิศที่เสริมเรื่องความรัก"
+```
+ทำให้ BGE-M3 ดึง gua-specific docs แทน generic direction docs
+
+**ถ้า query ถูก enrich** → `reuse_prefetched = False` → ทำ filtered search ใหม่เสมอ
+**ถ้าไม่ enrich + `knowledge_type = "both"`** → ใช้ prefetched docs จาก Layer 2 ต่อได้
+
+### เช็ค ChromaDB มี `knowledge_type` field ไหม
+
+ถ้า documents ถูก ingest โดยไม่มี field นี้ → filter ไม่มีผล → fallback ทุกครั้ง:
+
+```python
+vs = get_cached_vectorstore(...)
+sample = vs.get(limit=3, include=["metadatas"])
+print(sample["metadatas"])
+# ต้องเห็น: [{"knowledge_type": "feng_shui", ...}, ...]
+# ถ้าไม่มี knowledge_type → ต้อง re-ingest ด้วย step2b
+```
+
+---
+
 ## การไหลของข้อมูลระหว่างไฟล์
 
 ```

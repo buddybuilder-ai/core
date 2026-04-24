@@ -27,15 +27,17 @@ def print_separator(char: str = "=", width: int = 80) -> None:
 def export_to_csv(all_docs: list, all_metas: list, output_path: Path) -> None:
     """Export chunks ทั้งหมดเป็น CSV เพื่อตรวจสอบเนื้อหาใน Excel
 
-    columns: chunk_index, source (ชื่อไฟล์), size_chars, content
+    columns: chunk_index, source (ชื่อไฟล์), knowledge_type, has_llm_context, size_chars, content
     ใช้ encoding utf-8-sig เพื่อให้ Excel เปิดภาษาไทยได้ถูกต้อง
     """
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(["chunk_index", "source", "size_chars", "content"])
+        writer.writerow(["chunk_index", "source", "knowledge_type", "has_llm_context", "size_chars", "content"])
         for i, (doc, meta) in enumerate(zip(all_docs, all_metas)):
             src = Path(meta.get("source", "Unknown")).name
-            writer.writerow([i + 1, src, len(doc), doc])
+            kt = meta.get("knowledge_type", "")
+            has_llm = meta.get("has_llm_context", "")
+            writer.writerow([i + 1, src, kt, has_llm, len(doc), doc])
     print(f"  CSV: {output_path}")
 
 
@@ -67,6 +69,8 @@ def export_to_json(all_docs: list, all_metas: list, sizes: list, buckets: dict, 
             {
                 "index": i + 1,
                 "source": Path(meta.get("source", "Unknown")).name,
+                "knowledge_type": meta.get("knowledge_type", ""),
+                "has_llm_context": meta.get("has_llm_context", ""),
                 "size_chars": len(doc),
                 "content": doc,
             }
@@ -190,6 +194,32 @@ def check_vectordb() -> None:
             print(f"    chunks: {len(src_sizes):,}  |  avg size: {src_avg:,.0f}  |  min: {min(src_sizes):,}  max: {max(src_sizes):,}")
 
         # ============================================================
+        # สถิติ knowledge_type Labels
+        # ============================================================
+        print()
+        print_separator()
+        print(" สถิติ Knowledge Type Labels")
+        print_separator("-")
+
+        kt_counts: dict[str, int] = {}
+        for meta in all_metas:
+            kt = meta.get("knowledge_type", "(ไม่มี label)")
+            kt_counts[kt] = kt_counts.get(kt, 0) + 1
+
+        has_labels = any(k != "(ไม่มี label)" for k in kt_counts)
+        if not has_labels:
+            print("  ⚠  ไม่พบ knowledge_type ใน metadata")
+            print("     → Vectorstore ถูก build ด้วย step2 (standard) ไม่ใช่ step2b (contextual)")
+            print("     → รัน: python main.py --rebuild --method contextual  เพื่อ rebuild")
+        else:
+            for kt, cnt in sorted(kt_counts.items(), key=lambda x: x[1], reverse=True):
+                pct = cnt / count * 100
+                bar = "█" * int(pct / 2)
+                llm_cnt = sum(1 for m in all_metas if m.get("knowledge_type") == kt and m.get("has_llm_context"))
+                llm_info = f"  (LLM context: {llm_cnt})" if kt != "(ไม่มี label)" else ""
+                print(f"  {kt:<20} {cnt:>5} chunks ({pct:5.1f}%) {bar}{llm_info}")
+
+        # ============================================================
         # ดูตัวอย่าง Chunks แบบละเอียด
         # ============================================================
         print()
@@ -220,8 +250,10 @@ def check_vectordb() -> None:
             src = Path(meta.get("source", "Unknown")).name
             size = len(doc)
 
+            kt = all_metas[idx].get("knowledge_type", "-")
+            has_llm = all_metas[idx].get("has_llm_context", "-")
             print(f"\n{'─'*80}")
-            print(f" Chunk #{idx+1}  |  Source: {src}  |  Size: {size:,} chars")
+            print(f" Chunk #{idx+1}  |  Source: {src}  |  Type: {kt}  |  LLM: {has_llm}  |  Size: {size:,} chars")
             print(f"{'─'*80}")
             print(doc)
             print()
