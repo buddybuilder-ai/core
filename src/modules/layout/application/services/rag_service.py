@@ -35,12 +35,14 @@ _RAG_PIPELINE = Path(__file__).resolve().parents[5] / "rag_pipeline"
 if str(_RAG_PIPELINE) not in sys.path:
     sys.path.insert(0, str(_RAG_PIPELINE))
 
-from rag_constants import BEDROOM_KEYWORDS  # noqa: E402, I001
-from rag_constants import DOMAIN_KEYWORDS  # noqa: E402
-from rag_constants import EXCLUDE_KEYWORDS  # noqa: E402
-from rag_constants import MODE_ADDITIONS as _MODE_ADDITIONS  # noqa: E402
-from rag_constants import OUT_OF_SCOPE_MSG  # noqa: E402
-from rag_constants import SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE  # noqa: E402
+from rag_constants import (  # noqa: E402
+    BEDROOM_KEYWORDS,
+    DOMAIN_KEYWORDS,
+    EXCLUDE_KEYWORDS,
+    MODE_ADDITIONS as _MODE_ADDITIONS,
+    OUT_OF_SCOPE_MSG,
+    SYSTEM_PROMPT as _SYSTEM_PROMPT_BASE,
+)
 
 # ---------------------------------------------------------------------------
 # Quick keyword sets for query-type pre-classification (no LLM needed)
@@ -78,7 +80,6 @@ class FengShuiRAGService:
         self._vectorstore: Any = None
         self._retriever: Any = None
         from src.config.settings import get_settings
-
         s = get_settings()
         # อ่านจาก RAG_RELEVANCE_THRESHOLD ใน .env (default 1.0 = รับทุกคำถามใน domain)
         self.RELEVANCE_THRESHOLD: float = s.RAG_RELEVANCE_THRESHOLD
@@ -104,9 +105,7 @@ class FengShuiRAGService:
                     search_type=settings.RAG_SEARCH_TYPE,
                     search_kwargs={"k": settings.RAG_TOP_K},
                 )
-                logger.info(
-                    "FengShuiRAGService: vectorstore loaded from %s", settings.CHROMA_DB_PATH
-                )
+                logger.info("FengShuiRAGService: vectorstore loaded from %s", settings.CHROMA_DB_PATH)
             except Exception as exc:
                 logger.warning("FengShuiRAGService: could not load vectorstore (%s)", exc)
         return self._vectorstore
@@ -163,9 +162,7 @@ class FengShuiRAGService:
             return True
 
         # Sub-layer 2: fuzzy match on long keywords
-        fuzzy_matches = [
-            kw for kw in DOMAIN_KEYWORDS if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower())
-        ]
+        fuzzy_matches = [kw for kw in DOMAIN_KEYWORDS if len(kw) >= 4 and self._fuzzy_match(q_lower, kw.lower())]
         if fuzzy_matches:
             _rlog(f"  [RAG] Layer 1 ✅  fuzzy match: {fuzzy_matches}")
             return True
@@ -192,18 +189,15 @@ class FengShuiRAGService:
         self,
         question: str,
         conversation_history: list[dict[str, str]],
-    ) -> tuple[bool, list[Any]]:
+    ) -> bool:
         """2-layer relevance check before calling LLM.
 
         Layer 1: Keyword check (fast — no embedding needed).
         Layer 2: L2 distance against vectorstore (mirrors feng-shui-rag threshold 0.35).
 
-        Returns (is_relevant, prefetched_docs) — prefetched_docs reuses the embedding
-        call from Layer 2 so ask() skips a second embed round-trip.
-        On Layer 1 failure or vectorstore unavailability, prefetched_docs is [].
+        Returns True if question is in scope, False to skip LLM.
         """
         from src.config.settings import get_settings
-
         settings = get_settings()
         top_k = settings.RAG_TOP_K
 
@@ -440,8 +434,23 @@ class FengShuiRAGService:
             formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
             source_docs.append({"content": content[:400], "metadata": dict(doc.metadata)})
 
-        context = "\n\n---\n\n".join(formatted_parts)
-        return context, source_docs
+            formatted_parts: list[str] = []
+            source_docs: list[dict[str, Any]] = []
+            for i, doc in enumerate(docs, 1):
+                source = doc.metadata.get("source", "ฐานความรู้")
+                content = doc.page_content.strip()
+                # Format matches feng-shui-rag format_documents() style
+                formatted_parts.append(f"[เอกสาร {i}] (แหล่งที่มา: {source})\n{content}")
+                source_docs.append(
+                    {"content": content[:400], "metadata": dict(doc.metadata)}
+                )
+
+            context = "\n\n---\n\n".join(formatted_parts)
+            return context, source_docs
+
+        # except Exception as exc:
+        #     logger.warning("FengShuiRAGService retrieval failed: %s", exc)
+        #     return "", []
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -475,7 +484,9 @@ class FengShuiRAGService:
                     i += 2
                 else:
                     i += 1
-                formatted.append(f"รอบที่ {turn_num}:\nคุณถาม: {human_msg}\nผมตอบ: {ai_msg}")
+                formatted.append(
+                    f"รอบที่ {turn_num}:\nคุณถาม: {human_msg}\nผมตอบ: {ai_msg}"
+                )
                 turn_num += 1
             else:
                 i += 1
@@ -549,10 +560,7 @@ class FengShuiRAGService:
         history = (conversation_history or [])[-_max_turns * 2:]
 
         # --- Relevance guard (mirrors ConversationRAGChain._check_relevance) ---
-        # _check_relevance now returns (is_relevant, prefetched_docs) so we can
-        # reuse the Layer-2 embedding result instead of embedding the query twice.
-        is_relevant, prefetched_docs = self._check_relevance(question, history)
-        if not is_relevant:
+        if not self._check_relevance(question, history):
             logger.info("FengShuiRAGService: out-of-scope → %r", question[:60])
             _rlog("  [RAG] OUT_OF_SCOPE — returning default message")
             return OUT_OF_SCOPE_MSG, []
@@ -594,15 +602,16 @@ class FengShuiRAGService:
         if provider == "ollama":
             url = f"{settings.OLLAMA_BASE_URL}/v1/chat/completions"
             headers = {"Content-Type": "application/json"}
-            provider_label = f"Ollama ({model})"
+            print(f"  [RAG] LLM: Ollama ({model})")
         elif provider == "groq":
             url = f"{settings.GROQ_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.GROQ_API_KEY}",
                 "Content-Type": "application/json",
             }
-            provider_label = f"Groq ({model})"
+            print(f"  [RAG] LLM: Groq ({model})")
         else:
+            # openrouter หรือ provider อื่น
             url = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
             headers = {
                 "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",

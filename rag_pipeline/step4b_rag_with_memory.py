@@ -99,33 +99,22 @@ def contains_chinese(text: str) -> bool:
 
 
 class ConversationRAGChain:
-    """RAG Chain ที่จำบทสนทนาได้ (stateful) สำหรับใช้ใน dev/testing
-
-    ใช้สำหรับทดสอบ RAG pipeline ใน terminal (test_rag_chat.py)
-    Production ใช้ FengShuiRAGService ใน core/src แทน เพราะ stateless เหมาะกับ API
-
-    Flow ต่อ request:
-        user question → _check_relevance → retrieve docs → format prompt → LLM → answer
-                                                                        ↑
-                                                              (พร้อม chat_history)
-    """
+    """RAG Chain พร้อม Conversation Memory"""
 
     def __init__(self, retriever, max_history: int = MAX_HISTORY):
-        """ตั้งค่า chain และ LLM — เรียกครั้งเดียวตอน startup
-
+        """
         Args:
-            retriever: VectorStoreRetriever จาก step3_vectorstore.get_retriever()
-            max_history: จำนวนรอบสนทนาที่เก็บใน memory (default: MAX_HISTORY จาก config)
-                         รอบเก่ากว่า max_history จะถูกทิ้งเพื่อไม่ให้ prompt ยาวเกินไป
+            retriever: Retriever จาก ChromaDB
+            max_history: จำนวนการสนทนาที่จะเก็บ (default: 10 รอบล่าสุด)
         """
         self.retriever = retriever
         self.max_history = max_history
-        self.chat_history: List[Tuple[str, str]] = []  # เก็บ (human, ai) ทีละคู่
+        self.chat_history: List[Tuple[str, str]] = []
 
+        # สร้าง LLM
         self.llm = get_llm()
 
-        # Prompt structure: system prompt → history → retrieved context → question
-        # ลำดับนี้สำคัญ: system บอก persona, history ให้ LLM รู้บริบท, context ให้ข้อมูล RAG
+        # สร้าง Prompt Template with chat history
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
             ("human", """## ประวัติการสนทนาก่อนหน้า:
@@ -150,19 +139,18 @@ class ConversationRAGChain:
 ตอบเป็นภาษาไทยเท่านั้นครับ""")
         ])
 
-        # LangChain LCEL chain: dict input → prompt → LLM → parse string output
-        # retriever.invoke() เรียกตอน chain.invoke() ไม่ใช่ตอนสร้าง object
+        # สร้าง chain
         self.chain = (
             {
                 "context": lambda x: format_documents(
-                    self.retriever.invoke(x["question"])  # ดึง docs จาก vectorstore
+                    self.retriever.invoke(x["question"])
                 ),
                 "chat_history": lambda x: format_chat_history(x["chat_history"]),
                 "question": lambda x: x["question"]
             }
             | self.prompt
             | self.llm
-            | StrOutputParser()  # แปลง AIMessage → plain string
+            | StrOutputParser()
         )
 
         print(f" Conversation RAG Chain พร้อมใช้งาน!")
@@ -287,47 +275,48 @@ class ConversationRAGChain:
             return True  # ถ้า error ให้ผ่านไปก่อน
 
     def invoke(self, question: str) -> str:
-        """ถามคำถามกับ RAG chain พร้อมบริบทการสนทนาที่สะสมมา
-
-        ตรวจ relevance ก่อนเสมอ เพื่อประหยัด LLM token สำหรับคำถามนอก scope
+        """
+        ถามคำถามพร้อมบริบทการสนทนา
+        ตรวจ relevance score ก่อน — ถ้านอก scope ไม่เรียก LLM
 
         Args:
-            question: คำถามของผู้ใช้
+            question: คำถาม
 
         Returns:
-            คำตอบภาษาไทยจาก LLM หรือ OUT_OF_SCOPE_MSG ถ้าคำถามนอก scope
+            คำตอบจาก AI
         """
-        # ตรวจ relevance ก่อน — ถ้า block ตรงนี้จะไม่เรียก LLM เลย ประหยัด token
+        # ตรวจ relevance ก่อนเรียก LLM เพื่อประหยัด token
         if not self._check_relevance(question):
             print("    Out of scope — skipping LLM call")
             return OUT_OF_SCOPE_MSG
 
+        # ดึงคำตอบ
         answer = self.chain.invoke({
             "question": question,
-            "chat_history": self.chat_history  # ส่ง history ทั้งหมดเข้า prompt
+            "chat_history": self.chat_history
         })
 
-        # ถ้ามีตัวอักษรจีนหลุดออกมา แสดงว่า model ไม่ทำตาม instruction — แจ้งเตือน
+        # ตรวจจับและเตือนถ้ามีภาษาจีน
         if contains_chinese(answer):
             print("    WARNING: ตรวจพบตัวอักษรจีนในคำตอบ")
             print("    Tip: ลด TEMPERATURE ใน .env หรือเปลี่ยน model")
 
-        # บันทึกคู่ (question, answer) ลง history สำหรับรอบถัดไป
+        # เก็บประวัติการสนทนา
         self.chat_history.append((question, answer))
 
-        # ตัด history เก่าออกถ้าเกิน max_history เพื่อไม่ให้ prompt ยาวเกินไป
+        # จำกัดจำนวนประวัติ
         if len(self.chat_history) > self.max_history:
             self.chat_history = self.chat_history[-self.max_history:]
 
         return answer
 
     def clear_history(self):
-        """ล้าง chat history ทั้งหมด — ใช้เมื่อต้องการเริ่มบทสนทนาใหม่"""
+        """ล้างประวัติการสนทนา"""
         self.chat_history = []
         print("  ล้างประวัติการสนทนาแล้ว")
 
     def get_history(self) -> List[Tuple[str, str]]:
-        """คืน chat history ทั้งหมดในรูป list ของ (question, answer) tuple"""
+        """ดูประวัติการสนทนา"""
         return self.chat_history
 
 

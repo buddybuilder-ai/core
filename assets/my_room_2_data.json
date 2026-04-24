@@ -1,0 +1,107 @@
+{
+    "room_summary": {
+        "applied_height_m": 2.8,
+        "scale_factor": 2.11,
+        "total_objects": 8
+    },
+    "objects": [
+        {
+            "label": "lamp",
+            "confidence": 0.93,
+            "width_m": 2.16,
+            "height_m": 0.95,
+            "elevation_m": 2.26,
+            "distance_m": 1.4,
+            "center_pixel": [
+                610,
+                199
+            ]
+        },
+        {
+            "label": "bed",
+            "confidence": 0.93,
+            "width_m": 2.2,
+            "height_m": 1.0,
+            "elevation_m": 0.0,
+            "distance_m": 1.4,
+            "center_pixel": [
+                705,
+                829
+            ]
+        },
+        {
+            "label": "lamp",
+            "confidence": 0.87,
+            "width_m": 0.49,
+            "height_m": 0.42,
+            "elevation_m": 0.9,
+            "distance_m": 1.4,
+            "center_pixel": [
+                650,
+                626
+            ]
+        },
+        {
+            "label": "desk",
+            "confidence": 0.79,
+            "width_m": 2.01,
+            "height_m": 0.9,
+            "elevation_m": 0.31,
+            "distance_m": 1.4,
+            "center_pixel": [
+                127,
+                751
+            ]
+        },
+        {
+            "label": "nightstand",
+            "confidence": 0.73,
+            "width_m": 0.99,
+            "height_m": 0.15,
+            "elevation_m": 0.8,
+            "distance_m": 1.4,
+            "center_pixel": [
+                639,
+                687
+            ]
+        },
+        {
+            "label": "shelf",
+            "confidence": 0.43,
+            "width_m": 2.42,
+            "height_m": 2.11,
+            "elevation_m": 0.39,
+            "distance_m": 1.4,
+            "center_pixel": [
+                372,
+                567
+            ]
+        },
+        {
+            "label": "shelf",
+            "confidence": 0.3,
+            "width_m": 1.24,
+            "height_m": 2.09,
+            "elevation_m": 0.4,
+            "distance_m": 1.4,
+            "center_pixel": [
+                299,
+                566
+            ]
+        },
+        {
+            "label": "rug",
+            "confidence": 0.3,
+            "width_m": 8.69,
+            "height_m": 1.01,
+            "elevation_m": 0.0,
+            "distance_m": 1.4,
+            "center_pixel": [
+                543,
+                968
+            ]
+        }
+    ],
+    "status": "success",
+    "userId": "54ef533b-808c-4add-84a5-4243ce84448a"
+}
