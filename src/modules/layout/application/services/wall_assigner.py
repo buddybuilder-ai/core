@@ -114,23 +114,271 @@ class WallAssigner:
     11. everything else → best remaining wall
     """
 
+    def compute_valid_walls(
+        self,
+        furniture_items: list[dict[str, Any]],
+        room_spec: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        """Compute valid, preferred, and forbidden walls for each furniture item.
+
+        Returns a dict of furniture_id → {
+            "valid_walls": list[str],    # walls LLM may choose from
+            "preferred": str,            # Kua/command best wall
+            "forbidden": list[str],      # walls that violate hard rules
+            "reason": str,               # explanation for LLM
+        }
+        Used by LLM to make informed wall selections while respecting hard constraints.
+        """
+        dims = room_spec.get("dimensions") or {}
+        room_w = float(room_spec.get("width") or dims.get("width") or 4.0)
+        room_d = float(room_spec.get("depth") or dims.get("depth") or 4.0)
+
+        door_walls = self._extract_walls(room_spec.get("doors", []))
+        window_walls = self._extract_walls(room_spec.get("windows", []))
+
+        primary_door_wall = next(iter(door_walls), "south")
+        command_wall = _OPPOSITE_WALL.get(primary_door_wall, "north")
+
+        # Kua walls
+        user_prefs = room_spec.get("user_preferences") or {}
+        birth_year = user_prefs.get("birth_year")
+        gender = user_prefs.get("gender", "")
+        user_message = user_prefs.get("user_message", "")
+        kua_walls: list[str] = []
+        kua_bad: set[str] = set()
+        kua_num = None
+        kua_priority = "sheng_chi"
+        if birth_year and gender:
+            try:
+                kua_num = calculate_kua(int(birth_year), gender)
+                kua_priority = detect_kua_priority(user_message)
+                priority_info = kua_best_direction_info(kua_num, kua_priority)
+                priority_wall = priority_info["wall"]
+                kua_walls = [priority_wall] + [
+                    w for w in kua_auspicious_walls(kua_num) if w != priority_wall
+                ]
+                kua_bad = kua_inauspicious_walls(kua_num)
+            except Exception:
+                pass
+
+        result: dict[str, dict[str, Any]] = {}
+        wall_usage: dict[str, float] = dict.fromkeys(_ALL_WALLS, 0.0)
+
+        items = sorted(furniture_items, key=lambda x: x.get("priority", 99))
+        bed_assigned_wall: str | None = None
+        sofa_assigned_wall: str | None = None
+
+        for item in items:
+            fid = item.get("furniture_id", item.get("id", ""))
+            ft = _normalize_type(item.get("furniture_type", ""), fid)
+            fw = float(item.get("size", {}).get("w", item.get("width", 1.0)))
+
+            # Center items — no wall choice
+            if ft in _CENTER_TYPES:
+                result[fid] = {
+                    "valid_walls": ["center"],
+                    "preferred": "center",
+                    "forbidden": [],
+                    "reason": "วางกลางห้อง",
+                }
+                continue
+
+            # Door-adjacent items
+            if ft in _DOOR_ADJACENT_TYPES:
+                result[fid] = {
+                    "valid_walls": [primary_door_wall],
+                    "preferred": primary_door_wall,
+                    "forbidden": list(_ALL_WALLS - {primary_door_wall}),
+                    "reason": "ต้องวางชิดประตู",
+                }
+                continue
+
+            # Nightstand — must follow bed
+            if ft in _NIGHTSTAND_TYPES:
+                wall = bed_assigned_wall or command_wall
+                result[fid] = {
+                    "valid_walls": [wall],
+                    "preferred": wall,
+                    "forbidden": list(_ALL_WALLS - {wall}),
+                    "reason": "ต้องวางผนังเดียวกับเตียง",
+                }
+                continue
+
+            # Dining chair — must follow dining table
+            if ft in _DINING_CHAIR_TYPES:
+                result[fid] = {
+                    "valid_walls": list(_ALL_WALLS - door_walls),
+                    "preferred": command_wall,
+                    "forbidden": list(door_walls),
+                    "reason": "วางข้างโต๊ะอาหาร ห้ามผนังประตู",
+                }
+                continue
+
+            # Bed
+            if ft in _REAL_BED_TYPES:
+                forbidden = list(door_walls)
+                # valid = all except door walls; window walls soft-invalid but allowed
+                valid = sorted(_ALL_WALLS - door_walls)
+                # preferred: Kua first, then command
+                preferred = kua_walls[0] if kua_walls else command_wall
+                reason_parts = []
+                if kua_walls:
+                    reason_parts.append(f"Kua {kua_num} ({kua_priority}) แนะนำ {kua_walls[0]}")
+                reason_parts.append(f"command position = {command_wall}")
+                if window_walls:
+                    reason_parts.append(f"หลีกเลี่ยงผนังหน้าต่าง {sorted(window_walls)} ถ้าเป็นไปได้")
+                if kua_bad:
+                    reason_parts.append(f"ทิศอัปมงคล Kua = {sorted(kua_bad)}")
+                result[fid] = {
+                    "valid_walls": valid,
+                    "preferred": preferred,
+                    "forbidden": forbidden,
+                    "kua_avoid": sorted(kua_bad),
+                    "window_walls": sorted(window_walls),
+                    "reason": " | ".join(reason_parts),
+                }
+                bed_assigned_wall = preferred
+                wall_usage[preferred] = wall_usage.get(preferred, 0.0) + fw
+                continue
+
+            # Sofa bed
+            if ft in _SOFA_BED_TYPES:
+                has_real_bed = any(
+                    _normalize_type(i.get("furniture_type", "")) in _REAL_BED_TYPES for i in items
+                )
+                if not has_real_bed:
+                    forbidden = list(door_walls)
+                    valid = sorted(_ALL_WALLS - door_walls)
+                    preferred = kua_walls[0] if kua_walls else command_wall
+                else:
+                    forbidden = list(door_walls | ({bed_assigned_wall} if bed_assigned_wall else set()))
+                    valid = sorted(_ALL_WALLS - set(forbidden))
+                    preferred = valid[0] if valid else command_wall
+                result[fid] = {
+                    "valid_walls": valid or list(_ALL_WALLS - door_walls),
+                    "preferred": preferred,
+                    "forbidden": forbidden,
+                    "reason": "sofa_bed: command position ถ้าไม่มีเตียง หรือผนังข้างถ้ามีเตียงแล้ว",
+                }
+                sofa_assigned_wall = preferred
+                wall_usage[preferred] = wall_usage.get(preferred, 0.0) + fw
+                continue
+
+            # Sofa
+            if ft in _SOFA_TYPES:
+                exclude = door_walls.copy()
+                if bed_assigned_wall:
+                    exclude.add(bed_assigned_wall)
+                valid = sorted(_ALL_WALLS - exclude)
+                preferred = valid[0] if valid else sorted(_ALL_WALLS - door_walls)[0]
+                result[fid] = {
+                    "valid_walls": valid or sorted(_ALL_WALLS - door_walls),
+                    "preferred": preferred,
+                    "forbidden": list(exclude),
+                    "reason": "โซฟา: ผนังข้าง ห้ามผนังประตูและผนังเตียง",
+                }
+                sofa_assigned_wall = preferred
+                wall_usage[preferred] = wall_usage.get(preferred, 0.0) + fw
+                continue
+
+            # Desk
+            if ft in _DESK_TYPES:
+                exclude = door_walls.copy()
+                if bed_assigned_wall:
+                    exclude.add(bed_assigned_wall)
+                if sofa_assigned_wall:
+                    exclude.add(sofa_assigned_wall)
+                valid = sorted(_ALL_WALLS - exclude)
+                if not valid:
+                    valid = sorted(_ALL_WALLS - door_walls)
+                # No fixed preferred — let LLM choose freely from valid_walls
+                result[fid] = {
+                    "valid_walls": valid,
+                    "preferred": "",
+                    "forbidden": list(door_walls | (({bed_assigned_wall} if bed_assigned_wall else set()))),
+                    "reason": "โต๊ะทำงาน: เลือกผนังที่ยังไม่แออัด ห้ามผนังประตูและผนังเตียง",
+                }
+                wall_usage[valid[0] if valid else command_wall] = wall_usage.get(valid[0] if valid else command_wall, 0.0) + fw
+                continue
+
+            # TV stand
+            if ft in _TV_TYPES:
+                ref_wall = sofa_assigned_wall or bed_assigned_wall
+                occupied = door_walls | {a for a in [bed_assigned_wall, sofa_assigned_wall] if a}
+                if ref_wall:
+                    preferred = _OPPOSITE_WALL.get(ref_wall, "north")
+                    if preferred in occupied:
+                        valid = sorted(_ALL_WALLS - occupied)
+                        preferred = valid[0] if valid else preferred
+                valid_walls = sorted(_ALL_WALLS - occupied) or sorted(_ALL_WALLS - door_walls)
+                result[fid] = {
+                    "valid_walls": valid_walls,
+                    "preferred": preferred if ref_wall else (valid_walls[0] if valid_walls else "north"),
+                    "forbidden": list(door_walls),
+                    "reason": "TV: ตรงข้ามโซฟา/เตียง เพื่อมุมมองที่ดี",
+                }
+                wall_usage[preferred if ref_wall else valid_walls[0]] = wall_usage.get(preferred if ref_wall else valid_walls[0], 0.0) + fw
+                continue
+
+            # Storage (wardrobe, bookshelf)
+            if ft in _STORAGE_TYPES:
+                exclude = door_walls.copy()
+                if bed_assigned_wall:
+                    exclude.add(bed_assigned_wall)
+                if sofa_assigned_wall:
+                    exclude.add(sofa_assigned_wall)
+                valid = sorted(_ALL_WALLS - exclude)
+                if not valid:
+                    valid = sorted(_ALL_WALLS - door_walls)
+                # No fixed preferred — let LLM choose freely from valid_walls
+                result[fid] = {
+                    "valid_walls": valid,
+                    "preferred": "",
+                    "forbidden": list(exclude),
+                    "reason": "ตู้เก็บของ: เลือกผนังที่ยังไม่แออัด ห้ามผนังเตียง/ประตู",
+                }
+                wall_usage[valid[0] if valid else "east"] = wall_usage.get(valid[0] if valid else "east", 0.0) + fw
+                continue
+
+            # Default
+            exclude = door_walls | ({bed_assigned_wall} if bed_assigned_wall else set())
+            valid = sorted(_ALL_WALLS - exclude)
+            if not valid:
+                valid = sorted(_ALL_WALLS - door_walls)
+            preferred = valid[0] if valid else "east"
+            result[fid] = {
+                "valid_walls": valid,
+                "preferred": preferred,
+                "forbidden": list(door_walls),
+                "reason": "เฟอร์นิเจอร์ทั่วไป: ผนังที่เหลือ",
+            }
+            wall_usage[preferred] = wall_usage.get(preferred, 0.0) + fw
+
+        return result
+
     def assign(
         self,
         furniture_items: list[dict[str, Any]],
         room_spec: dict[str, Any],
+        llm_walls: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Assign wall/alignment/offset to each furniture item.
 
         Args:
             furniture_items: List of dicts with at least:
-                furniture_id, furniture_type, size, priority
-                (target_wall/alignment/offset_from_wall are IGNORED and overwritten)
+                furniture_id, furniture_type, size, priority.
             room_spec: Room spec with width, depth, doors, windows.
+            llm_walls: Optional dict of furniture_id → wall chosen by LLM.
+                When provided, the LLM's wall choice is used instead of the
+                deterministic pick for that item (alignment/offset/facing are
+                still computed by code). Hard constraints (center/door-adjacent
+                types) always override llm_walls.
 
         Returns:
             The same list but with target_wall, alignment, offset_from_wall,
             and facing filled in by code.
         """
+        llm_walls = llm_walls or {}
         dims = room_spec.get("dimensions") or {}
         room_w = float(room_spec.get("width") or dims.get("width") or 4.0)
         room_d = float(room_spec.get("depth") or dims.get("depth") or 4.0)
@@ -230,7 +478,28 @@ class WallAssigner:
             fw = float(item.get("size", {}).get("w", item.get("width", 1.0)))
 
             if ft in _REAL_BED_TYPES:
-                wall = bed_wall
+                # Kua has highest priority for bed — LLM is only used when no Kua data
+                llm_choice = llm_walls.get(fid)
+                if kua_walls:
+                    # Kua overrides LLM — bed must follow auspicious direction
+                    wall = bed_wall
+                    if llm_choice and llm_choice != wall:
+                        logger.info(
+                            f"WallAssigner: {fid} LLM wall={llm_choice!r} overridden by Kua → {wall!r}"
+                        )
+                    else:
+                        logger.info(f"WallAssigner: {fid} using Kua wall={wall!r}")
+                else:
+                    # No Kua data — respect LLM choice if not a door wall
+                    wall = (
+                        llm_choice
+                        if llm_choice and llm_choice in (_ALL_WALLS - door_walls)
+                        else bed_wall
+                    )
+                    if llm_choice and llm_choice != wall:
+                        logger.info(f"WallAssigner: {fid} LLM wall={llm_choice!r} rejected (door wall) → {wall!r}")
+                    elif llm_choice:
+                        logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
                 bed_assigned_wall = wall
                 # If bed shares a wall with a door, slide it away from the door
                 bed_align = "center"
@@ -260,22 +529,39 @@ class WallAssigner:
                 logger.info(f"WallAssigner: {fid} ({ft}) → {wall} wall (command position)")
 
             elif ft in _SOFA_BED_TYPES:
-                # If no real bed, sofa_bed gets command position
+                # If no real bed, sofa_bed gets command position (Kua overrides LLM)
+                llm_choice = llm_walls.get(fid)
                 if not any(
                     _normalize_type(i.get("furniture_type", "")) in _REAL_BED_TYPES for i in items
                 ):
-                    wall = bed_wall
+                    if kua_walls:
+                        wall = bed_wall
+                        if llm_choice and llm_choice != wall:
+                            logger.info(
+                                f"WallAssigner: {fid} LLM wall={llm_choice!r} overridden by Kua → {wall!r}"
+                            )
+                    else:
+                        wall = (
+                            llm_choice
+                            if llm_choice and llm_choice in (_ALL_WALLS - door_walls)
+                            else bed_wall
+                        )
                     bed_assigned_wall = wall
                 else:
                     # Side wall, not door wall, not bed wall
-                    wall = self._pick_wall(
-                        exclude=door_walls | {bed_wall} if bed_wall else door_walls,
-                        prefer_side=True,
-                        room_w=room_w,
-                        room_d=room_d,
-                        wall_usage=wall_usage,
-                        item_width=fw,
-                    )
+                    _sb_exclude = door_walls | {bed_wall} if bed_wall else door_walls
+                    if llm_choice and llm_choice not in _sb_exclude:
+                        wall = llm_choice
+                        logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
+                    else:
+                        wall = self._pick_wall(
+                            exclude=_sb_exclude,
+                            prefer_side=True,
+                            room_w=room_w,
+                            room_d=room_d,
+                            wall_usage=wall_usage,
+                            item_width=fw,
+                        )
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": "center",
@@ -422,14 +708,19 @@ class WallAssigner:
                     exclude.add(bed_assigned_wall)
                 if sofa_assigned_wall:
                     exclude.add(sofa_assigned_wall)
-                wall = self._pick_wall(
-                    exclude=exclude,
-                    prefer_side=True,
-                    room_w=room_w,
-                    room_d=room_d,
-                    wall_usage=wall_usage,
-                    item_width=fw,
-                )
+                llm_choice = llm_walls.get(fid)
+                if llm_choice and llm_choice not in exclude:
+                    wall = llm_choice
+                    logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
+                else:
+                    wall = self._pick_wall(
+                        exclude=exclude,
+                        prefer_side=True,
+                        room_w=room_w,
+                        room_d=room_d,
+                        wall_usage=wall_usage,
+                        item_width=fw,
+                    )
                 sofa_assigned_wall = wall
                 assignments[fid] = {
                     "target_wall": wall,
@@ -453,14 +744,23 @@ class WallAssigner:
                     exclude.add(dining_table_wall)
                 if exclude >= _ALL_WALLS:
                     exclude = door_walls.copy()  # fallback
-                wall = self._pick_wall(
-                    exclude=exclude,
-                    prefer_side=True,
-                    room_w=room_w,
-                    room_d=room_d,
-                    wall_usage=wall_usage,
-                    item_width=fw,
-                )
+                llm_choice = llm_walls.get(fid)
+                if llm_choice and llm_choice not in exclude:
+                    wall = llm_choice
+                    logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
+                else:
+                    if llm_choice and llm_choice in exclude:
+                        logger.info(
+                            f"WallAssigner: {fid} LLM wall={llm_choice!r} conflicts with bed/door → picking alternate"
+                        )
+                    wall = self._pick_wall(
+                        exclude=exclude,
+                        prefer_side=True,
+                        room_w=room_w,
+                        room_d=room_d,
+                        wall_usage=wall_usage,
+                        item_width=fw,
+                    )
                 assignments[fid] = {
                     "target_wall": wall,
                     "alignment": "center",
@@ -481,7 +781,11 @@ class WallAssigner:
                     a["target_wall"] for a in assignments.values() if a["target_wall"] != "center"
                 }
                 occupied = door_walls | occupied_walls
-                if ref_wall:
+                llm_choice = llm_walls.get(fid)
+                if llm_choice and llm_choice not in door_walls and llm_choice in _ALL_WALLS:
+                    wall = llm_choice
+                    logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
+                elif ref_wall:
                     wall = _OPPOSITE_WALL.get(ref_wall, "north")
                     if wall in occupied:
                         wall = self._pick_wall(
@@ -537,14 +841,19 @@ class WallAssigner:
                     exclude_storage = exclude | crowded_walls - door_walls
                 if exclude_storage >= _ALL_WALLS:
                     exclude_storage = exclude  # absolute fallback
-                wall = self._pick_wall(
-                    exclude=exclude_storage,
-                    prefer_side=False,
-                    room_w=room_w,
-                    room_d=room_d,
-                    wall_usage=wall_usage,
-                    item_width=fw,
-                )
+                llm_choice = llm_walls.get(fid)
+                if llm_choice and llm_choice not in exclude and llm_choice in _ALL_WALLS:
+                    wall = llm_choice
+                    logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
+                else:
+                    wall = self._pick_wall(
+                        exclude=exclude_storage,
+                        prefer_side=False,
+                        room_w=room_w,
+                        room_d=room_d,
+                        wall_usage=wall_usage,
+                        item_width=fw,
+                    )
                 align = (
                     self._safe_alignment_for_door_wall(
                         wall, fw, room_w, room_d, room_spec.get("doors", [])
@@ -656,14 +965,23 @@ class WallAssigner:
             if exclude_default >= _ALL_WALLS or crowded_non_door >= (_ALL_WALLS - door_walls):
                 # All preferred walls taken — allow door wall as last resort
                 exclude_default = door_walls.copy()
-            wall = self._pick_wall(
-                exclude=exclude_default,
-                prefer_side=False,
-                room_w=room_w,
-                room_d=room_d,
-                wall_usage=wall_usage,
-                item_width=fw,
-            )
+            llm_choice = llm_walls.get(fid)
+            if llm_choice and llm_choice not in exclude_default and llm_choice in _ALL_WALLS:
+                wall = llm_choice
+                logger.info(f"WallAssigner: {fid} using LLM wall={wall!r}")
+            else:
+                if llm_choice and llm_choice in exclude_default:
+                    logger.info(
+                        f"WallAssigner: {fid} LLM wall={llm_choice!r} conflicts with bed/door → picking alternate"
+                    )
+                wall = self._pick_wall(
+                    exclude=exclude_default,
+                    prefer_side=False,
+                    room_w=room_w,
+                    room_d=room_d,
+                    wall_usage=wall_usage,
+                    item_width=fw,
+                )
             align = (
                 self._safe_alignment_for_door_wall(
                     wall, fw, room_w, room_d, room_spec.get("doors", [])

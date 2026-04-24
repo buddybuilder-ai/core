@@ -182,10 +182,53 @@ class RearrangeAgent:
             f"Your response MUST contain exactly {len(furniture_list)} placements."
         )
 
+        # Build current wall summary so LLM knows the existing layout and can vary it.
+        # current_layout items may not have a 'wall' field (frontend strips it), so
+        # infer wall from pos_x/pos_z relative to room centre (Three.js convention).
+        _half_w = room_w / 2
+        _half_d = room_d / 2
+        _WALL_TOL = 1.0  # meters from wall edge to count as "against that wall"
+
+        def _infer_wall(item: dict[str, Any]) -> str:
+            px = float(item.get("pos_x", 0))
+            pz = float(item.get("pos_z", 0))
+            dims = item.get("dimensions") or {}
+            fw = float(dims.get("width", 1.0))
+            fd = float(dims.get("depth", 1.0))
+            # Convert frontend centre coords back to backend SW-corner coords
+            bx = px + _half_w - fw / 2
+            bz = -pz + _half_d - fd / 2
+            if bz <= _WALL_TOL:
+                return "south"
+            elif bz + fd >= room_d - _WALL_TOL:
+                return "north"
+            elif bx <= _WALL_TOL:
+                return "west"
+            elif bx + fw >= room_w - _WALL_TOL:
+                return "east"
+            return "center"
+
+        current_walls: list[str] = []
+        for item in current_layout:
+            fid = item.get("furniture_id") or item.get("id") or ""
+            wall = item.get("wall") or _infer_wall(item)
+            if fid and wall:
+                current_walls.append(f"  - {fid}: currently on {wall} wall")
+        current_layout_hint = ""
+        if current_walls:
+            current_layout_hint = (
+                "CURRENT LAYOUT (the existing arrangement — you MUST produce a DIFFERENT layout):\n"
+                + "\n".join(current_walls)
+                + "\n"
+                "Choose different walls where possible to create variety. "
+                "At minimum, move 2-3 items to different walls than their current position."
+            )
+
         user_prefs: dict[str, Any] = {
             "user_message": modification_request,
             "owned_furniture": owned_ids_str,
             "placement_constraints": hard_constraints,
+            "placement_hint": current_layout_hint,
         }
 
         llm_response = await self._llm_agent.plan_layout(
@@ -251,10 +294,14 @@ class RearrangeAgent:
             p.setdefault("offset_from_wall", 0.05)
             corrected_placements.append(p)
 
-        # WallAssigner handles wall placement deterministically
-        # If user explicitly requested a wall direction, override after assignment
+        # WallAssigner handles alignment/offset/facing; preserve LLM-chosen walls
         wall_assigner = WallAssigner()
-        corrected_placements = wall_assigner.assign(corrected_placements, room_spec)
+        llm_walls = {
+            p["furniture_id"]: p["target_wall"]
+            for p in corrected_placements
+            if p.get("target_wall") and p["target_wall"] != "center"
+        }
+        corrected_placements = wall_assigner.assign(corrected_placements, room_spec, llm_walls=llm_walls)
 
         if wall_dir:
             _pack_alignments = ["left", "center", "right", "left", "center", "right"]
@@ -714,30 +761,8 @@ class RearrangeAgent:
 
         logger.info(f"RearrangeAgent: kua_line={kua_line!r}")
 
-        # Build layout summary so LLM knows what was placed where
-        _wall_th = {"north": "เหนือ", "south": "ใต้", "east": "ตะวันออก", "west": "ตะวันตก"}
-        _name_th: dict[str, str] = {
-            "bed": "เตียง", "sofa_bed": "โซฟาเบด", "sofa": "โซฟา",
-            "nightstand": "โต๊ะข้างเตียง", "wardrobe": "ตู้เสื้อผ้า",
-            "compact_wardrobe": "ตู้เสื้อผ้า", "desk": "โต๊ะทำงาน",
-            "office_chair": "เก้าอี้", "dining_table": "โต๊ะอาหาร",
-            "dining_chair": "เก้าอี้กินข้าว", "coat_rack": "ราวแขวนเสื้อ",
-            "shoe_cabinet": "ตู้รองเท้า", "tv_stand": "ตู้ทีวี",
-            "bookshelf": "ชั้นหนังสือ", "coffee_table": "โต๊ะกลาง",
-        }
-        layout_summary = ""
-        if enriched_layout:
-            lines = []
-            for e in enriched_layout:
-                ftype = (e.get("furniture_type") or e.get("category") or "").lower().replace("-", "_")
-                name = _name_th.get(ftype) or e.get("name") or ftype
-                wall = e.get("wall") or e.get("target_wall") or ""
-                wall_th = _wall_th.get(wall, wall)
-                if wall_th:
-                    lines.append(f"- {name}: ผนัง{wall_th}")
-            layout_summary = "\n".join(lines) if lines else "ไม่มีข้อมูล"
-
-        items_summary = _build_items_summary(enriched_layout or [])
+        room_direction = (room_spec or {}).get("direction", "north")
+        layout_summary = _build_items_summary(enriched_layout or [], room_direction=room_direction)
 
         prompt = EXPLANATION_PROMPT.format(
             layout_summary=layout_summary,

@@ -361,25 +361,32 @@ class LayoutResolver:
             dim_w = fw
             dim_d = fd
 
-        # Derive which wall the furniture is against from rotation.
-        # _WALL_ROTATION in spatial_resolver maps wall → rotation:
-        #   south=180, north=0, west=90, east=270
-        # Reverse: rotation → wall the back is against.
+        # Derive which wall the furniture is against from actual position.
+        # Compute distance to each wall edge, then pick the closest one that
+        # is within tolerance. This handles corner items correctly (e.g. a
+        # wardrobe at x=6.4,z=0 in a 7x4 room is against the east wall, not south).
+        _WALL_TOL = 0.35
+        dist_south = p.z
+        dist_north = room.depth - (p.z + fd)
+        dist_west = p.x
+        dist_east = room.width - (p.x + fw)
+        candidates = {
+            "south": dist_south,
+            "north": dist_north,
+            "west": dist_west,
+            "east": dist_east,
+        }
         _ROT_TO_WALL = {0: "north", 180: "south", 90: "west", 270: "east"}
-        _WALL_TOL = 0.15
-        rot_wall = _ROT_TO_WALL.get(p.rotation % 360)
-        if rot_wall:
-            wall = rot_wall
-        elif p.z <= _WALL_TOL:
-            wall = "south"
-        elif p.z + fd >= room.depth - _WALL_TOL:
-            wall = "north"
-        elif p.x <= _WALL_TOL:
-            wall = "west"
-        elif p.x + fw >= room.width - _WALL_TOL:
-            wall = "east"
+        rot_wall = _ROT_TO_WALL.get(p.rotation % 360, "center")
+        within_tol = {w: d for w, d in candidates.items() if d <= _WALL_TOL}
+        if within_tol:
+            # If rotation wall is among candidates within tolerance, prefer it (tie-break)
+            if rot_wall in within_tol:
+                wall = rot_wall
+            else:
+                wall = min(within_tol, key=within_tol.__getitem__)
         else:
-            wall = "center"
+            wall = rot_wall
 
         logger.info(
             f"_physical_to_dict: {p.furniture_id} "

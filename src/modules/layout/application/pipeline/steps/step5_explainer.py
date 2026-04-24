@@ -113,7 +113,8 @@ class ExplainerStep(BaseStep):
         depth = spec.get("depth", 0)
 
         # Items summary — include wall placement so LLM can reference actual positions
-        items_summary = _build_items_summary(items)
+        room_direction = spec.get("direction", "north")
+        items_summary = _build_items_summary(items, room_direction=room_direction)
 
         # Final geometric overlap safety-net: regardless of what the
         # pipeline conflict list says, verify the actual AABB layout right
