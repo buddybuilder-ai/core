@@ -4,8 +4,12 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 from src.config.settings import get_settings
 from src.schemas.chat import ChatRequest, ChatResponse
@@ -425,6 +429,36 @@ async def _answer_question(
         conversation_history=conversation_history or [],
     )
     return answer
+
+
+@router.post("/process-single-image")
+async def process_single_image(
+    image: UploadFile = File(...),
+    target_height: float = Form(default=2.7),
+    userId: str = Form(default=""),  # noqa: ARG001 — reserved for future per-user logging
+) -> dict[str, Any]:
+    """Detect furniture in an uploaded image using YOLOv8.
+
+    Returns detected objects with estimated real-world dimensions and positions.
+    """
+    import asyncio
+
+    try:
+        image_bytes = await image.read()
+        from src.modules.layout.infrastructure.vision.furniture_detector import detect_furniture
+
+        detections = await asyncio.get_event_loop().run_in_executor(
+            None, detect_furniture, image_bytes, target_height
+        )
+
+        if not detections:
+            return {"status": "no_objects", "message": "ไม่พบเฟอร์นิเจอร์ในรูปภาพ", "objects": []}
+
+        return {"status": "success", "objects": detections}
+
+    except Exception as exc:
+        logger.exception("process_single_image failed")
+        raise HTTPException(status_code=500, detail=f"Image processing error: {exc}")
 
 
 def _get_default_system_prompt(mode: str) -> str:

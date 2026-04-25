@@ -61,6 +61,9 @@ dependencies = [
     "bcrypt>=4.0.0",
     "slowapi>=0.1.9",
 
+    # Image Processing
+    "Pillow>=10.0.0",
+
     # Utilities
     "python-dotenv>=1.0.0",
     "structlog>=24.1.0",
