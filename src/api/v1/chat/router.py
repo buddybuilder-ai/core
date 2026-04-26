@@ -364,7 +364,11 @@ async def chat_rag_only(request: ChatStreamRequest) -> StreamingResponse:
                     full_answer = text
                     source_docs = sources or []
         except Exception as exc:  # pragma: no cover - safety net
-            full_answer = full_answer or f"ขออภัยครับ เกิดข้อผิดพลาด: {exc}"
+            import traceback, sys
+            sys.stderr.buffer.write(b"[CHAT STREAM ERROR]\n")
+            sys.stderr.buffer.write(traceback.format_exc().encode("utf-8", errors="replace"))
+            sys.stderr.buffer.flush()
+            full_answer = full_answer or f"ERROR: {type(exc).__name__}: {exc}"
 
         yield _sse("answer", answer=full_answer, source_documents=source_docs)
 
