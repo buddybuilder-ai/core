@@ -61,6 +61,19 @@ print(f"🚀 Loading AI Engine | Project Root: {BASE_DIR}")
 print(f"📸 Target Image: {INPUT_IMAGE_PATH}")
 
 repo = "isl-org/ZoeDepth"
+# Pre-register trusted repos so nested torch.hub.load calls don't prompt interactively
+_hub_dir = torch.hub.get_dir()
+_trusted_file = os.path.join(_hub_dir, "trusted_list")
+_repos_to_trust = ["intel-isl_MiDaS", "isl-org_ZoeDepth"]
+_existing = set()
+if os.path.exists(_trusted_file):
+    with open(_trusted_file, "r") as _f:
+        _existing = set(line.strip() for line in _f)
+with open(_trusted_file, "a") as _f:
+    for _r in _repos_to_trust:
+        if _r not in _existing:
+            _f.write(_r + "\n")
+
 zoe_model = torch.hub.load(repo, "ZoeD_N", pretrained=False, trust_repo=True)  # type: ignore
 checkpoint_path = os.path.expanduser("~/.cache/torch/hub/checkpoints/ZoeD_M12_N.pt")
 
